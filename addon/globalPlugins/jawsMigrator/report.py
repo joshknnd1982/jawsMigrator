@@ -221,10 +221,22 @@ def build(plan, result) -> tuple[str, str]:
 
 	# Sounds
 	b.heading(2, "Sounds")
-	if options.sounds and result.soundsCopied:
-		b.items(f"{choice.event.label}: {choice.jawsName} ({how})" for choice, _path, how in result.soundsCopied)
+	from . import classicSounds
+
+	if result.nvdaSounds is not None:
+		b.paragraph(classicSounds.statusText(result.nvdaSounds.record) + " NVDA's own sound files were not changed; a copy of them is kept.")
+		b.items(f"{choice.event.label}: {choice.jawsName}" for choice in plan.sounds)
+		if result.nvdaSounds.kept:
+			b.paragraph("Left as they were, because the scheme already had its own sound: " + ", ".join(result.nvdaSounds.kept) + ".")
+	elif not plan.classicSpeech:
+		b.paragraph("NVDA's own sounds were kept: JAWS sounds play through ClassicSpeech, which is not installed.")
 	else:
 		b.paragraph("NVDA's own sounds were kept.")
+	if result.allSounds is not None:
+		b.paragraph(
+			f"{result.allSounds.sounds} JAWS sounds were copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME} "
+			f"({result.allSounds.converted} converted so NVDA can play them): {result.allSounds.folder}",
+		)
 	b.paragraph(f"{len(index.wavFiles())} JAWS sound files were found.")
 
 	# Scripts

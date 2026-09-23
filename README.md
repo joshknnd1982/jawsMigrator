@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.1
+- Version: 1.2
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -54,7 +54,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.1.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.2.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 
@@ -71,7 +71,7 @@ The assistant is a single dialog with Back, Next and Cancel buttons. Each step i
 5. **Where the JAWS settings go.** A separate profile, or NVDA's normal configuration. For a profile, you can turn it on every time NVDA starts, and right away.
 6. **Voices.** Which NVDA synthesizer and voice replaces your JAWS voice, and which JAWS voice profiles to migrate.
 7. **ClassicSpeech** (only when it is installed). Which JAWS speech and sound schemes to copy, which one to turn on, and whether to copy voice profiles, voice aliases, and verbosity, number and text settings.
-8. **Sound effects.** Whether JAWS sound effects replace NVDA's sounds, with the list of which JAWS sound replaces which NVDA sound.
+8. **Sound effects** (only when ClassicSpeech is installed). Whether JAWS sounds play in place of NVDA's sounds, with the list of which JAWS sound replaces which NVDA sound, and whether to copy every JAWS sound into ClassicSpeech.
 9. **Keyboard commands.** Whether JAWS keystrokes become NVDA input gestures, which [JAWS keyboard layouts](#keyboard-layouts) to bring over (desktop, laptop and so on), NVDA's keyboard layout afterwards, whether to use JAWS quick navigation letters in browse mode, and whether JAWS keystrokes may replace NVDA's own. The list shows every keystroke that will be added.
 10. **Recommended add-ons.** Which of the four recommended add-ons to install, what each does, and what happens if you don't.
 11. **Ready to migrate.** A summary of what will happen. Press Migrate.
@@ -91,7 +91,7 @@ The dialog reads your JAWS settings, which takes a few seconds, and lists every 
 - **Voice profiles:** each JAWS voice profile and the NVDA synthesizer it becomes.
 - **Voice aliases:** each alias (LinkVoice, HeadingLevel1Voice, the Rent-A-Crowd aliases...) with what it does in each voice profile.
 - **Keyboard settings and layouts:** keyboard options such as typing echo, the NVDA key and the keyboard layout, JAWS keystrokes as NVDA gestures, each [JAWS keyboard layout](#keyboard-layouts), and quick navigation letters.
-- **Dictionaries, punctuation, sounds and applications:** your dictionary rules, Freedom Scientific's rules, punctuation, JAWS sound effects, ClassicSpeech voices and settings, the archive, each application's profile, and each application where NVDA should sleep.
+- **Dictionaries, punctuation, sounds and applications:** your dictionary rules, Freedom Scientific's rules, punctuation, JAWS sounds in place of NVDA's, all JAWS sounds copied into ClassicSpeech, ClassicSpeech voices and settings, the archive, each application's profile, and each application where NVDA should sleep.
 
 The dialog's controls:
 
@@ -187,7 +187,22 @@ Without ClassicSpeech, everything NVDA itself supports is migrated. The report l
 
 ## Sounds
 
-The assistant finds every JAWS sound (`.wav`), in your settings and the shared settings, and asks whether JAWS sound effects should replace NVDA's sounds:
+JAWS sounds play through [ClassicSpeech](https://github.com/joshknnd1982/classicspeech-nvda). Without ClassicSpeech, NVDA keeps its own sounds, and the assistant says so rather than changing anything.
+
+### Every JAWS sound in ClassicSpeech
+
+The assistant can copy every JAWS sound it finds (`.wav`, your own and the shared ones) into ClassicSpeech, as a scheme named "JAWS Sounds (from JAWS)":
+
+`%APPDATA%
+vda\ClassicSpeech\Schemes\JAWS Sounds (from JAWS)\Sounds`
+
+Sounds JAWS keeps compressed are converted so NVDA can play them. Where you have your own copy of a JAWS sound, yours is used, as in JAWS. The scheme changes nothing by itself; its sounds are at hand in ClassicSpeech's Speech and Sound Schemes, for any item. Copying again later keeps what you set up in the scheme.
+
+Do it in the migration's Sound effects step, or at any time with NVDA+Shift+J then A, or NVDA menu, Tools, JAWS Migration Assistant, Copy all JAWS sounds into ClassicSpeech.
+
+### JAWS sounds in place of NVDA's
+
+NVDA plays its own sounds when you switch between focus and browse mode, and for other events. The assistant can have JAWS sounds play instead:
 
 | NVDA sound | JAWS sound used |
 | --- | --- |
@@ -199,7 +214,21 @@ The assistant finds every JAWS sound (`.wav`), in your settings and the shared s
 | Remote Access connected, controlled, joined and disconnected | Tandem connect and disconnect (or your choice) |
 | Error written to the NVDA log | Error buzzer |
 
-NVDA's own sound files, in NVDA's program folder, are never changed. The chosen JAWS sounds are copied into the assistant's folder and played in their place while JAWS sound effects are on. Turn them on or off with NVDA+Shift+J then S, or in NVDA's Settings, JAWS Migration Assistant. NVDA's original sounds are also copied into every backup.
+JAWS has no sounds for NVDA starting or exiting, or for the Remote Access clipboard, so NVDA keeps its own for those.
+
+To switch quickly, press NVDA+Shift+J then S. The first press plays JAWS sounds; the next restores NVDA's own. The same actions are in NVDA menu, Tools, JAWS Migration Assistant (Use JAWS sounds in place of NVDA's sounds, and Restore NVDA's own sounds), and in NVDA's Settings, JAWS Migration Assistant. The migration's Sound effects step does it too.
+
+How it works, and how to go back:
+
+- ClassicSpeech plays a scheme's "NVDA sound" items in place of NVDA's own sounds. The assistant gives every ClassicSpeech scheme the JAWS sounds, each copied into that scheme's own Sounds folder, so the JAWS sounds play whichever scheme is active. A sound you already chose for an item in a scheme is left as it is. If ClassicSpeech's speech and sound schemes were off, they are turned on, since the sounds need them.
+- NVDA's own sound files, in NVDA's program folder, are never changed. Before the JAWS sounds go in, a copy of NVDA's own sounds is kept in `jawsMigrator
+vdaSounds`, and NVDA's settings, add-ons and add-on settings are backed up.
+- Restore NVDA's own sounds takes out exactly what the assistant added, and turns ClassicSpeech's schemes off again if the assistant had turned them on. Sounds you changed in ClassicSpeech since are left as you set them. The JAWS sounds copied into "JAWS Sounds (from JAWS)" stay.
+- Restoring a backup also puts everything back as it was.
+
+Some NVDA sounds only play when their NVDA option is on. For example, focus and browse mode sounds need "Audio indication of focus and browse modes" in NVDA's Browse Mode settings. NVDA plays the logged error sound only in its test versions, unless you change that in its Advanced settings.
+
+Version 1.1 of the assistant played JAWS sounds by itself. In 1.2 they play through ClassicSpeech, and 1.1's way is turned off. If you used it, turn JAWS sounds on again with NVDA+Shift+J then S.
 
 ## Keyboard commands
 
@@ -256,7 +285,8 @@ Press NVDA+Shift+J, then:
 | G | Open NVDA's Input Gestures dialog |
 | P | Turn the JAWS settings profile on or off |
 | K | JAWS keystroke helper: hear what a JAWS keystroke does in NVDA |
-| S | Turn JAWS sound effects on or off |
+| S | Play JAWS sounds in place of NVDA's sounds, or restore NVDA's own (needs ClassicSpeech) |
+| A | Copy all JAWS sounds into ClassicSpeech |
 | R | Open the last migration report |
 | B | Restore NVDA settings from a backup |
 | U | Check for updates |
@@ -265,11 +295,10 @@ Press NVDA+Shift+J, then:
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
 
-The NVDA menu, Tools, JAWS Migration Assistant has the same actions, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, open the assistant, restore a backup, open the last migration report and check for updates. That category also has:
+The NVDA menu, Tools, JAWS Migration Assistant has the same actions, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
 
 - automatic update checks;
 - turning on the JAWS settings profile when NVDA starts;
-- JAWS sound effects;
 - the list of applications where NVDA sleeps.
 
 ## Recommended add-ons
@@ -369,10 +398,12 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 | `jawsMigrator\backups\<date>` | Backups of NVDA's settings, add-ons and add-on settings (`backup.json` lists every file and add-on) |
 | `jawsMigrator\archive\JAWS <version> <date>` | Copies of your JAWS settings (and the shared settings, when chosen) |
 | `jawsMigrator\migrations\<date>` | The report (`report.html`, `report.txt`), the JAWS index (`jaws-index.json`, `jaws-index.txt`), gestures.ini as it was, and ClassicSpeech voice and scheme files |
-| `jawsMigrator\sounds` | JAWS sounds that replace NVDA's |
+| `jawsMigrator
+vdaSounds\<NVDA version>` | A copy of NVDA's own sounds, kept before JAWS sounds are used in their place |
 | `jawsMigrator\state.json` | The assistant's own settings, including your choice of JAWS items to import |
 | `profiles\JAWS settings.ini`, `profiles\JAWS - program.ini` | Migrated NVDA configuration profiles |
 | `ClassicSpeech\Schemes\<scheme> (from JAWS)` | Migrated ClassicSpeech schemes |
+| `ClassicSpeech\Schemes\JAWS Sounds (from JAWS)\Sounds` | Every JAWS sound, ready for ClassicSpeech |
 
 ## Limits
 

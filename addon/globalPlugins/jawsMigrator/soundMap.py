@@ -5,10 +5,9 @@
 """Which JAWS sound effect stands in for each of NVDA's own sounds.
 
 NVDA's sounds live in its program folder (``waves``), which only an
-administrator may change, so NVDA's files are never touched. Instead the
-chosen JAWS sounds are copied into the assistant's folder and played in place
-of NVDA's while "JAWS sound effects" are on; turning them off, or removing the
-add-on, brings NVDA's sounds back.
+administrator may change, so NVDA's files are never touched. Instead
+ClassicSpeech plays the chosen JAWS sounds in place of NVDA's (``classicSounds``);
+restoring NVDA's sounds, or turning ClassicSpeech's schemes off, brings them back.
 
 Where the user changed a JAWS sound in Settings Center (for instance the forms
 mode sounds), their choice is used.

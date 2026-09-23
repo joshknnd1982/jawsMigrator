@@ -37,10 +37,28 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self.atStartup.SetValue(bool(state.get("activateJawsProfileAtStartup")) and profileExists)
 		self.atStartup.Enable(profileExists)
 
-		replacements = state.get("soundReplacements") or {}
-		self.sounds = helper.addItem(wx.CheckBox(self, label=f"Use JAWS sound &effects in place of NVDA's sounds ({len(replacements)} sounds)"))
-		self.sounds.SetValue(bool(state.get("jawsSoundsEnabled")) and bool(replacements))
-		self.sounds.Enable(bool(replacements))
+		from .. import classicSounds
+
+		classic = nvdaEnv.classicSpeechInfo()
+		record = state.get(classicSounds.STATE_KEY) or {}
+		status = classicSounds.statusText(record)
+		if not classic.installed:
+			status += " JAWS sounds play through ClassicSpeech, which is not installed."
+		elif not classic.usable:
+			status += " JAWS sounds play through ClassicSpeech, which is disabled."
+		helper.addItem(wx.StaticText(self, label="JAWS sounds: " + status))
+		soundButtons = guiHelper.ButtonHelper(wx.HORIZONTAL)
+		useSounds = soundButtons.addButton(self, label="Use JAWS soun&ds in place of NVDA's")
+		useSounds.Bind(wx.EVT_BUTTON, lambda event: self._run("useJawsSounds"))
+		restoreSounds = soundButtons.addButton(self, label="Restore NVDA's o&wn sounds")
+		restoreSounds.Bind(wx.EVT_BUTTON, lambda event: self._run("restoreNvdaSounds"))
+		copySounds = soundButtons.addButton(self, label="Cop&y all JAWS sounds into ClassicSpeech")
+		copySounds.Bind(wx.EVT_BUTTON, lambda event: self._run("copyJawsSounds"))
+		helper.addItem(soundButtons)
+		usable = classic.installed and classic.usable
+		useSounds.Enable(usable)
+		copySounds.Enable(usable)
+		restoreSounds.Enable(classicSounds.isApplied(record))
 
 		self.sleepApps = list(state.get("sleepApps") or [])
 		self.sleepList = helper.addLabeledControl(
@@ -89,7 +107,6 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			{
 				"checkForUpdatesAutomatically": self.autoUpdate.GetValue(),
 				"activateJawsProfileAtStartup": self.atStartup.GetValue() if self.atStartup.IsEnabled() else state.get("activateJawsProfileAtStartup"),
-				"jawsSoundsEnabled": self.sounds.GetValue() if self.sounds.IsEnabled() else False,
 				"sleepApps": keptApps,
 			},
 		)

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import voices
+from . import classicSounds, voices
 
 STATE_KEY = "importSelection"
 
@@ -115,13 +115,20 @@ def buildItems(plan) -> list[ImportItem]:
 		("other:sharedDictionaries", f"Freedom Scientific's own dictionary rules ({sharedRules})", False, sharedRules > 0),
 		("other:symbols", f"Punctuation and symbols you changed ({len(plan.symbols)})", True, True),
 		("other:jawsSymbolNames", f"JAWS's names for all punctuation symbols ({len(plan.jawsSymbolDefaults)})", False, bool(plan.jawsSymbolDefaults)),
-		("other:sounds", f"JAWS sound effects in place of NVDA's sounds ({len(plan.sounds)})", False, bool(plan.sounds)),
 		("other:classicVoices", "JAWS voice contexts as ClassicSpeech Voice Profiles", True, plan.classicSpeech),
 		("other:classicSettings", "JAWS verbosity, number and text settings in ClassicSpeech", True, plan.classicSpeech),
 		("other:archive", "Keep a copy of your JAWS settings with NVDA's settings", True, True),
 	]
 	for key, label, default, available in others:
 		items.append(ImportItem(key, OTHER, label, default=default, available=available, reason="" if available else "nothing to import"))
+	# JAWS sounds play through ClassicSpeech, so both need it.
+	allSounds = classicSounds.uniqueSounds(plan.index.wavFiles()) if plan.index is not None else []
+	for key, label, default, found in (
+		("other:sounds", f"JAWS sounds in place of NVDA's sounds, through ClassicSpeech ({len(plan.sounds)})", False, bool(plan.sounds)),
+		("other:allSounds", f"All {len(allSounds)} JAWS sounds copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}", True, bool(allSounds)),
+	):
+		reason = "" if plan.classicSpeech and found else ("needs ClassicSpeech" if not plan.classicSpeech else "nothing to import")
+		items.append(ImportItem(key, OTHER, label, default=default, available=not reason, reason=reason))
 	for configName in plan.appSettings:
 		items.append(ImportItem(f"app:{configName}", OTHER, f"NVDA profile for {configName}, from its JAWS settings"))
 	for configName, executables in plan.sleepCandidates:
@@ -205,6 +212,7 @@ def apply(plan, selection: Selection) -> None:
 	options.quickNavLetters = chosen("keyboard:quickNav")
 	options.keyboardLayouts = [layout.id for layout in plan.keyboardLayouts if chosen(f"keyboard:layout:{layout.id}", layout.id == plan.jawsKeyboardLayout)]
 	options.sounds = chosen("other:sounds", False)
+	options.allSounds = chosen("other:allSounds")
 	options.classicVoices = chosen("other:classicVoices")
 	options.classicSettings = chosen("other:classicSettings")
 	options.archive = chosen("other:archive")

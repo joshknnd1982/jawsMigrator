@@ -24,7 +24,7 @@ def main():
 	root = tempfile.mkdtemp(prefix="jawsMigrator-test-")
 	configDir, appDir = fakeNvda.makeNvdaFolders(root)
 	conf, current = fakeNvda.install(configDir, appDir, frame)
-	from jawsMigrator import backup, jawsIndex, migrator, nvdaApply, state, systemCheck
+	from jawsMigrator import backup, classicSounds, jawsIndex, migrator, nvdaApply, state, systemCheck, wavUtil
 
 	# An add-on with settings in its own folder and in NVDA's settings folder, as many add-ons have.
 	someAddon = os.path.join(configDir, "addons", "someAddon")
@@ -102,7 +102,24 @@ def main():
 	state.forget()
 	saved = json.load(open(os.path.join(configDir, "jawsMigrator", "state.json"), encoding="utf-8"))
 	check(sorted(saved.get("sleepApps", [])) == sorted(options.sleepApps and ["baseball", "football", "freightfate", "press"]), f"sleep apps: {saved.get('sleepApps')}")
-	check(len(saved.get("soundReplacements", {})) >= 10 and saved.get("jawsSoundsEnabled"), f"JAWS sounds: {len(saved.get('soundReplacements', {}))}")
+	record = saved.get("classicNvdaSounds") or {}
+	schemeFolders = [name for name in os.listdir(schemes) if os.path.isfile(os.path.join(schemes, name, "scheme.json"))]
+	check(
+		len(record.get("sounds", {})) >= 10 and len(record.get("schemes", {})) == len(schemeFolders),
+		f"JAWS sounds for {len(record.get('sounds', {}))} NVDA sounds, through {len(record.get('schemes', {}))} of {len(schemeFolders)} ClassicSpeech schemes",
+	)
+	activeFolder = os.path.join(schemes, options.activeClassicScheme)
+
+	def activeItems():
+		return json.load(open(os.path.join(activeFolder, "scheme.json"), encoding="utf-8"))["items"]
+
+	focusSound = activeItems().get("nvdaSound.focusMode", {}).get("sound", "")
+	check(bool(focusSound) and wavUtil.isPlayable(os.path.join(activeFolder, focusSound)), f"the active scheme plays {focusSound} when NVDA switches to focus mode")
+	library = os.path.join(schemes, classicSounds.JAWS_SOUNDS_SCHEME, "Sounds")
+	libraryCount = len(os.listdir(library)) if os.path.isdir(library) else 0
+	check(libraryCount == len(classicSounds.uniqueSounds(index.wavFiles())), f"every JAWS sound was copied into ClassicSpeech: {libraryCount}")
+	nvdaCopies = os.path.join(configDir, "jawsMigrator", "nvdaSounds")
+	check(os.path.isdir(nvdaCopies) and any(os.listdir(os.path.join(nvdaCopies, name)) for name in os.listdir(nvdaCopies)), "a copy of NVDA's own sounds is kept")
 	check(os.path.isfile(result.reportPath), f"report written: {result.reportPath}")
 	check(bool(result.archiveFolder) and os.path.isdir(result.archiveFolder), "JAWS settings archived")
 	check(os.path.isfile(os.path.join(result.outputFolder, "jaws-index.json")), "index saved")
@@ -114,6 +131,18 @@ def main():
 		{"addons/someAddon/settings.json", "someAddonData/data.txt", "nvda.ini"} <= backedUp and result.backup.original,
 		f"the backup holds add-ons and their settings, and is the original: {len(backedUp)} files, add-ons {[a['name'] for a in result.backup.addons]}",
 	)
+
+	# NVDA's own sounds back, and JAWS sounds again, quickly, outside a migration.
+	outcome = migrator.restoreNvdaSounds()
+	print("Restore NVDA's own sounds:", outcome.message)
+	check(outcome.succeeded and not any(key.startswith("nvdaSound.") for key in activeItems()), "restoring NVDA's own sounds takes every JAWS sound out of the schemes")
+	check(len(os.listdir(library)) == libraryCount, "the JAWS sounds copied into ClassicSpeech stay")
+	check(not classicSounds.isApplied(state.get(classicSounds.STATE_KEY)), "the record of JAWS sounds is cleared")
+	backupsBefore = len(backup.listBackups(os.path.join(configDir, "jawsMigrator")))
+	outcome = migrator.useJawsSounds(facts)
+	print("Use JAWS sounds:", outcome.message)
+	check(outcome.succeeded and "nvdaSound.browseMode" in activeItems(), "JAWS sounds can be turned on again in one step")
+	check(len(backup.listBackups(os.path.join(configDir, "jawsMigrator"))) == backupsBefore + 1, "NVDA's settings and add-ons are backed up first")
 
 	# Afterwards an add-on is installed (as the recommended ones are), and add-on settings change.
 	pending = os.path.join(configDir, "addons", "customLabels.pendingInstall")
@@ -128,6 +157,7 @@ def main():
 		stream.write("changed data")
 
 	# Undo everything from the backup.
+	backupsBefore = len(backup.listBackups(os.path.join(configDir, "jawsMigrator")))
 	outcome = migrator.restore(result.backup)
 	print("Restore:", outcome.message)
 	check(not os.path.isdir(pending) and outcome.restartNeeded, "restore removed the add-on installed after the backup")
@@ -137,7 +167,7 @@ def main():
 	check(not os.path.isfile(os.path.join(configDir, "profiles", "JAWS settings.ini")), "restore removed the JAWS settings profile")
 	check(not os.path.isdir(os.path.join(schemes, "Web RentACrowd (from JAWS)")), "restore removed the schemes")
 	check("toggleScreenCurtain" in open(os.path.join(configDir, "gestures.ini"), encoding="utf-8").read() and "elementsList" not in open(os.path.join(configDir, "gestures.ini"), encoding="utf-8").read(), "restore put gestures.ini back")
-	check(len(backup.listBackups(os.path.join(configDir, "jawsMigrator"))) == 2, "a safety backup was made before restoring")
+	check(len(backup.listBackups(os.path.join(configDir, "jawsMigrator"))) == backupsBefore + 1, "a safety backup was made before restoring")
 	print()
 	print(f"{len(failures)} failures" if failures else "All checks passed")
 	shutil.rmtree(root, ignore_errors=True)

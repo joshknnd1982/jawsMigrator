@@ -47,6 +47,7 @@ LAYER_GESTURES = {
 	"kb:p": "toggleJawsProfile",
 	"kb:k": "jawsKeystrokeHelp",
 	"kb:s": "toggleJawsSounds",
+	"kb:a": "copyJawsSounds",
 	"kb:r": "openReport",
 	"kb:b": "restoreBackup",
 	"kb:u": "checkForUpdates",
@@ -62,7 +63,8 @@ LAYER_HELP = (
 	"G, open NVDA's Input Gestures dialog. "
 	"P, turn the JAWS settings profile on or off. "
 	"K, hear what a JAWS keystroke does in NVDA. "
-	"S, turn JAWS sound effects on or off. "
+	"S, JAWS sounds in place of NVDA's own, on or off, through ClassicSpeech. "
+	"A, copy all JAWS sounds into ClassicSpeech. "
 	"R, open the last migration report. "
 	"B, restore NVDA settings from a backup. "
 	"U, check for updates. "
@@ -88,52 +90,6 @@ def _finally(function, final):
 	return wrapper
 
 
-class SoundReplacer:
-	"""Plays the migrated JAWS sounds in place of NVDA's own sounds, without touching NVDA's files."""
-
-	def __init__(self):
-		self._registered = False
-		self._replacements: dict = {}
-		self._waves = os.path.normcase(os.path.normpath(nvdaEnv.wavesFolder())) if nvdaEnv.wavesFolder() else ""
-
-	def configure(self, enabled: bool, replacements: dict):
-		self._replacements = {name.lower(): path for name, path in (replacements or {}).items() if path and os.path.isfile(path)}
-		wanted = enabled and bool(self._replacements)
-		try:
-			import nvwave
-
-			if wanted and not self._registered:
-				nvwave.decide_playWaveFile.register(self._decide)
-				self._registered = True
-			elif not wanted and self._registered:
-				nvwave.decide_playWaveFile.unregister(self._decide)
-				self._registered = False
-		except Exception:
-			_log().debugWarning("jawsMigrator: sound replacement unavailable", exc_info=True)
-
-	def _decide(self, fileName=None, asynchronous=True, isSpeechWaveFileCommand=False, **kwargs):
-		try:
-			if not fileName or not self._waves:
-				return True
-			path = os.path.normcase(os.path.normpath(fileName))
-			if os.path.dirname(path) != self._waves:
-				return True
-			name = os.path.splitext(os.path.basename(path))[0].lower()
-			replacement = self._replacements.get(name)
-			if not replacement:
-				return True
-			import nvwave
-
-			nvwave.playWaveFile(replacement, asynchronous=asynchronous)
-			return False
-		except Exception:
-			_log().debugWarning("jawsMigrator: could not play a JAWS sound", exc_info=True)
-			return True
-
-	def stop(self):
-		self.configure(False, {})
-
-
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	scriptCategory = CATEGORY
 
@@ -148,7 +104,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._factsCache = None
 		self._sleepApps: set = set()
 		self._keymapCache = None
-		self.sounds = SoundReplacer()
 		self.updater = updater.UpdateChecker()
 		if self._secure:
 			return
@@ -169,7 +124,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def terminate(self):
 		self.updater.stop()
-		self.sounds.stop()
 		try:
 			from .gui import settingsPanel
 
@@ -192,9 +146,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	# -- start up ----------------------------------------------------------------------
 
 	def applyRuntimeSettings(self):
-		"""Apply the assistant's own settings: JAWS sounds and sleeping applications."""
+		"""Apply the assistant's own settings: the applications where NVDA sleeps."""
 		data = state.load()
-		self.sounds.configure(bool(data.get("jawsSoundsEnabled")), data.get("soundReplacements") or {})
+		if data.get("jawsSoundsEnabled") or data.get("soundReplacements"):
+			# Version 1.1 played JAWS sounds itself. They play through ClassicSpeech now (classicSounds).
+			state.update({"jawsSoundsEnabled": False, "soundReplacements": {}})
+			_log().info("jawsMigrator: JAWS sounds now play through ClassicSpeech; version 1.1's own sound replacement is off")
 		self._sleepApps = {str(name).lower() for name in data.get("sleepApps") or []}
 
 	def _activateProfileAtStartup(self):
@@ -221,6 +178,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			items = (
 				("&Migrate JAWS settings to NVDA...", self.onMenuOpen),
 				("&Choose what to import...", lambda event: self.openImportSettings()),
+				("Use JAWS &sounds in place of NVDA's sounds", lambda event: self.useJawsSounds()),
+				("Restore NVDA's &own sounds", lambda event: self.restoreNvdaSounds()),
+				("Copy &all JAWS sounds into ClassicSpeech", lambda event: self.copyJawsSounds()),
 				("&Restore NVDA settings from a backup...", lambda event: self.openRestore()),
 				("Open the last migration &report", lambda event: self.openLastReport()),
 				("What does a &JAWS keystroke do in NVDA?", lambda event: wx.CallLater(300, self._startKeystrokeHelp)),
@@ -353,6 +313,72 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		finally:
 			self._busy = False
 
+	# -- JAWS sounds, through ClassicSpeech ------------------------------------------------
+
+	def _soundsAction(self, action, announcement: str):
+		if self._secure:
+			return
+		if self._busy:
+			ui.message("The JAWS Migration Assistant is busy. Finish or close it first.")
+			return
+		self._busy = True
+		ui.message(announcement)
+		wx.CallLater(150, self._runSoundsAction, action)
+
+	def _runSoundsAction(self, action):
+		try:
+			outcome = action()
+			if outcome is not None:
+				messageBox(outcome.message, TITLE, wx.OK | (wx.ICON_INFORMATION if outcome.succeeded else wx.ICON_WARNING))
+		except Exception as error:
+			_log().exception("jawsMigrator: the JAWS sounds action failed")
+			messageBox(f"That could not be done, and NVDA's sounds were not changed: {error}", TITLE, wx.OK | wx.ICON_ERROR)
+		finally:
+			self._busy = False
+
+	def useJawsSounds(self):
+		"""Play JAWS sounds in place of NVDA's own sounds, through ClassicSpeech, after backing up."""
+		from . import backup, migrator
+
+		def action():
+			facts = self._facts()
+			problem = migrator.soundsProblem(facts)
+			if problem:
+				return migrator.SoundsOutcome(problem, False)
+			size = f" The backup copies about {backup.sizeText(facts.backupBytes)}, which can take a minute." if facts.backupBytes > 50 * 1024 * 1024 else ""
+			if messageBox(
+				"Play JAWS sounds in place of NVDA's own sounds, through ClassicSpeech? Focus and browse mode, spelling errors, "
+				"auto-suggestions, the screen curtain, Remote Access and logged errors then sound as in JAWS.\n\n"
+				"NVDA's settings, add-ons and add-on settings are backed up first, and a copy of NVDA's own sounds is kept; NVDA's "
+				f"own sound files are never changed.{size} You can restore NVDA's own sounds at any time.",
+				TITLE,
+				wx.YES | wx.NO | wx.ICON_QUESTION,
+			) != wx.YES:
+				return None
+			return migrator.useJawsSounds(facts)
+
+		self._soundsAction(action, "JAWS sounds for NVDA")
+
+	def restoreNvdaSounds(self):
+		"""Put NVDA's own sounds back: take out the JAWS sounds the assistant gave ClassicSpeech."""
+		from . import migrator
+
+		self._soundsAction(migrator.restoreNvdaSounds, "Restoring NVDA's own sounds")
+
+	def copyJawsSounds(self):
+		"""Copy every JAWS sound into ClassicSpeech, as the scheme JAWS Sounds (from JAWS)."""
+		from . import migrator
+
+		self._soundsAction(lambda: migrator.copyAllJawsSounds(self._facts()), "Copying all JAWS sounds into ClassicSpeech")
+
+	def toggleJawsSounds(self):
+		from . import classicSounds
+
+		if classicSounds.isApplied(state.get(classicSounds.STATE_KEY)):
+			self.restoreNvdaSounds()
+		else:
+			self.useJawsSounds()
+
 	def openInputGestures(self):
 		"""Open NVDA's own Input Gestures dialog."""
 		try:
@@ -465,16 +491,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		elif nvdaApply.activateProfile(name):
 			ui.message(f"{name} profile on")
 
-	@script(description="Turns JAWS sound effects in place of NVDA's sounds on or off")
+	@script(description="Plays JAWS sounds in place of NVDA's own sounds, through ClassicSpeech, or restores NVDA's own sounds")
 	def script_toggleJawsSounds(self, gesture):
-		replacements = state.get("soundReplacements") or {}
-		if not replacements:
-			ui.message("No JAWS sound effects were migrated. Choose them in the JAWS Migration Assistant.")
-			return
-		enabled = not state.get("jawsSoundsEnabled")
-		state.set("jawsSoundsEnabled", enabled)
-		self.applyRuntimeSettings()
-		ui.message("JAWS sound effects on" if enabled else "JAWS sound effects off, NVDA sounds on")
+		wx.CallAfter(self.toggleJawsSounds)
+
+	@script(description="Copies all JAWS sounds into ClassicSpeech, as the scheme JAWS Sounds (from JAWS)")
+	def script_copyJawsSounds(self, gesture):
+		wx.CallAfter(self.copyJawsSounds)
 
 	@script(description="Opens the report of the last JAWS migration")
 	def script_openReport(self, gesture):

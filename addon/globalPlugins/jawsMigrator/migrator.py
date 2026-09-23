@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 
 from . import (
 	backup,
+	classicSounds,
 	dictMap,
 	jawsDetect,
 	jawsFiles,
@@ -89,7 +90,10 @@ class MigrationOptions:
 	nvdaKeyboardLayout: str | None = None
 	quickNavLetters: bool = True
 	overrideConflicts: bool = False
+	#: JAWS sounds in place of NVDA's own sounds, through ClassicSpeech (see classicSounds).
 	sounds: bool = False
+	#: Every JAWS sound copied into ClassicSpeech, as the scheme JAWS Sounds (from JAWS).
+	allSounds: bool = True
 	archive: bool = True
 	addonsToInstall: list = field(default_factory=list)
 	#: Names of the JAWS voice profiles to migrate; None migrates every one NVDA has a synthesizer for.
@@ -565,7 +569,10 @@ class MigrationResult:
 	schemesWritten: list = field(default_factory=list)
 	voiceProfilesWritten: list = field(default_factory=list)
 	appProfiles: list = field(default_factory=list)
-	soundsCopied: list = field(default_factory=list)
+	#: JAWS sounds given to ClassicSpeech's schemes in place of NVDA's (classicSounds.SoundsResult), or None.
+	nvdaSounds: object = None
+	#: Every JAWS sound copied into ClassicSpeech (classicSounds.ImportResult), or None.
+	allSounds: object = None
 	rolledBack: bool = False
 	error: str = ""
 	reportPath: str = ""
@@ -655,9 +662,10 @@ class Migration:
 			if options.archive:
 				self._later(self._say, "Copying your JAWS settings into the migration archive")
 				self._archive()
-			if options.sounds and plan.sounds:
-				self._later(self._say, "Copying JAWS sounds")
-				self._copySounds()
+			if plan.classicSpeech and options.allSounds and plan.index.wavFiles():
+				self._later(self._say, "Copying every JAWS sound into ClassicSpeech")
+				self.result.allSounds = classicSounds.importAllSounds(plan.index.wavFiles(), nvdaEnv.configDir())
+				self.result.messages.extend(self.result.allSounds.failed)
 			if plan.classicSpeech and options.classicSchemes and plan.schemes:
 				self._later(self._say, "Preparing JAWS sound schemes for ClassicSpeech")
 				self._stageSchemeSounds()
@@ -696,19 +704,6 @@ class Migration:
 						shutil.copyfile(path, copied)
 					except OSError as error:
 						self.result.messages.append(f"Not archived: {relative} ({error})")
-
-	def _copySounds(self):
-		from . import wavUtil
-
-		folder = nvdaEnv.addonDataDir("sounds")
-		os.makedirs(folder, exist_ok=True)
-		for choice in self.plan.sounds:
-			destination = os.path.join(folder, choice.event.nvdaName + ".wav")
-			try:
-				how = wavUtil.copyPlayable(choice.jawsPath, destination)
-				self.result.soundsCopied.append((choice, destination, how))
-			except (OSError, wavUtil.WavError) as error:
-				self.result.messages.append(f"{choice.event.label}: {choice.jawsName} could not be used ({error})")
 
 	def _stageSchemeSounds(self):
 		# Sounds are copied while building items in the main thread (fast); nothing heavy here yet.
@@ -853,6 +848,18 @@ class Migration:
 			result.gesturesAdded = added
 			result.messages.extend(f"Gesture {binding.gesture} could not be added: {error}" for binding, error in failed)
 
+		# JAWS sounds in place of NVDA's own, through ClassicSpeech; NVDA's files are never changed.
+		if plan.classicSpeech and options.sounds and plan.sounds:
+			self._say("Playing JAWS sounds in place of NVDA's sounds, through ClassicSpeech")
+			classicSounds.backupNvdaSounds(nvdaEnv.wavesFolder(), nvdaEnv.addonDataDir(), nvdaEnv.nvdaVersion())
+			soundsResult = classicSounds.applyNvdaSounds(plan.sounds, nvdaEnv.configDir(), state.get(classicSounds.STATE_KEY))
+			if classicSounds.enableSchemes(nvdaApply.classicSpeechSection()):
+				soundsResult.record["enabledSchemes"] = True
+				nvdaApply.saveConfig()
+			nvdaApply.invalidateClassicSpeechCaches()
+			result.nvdaSounds = soundsResult
+			result.messages.extend(soundsResult.failed)
+
 		# The assistant's own settings: sleeping applications, sounds, the JAWS profile.
 		updates = {}
 		if options.sleepApps:
@@ -861,12 +868,8 @@ class Migration:
 				for executable in plan.appExecutables.get(configName, [configName.lower()]):
 					sleepApps.add(executable.lower())
 			updates["sleepApps"] = sorted(sleepApps)
-		if options.sounds and result.soundsCopied:
-			replacements = dict(state.get("soundReplacements") or {})
-			for choice, destination, _how in result.soundsCopied:
-				replacements[choice.event.nvdaName] = destination
-			updates["soundReplacements"] = replacements
-			updates["jawsSoundsEnabled"] = True
+		if result.nvdaSounds is not None:
+			updates[classicSounds.STATE_KEY] = result.nvdaSounds.record
 		if profileName:
 			updates["jawsProfileName"] = profileName
 			updates["activateJawsProfileAtStartup"] = bool(options.activateAtStartup)
@@ -1060,6 +1063,145 @@ def restore(info: backup.BackupInfo) -> RestoreOutcome:
 		lines.append(f"{len(result.failed)} items could not be put back: " + "; ".join(result.failed[:5]) + ".")
 	lines.append(f"Your settings and add-ons from before the restore were saved as the backup {before.name}, so this can be undone.")
 	return RestoreOutcome(" ".join(lines), result.restartNeeded, result.failed)
+
+
+# -- JAWS sounds through ClassicSpeech, outside a migration ----------------------------------
+
+
+@dataclass
+class SoundsOutcome:
+	message: str
+	succeeded: bool = True
+
+
+def soundsProblem(facts: systemCheck.SystemFacts) -> str:
+	"""Why JAWS sounds can't be used on this computer, or "" when they can."""
+	info = facts.classicSpeech
+	if not info.installed:
+		return (
+			"JAWS sounds play through ClassicSpeech, which is not installed. Install ClassicSpeech "
+			"(https://github.com/joshknnd1982/classicspeech-nvda), restart NVDA, then try again. Nothing was changed."
+		)
+	if not info.usable:
+		return "JAWS sounds play through ClassicSpeech, which is installed but disabled or not working. Enable it in NVDA's Add-on Store, restart NVDA, then try again. Nothing was changed."
+	if not (facts.jawsWithSettings or facts.jaws):
+		return "No JAWS settings were found on this computer, so there are no JAWS sounds to use. Nothing was changed."
+	return ""
+
+
+def _jawsIndexFor(facts: systemCheck.SystemFacts) -> jawsIndex.JawsIndex:
+	jaws = (facts.jawsWithSettings or facts.jaws)[0]
+	language = jaws.primaryLanguage or (jaws.settingsLanguages[0] if jaws.settingsLanguages else "enu")
+	return jawsIndex.buildIndex(jaws, language, facts.leasey)
+
+
+def _backupFirst(reason: str) -> backup.BackupInfo:
+	dataDir = nvdaEnv.addonDataDir()
+	info = backup.createBackup(
+		nvdaEnv.configDir(),
+		dataDir,
+		nvdaEnv.wavesFolder(),
+		reason,
+		nvdaEnv.nvdaVersion(),
+		_addonVersion(),
+		original=not backup.hasOriginal(dataDir),
+	)
+	backup.pruneBackups(dataDir, keep=15)
+	return info
+
+
+def useJawsSounds(facts: systemCheck.SystemFacts) -> SoundsOutcome:
+	"""Play JAWS sounds in place of NVDA's own, through ClassicSpeech. Main thread only.
+
+	NVDA's settings, add-ons and add-on settings are backed up first, and NVDA's own sounds are
+	copied; the file work runs in the background while NVDA keeps responding.
+	"""
+	from . import nvdaApply, state
+
+	problem = soundsProblem(facts)
+	if problem:
+		return SoundsOutcome(problem, False)
+	earlier = state.get(classicSounds.STATE_KEY) or {}
+
+	def work():
+		index = _jawsIndexFor(facts)
+		choices, missing = classicSounds.soundChoices(index)
+		if not choices:
+			raise OSError("none of the JAWS sounds for NVDA's sounds were found")
+		before = _backupFirst("Before playing JAWS sounds in place of NVDA's sounds")
+		copies = classicSounds.backupNvdaSounds(nvdaEnv.wavesFolder(), nvdaEnv.addonDataDir(), nvdaEnv.nvdaVersion())
+		return before, copies, missing, classicSounds.applyNvdaSounds(choices, nvdaEnv.configDir(), earlier)
+
+	before, copies, missing, result = nvdaApply.runWithProgress(work, "Setting up JAWS sounds for NVDA. Please wait.")
+	record = result.record
+	turnedOn = classicSounds.enableSchemes(nvdaApply.classicSpeechSection())
+	if turnedOn:
+		record["enabledSchemes"] = True
+	state.set(classicSounds.STATE_KEY, record)
+	nvdaApply.invalidateClassicSpeechCaches()
+	nvdaApply.saveConfig()
+	sounds = record.get("sounds") or {}
+	lines = [f"JAWS sounds now play in place of {len(sounds)} of NVDA's sounds, through {len(result.schemes)} ClassicSpeech schemes. For example, focus mode plays {sounds.get('focusMode', 'a JAWS sound')} and browse mode {sounds.get('browseMode', 'a JAWS sound')}."]
+	if turnedOn:
+		lines.append("ClassicSpeech's speech and sound schemes were turned on, as JAWS sounds need them.")
+	if result.kept:
+		lines.append(f"{len(result.kept)} NVDA sounds that a scheme already had its own sound for were left as they are.")
+	if missing or result.failed:
+		lines.append("Not used: " + "; ".join((missing + result.failed)[:5]) + ".")
+	lines.append(f"NVDA's own sound files are never changed; a copy of them is in {copies}. NVDA's settings and add-ons were backed up first, as {before.name}.")
+	lines.append("To hear NVDA's own sounds again, press NVDA+Shift+J then S, or use NVDA menu, Tools, JAWS Migration Assistant, Restore NVDA's own sounds.")
+	return SoundsOutcome(" ".join(lines))
+
+
+def restoreNvdaSounds() -> SoundsOutcome:
+	"""Take out the JAWS sounds the assistant gave ClassicSpeech's schemes, so NVDA plays its own again. Main thread only."""
+	from . import nvdaApply, state
+
+	record = state.get(classicSounds.STATE_KEY) or {}
+	if not classicSounds.isApplied(record):
+		return SoundsOutcome("NVDA already plays its own sounds; the assistant hasn't set up JAWS sounds for them.", False)
+	result = classicSounds.restoreNvdaSounds(nvdaEnv.configDir(), record)
+	turnedOff = False
+	if record.get("enabledSchemes") and nvdaEnv.classicSpeechInfo().installed:
+		turnedOff = classicSounds.disableSchemes(nvdaApply.classicSpeechSection())
+	state.set(classicSounds.STATE_KEY, {})
+	nvdaApply.invalidateClassicSpeechCaches()
+	nvdaApply.saveConfig()
+	lines = [f"NVDA's own sounds are back: JAWS sounds were taken out of {len(result.schemes)} ClassicSpeech schemes."]
+	if turnedOff:
+		lines.append("ClassicSpeech's speech and sound schemes are off again, as they were before.")
+	if result.kept:
+		lines.append(f"Left as you changed them in ClassicSpeech: {', '.join(result.kept[:6])}" + (f" and {len(result.kept) - 6} more." if len(result.kept) > 6 else "."))
+	if result.failed:
+		lines.append("; ".join(result.failed[:5]) + ".")
+	return SoundsOutcome(" ".join(lines))
+
+
+def copyAllJawsSounds(facts: systemCheck.SystemFacts) -> SoundsOutcome:
+	"""Copy every JAWS sound into ClassicSpeech, as the scheme JAWS Sounds (from JAWS). Main thread only."""
+	from . import nvdaApply
+
+	problem = soundsProblem(facts)
+	if problem:
+		return SoundsOutcome(problem, False)
+
+	def work():
+		index = _jawsIndexFor(facts)
+		wavFiles = index.wavFiles()
+		if not wavFiles:
+			raise OSError("no JAWS sound files were found")
+		before = _backupFirst("Before copying every JAWS sound into ClassicSpeech")
+		return before, classicSounds.importAllSounds(wavFiles, nvdaEnv.configDir())
+
+	before, result = nvdaApply.runWithProgress(work, "Copying every JAWS sound into ClassicSpeech. Please wait.")
+	nvdaApply.invalidateClassicSpeechCaches()
+	lines = [f"{result.sounds} JAWS sounds are now in ClassicSpeech, in the scheme {classicSounds.JAWS_SOUNDS_SCHEME}, folder {os.path.join(result.folder, classicSounds.SOUNDS_FOLDER)}."]
+	if result.converted:
+		lines.append(f"{result.converted} were converted so NVDA can play them.")
+	if result.failed:
+		lines.append(f"{len(result.failed)} could not be copied: " + "; ".join(result.failed[:5]) + ".")
+	lines.append(f"Choose them for any item in ClassicSpeech's Speech and Sound Schemes. NVDA's settings and add-ons were backed up first, as {before.name}.")
+	return SoundsOutcome(" ".join(lines), result.sounds > 0)
 
 
 def recommendedAddonStates(facts: systemCheck.SystemFacts) -> list:

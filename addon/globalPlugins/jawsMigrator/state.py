@@ -29,7 +29,7 @@ DEFAULTS = {
 	#: Name of the NVDA profile holding migrated settings, when one was made.
 	"jawsProfileName": "",
 	"activateJawsProfileAtStartup": False,
-	#: JAWS sound effects in place of NVDA's sounds.
+	#: Version 1.1 played JAWS sounds itself; kept only to turn that off (sounds now go through ClassicSpeech).
 	"jawsSoundsEnabled": False,
 	#: {NVDA sound name: path of the copied JAWS sound}
 	"soundReplacements": {},
@@ -40,6 +40,8 @@ DEFAULTS = {
 	"lastMigration": {},
 	#: Which JAWS items to import, chosen in JAWS Migration Assistant settings (see selection.py).
 	"importSelection": {},
+	#: The JAWS sounds given to ClassicSpeech's schemes in place of NVDA's (see classicSounds).
+	"classicNvdaSounds": {},
 }
 
 _lock = threading.RLock()

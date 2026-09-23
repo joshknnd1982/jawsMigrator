@@ -2,11 +2,13 @@
 # They use small made-up JAWS files, so they run anywhere.
 # Run: python -m unittest discover -s tests -p "test_*.py"
 
+import json
 import os
 import shutil
 import struct
 import sys
 import tempfile
+import types
 import unittest
 import wave
 
@@ -17,6 +19,7 @@ nvdaStubs.install()
 
 from jawsMigrator import (  # noqa: E402
 	backup,
+	classicSounds,
 	dictMap,
 	jawsDocs,
 	jawsFiles,
@@ -26,6 +29,7 @@ from jawsMigrator import (  # noqa: E402
 	schemeMap,
 	selection,
 	settingsMap,
+	soundMap,
 	storeAddons,
 	symbolMap,
 	updater,
@@ -423,6 +427,122 @@ class FullBackupTests(Temp):
 		result = backup.restoreBackup(first, config, data)
 		self.assertTrue(any("damaged" in problem for problem in result.failed))
 		self.assertEqual(self.read("nvda", "macintalk", "voice.dat"), "different!")
+
+
+class ClassicSoundsTests(Temp):
+	def wav(self, *parts, frames=b"\x01\x00" * 50):
+		path = os.path.join(self.folder, *parts)
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with wave.open(path, "wb") as out:
+			out.setnchannels(1)
+			out.setsampwidth(2)
+			out.setframerate(11025)
+			out.writeframes(frames)
+		return path
+
+	def imaWav(self, *parts):
+		# The one-block IMA ADPCM file of WavTests, which NVDA can't play until it is converted.
+		fmt = struct.pack("<HHIIHH", wavUtil.WAVE_FORMAT_IMA_ADPCM, 1, 8000, 4000, 8, 4) + struct.pack("<HH", 2, 9)
+		data = struct.pack("<hBB", 0, 0, 0) + bytes([0x11, 0x22, 0x77, 0x00])
+		riff = b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt + b"data" + struct.pack("<I", len(data)) + data
+		path = os.path.join(self.folder, *parts)
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with open(path, "wb") as stream:
+			stream.write(b"RIFF" + struct.pack("<I", len(riff)) + riff)
+		return path
+
+	def scheme(self, config, folder, items=None):
+		path = os.path.join(config, "ClassicSpeech", "Schemes", folder)
+		os.makedirs(path, exist_ok=True)
+		with open(os.path.join(path, "scheme.json"), "w", encoding="utf-8") as stream:
+			json.dump({"format": "ClassicSpeech scheme", "version": 1, "name": folder, "items": items or {}, "custom": {}, "extra": "kept"}, stream)
+		return path
+
+	def items(self, folder):
+		return classicSounds.readScheme(folder)["items"]
+
+	def test_every_jaws_sound_copied(self):
+		config = os.path.join(self.folder, "nvda")
+		sounds = [
+			types.SimpleNamespace(path=self.wav("jaws", "shared", "Click.wav"), name="Click.wav", scope="shared"),
+			types.SimpleNamespace(path=self.wav("jaws", "user", "click.wav", frames=b"\x05\x00" * 10), name="click.wav", scope="user"),
+			types.SimpleNamespace(path=self.imaWav("jaws", "shared", "Compressed.wav"), name="Compressed.wav", scope="shared"),
+		]
+		result = classicSounds.importAllSounds(sounds, config)
+		self.assertEqual((result.sounds, result.converted, result.failed), (2, 1, []))
+		folder = os.path.join(config, "ClassicSpeech", "Schemes", classicSounds.JAWS_SOUNDS_SCHEME)
+		self.assertEqual(result.folder, folder)
+		copied = {name.lower(): os.path.join(folder, "Sounds", name) for name in os.listdir(os.path.join(folder, "Sounds"))}
+		self.assertEqual(sorted(copied), ["click.wav", "compressed.wav"])
+		with wave.open(copied["click.wav"]) as sound:
+			self.assertEqual(sound.getnframes(), 10, "the user's own copy of a JAWS sound wins, as in JAWS")
+		self.assertTrue(wavUtil.isPlayable(copied["compressed.wav"]))
+		self.assertEqual(classicSounds.readScheme(folder)["name"], classicSounds.JAWS_SOUNDS_SCHEME)
+		# Copying again keeps what the user set up in the scheme.
+		scheme = classicSounds.readScheme(folder)
+		scheme["items"]["role.LINK"] = {"sound": "Sounds/Click.wav", "soundOnly": False}
+		classicSounds._writeScheme(folder, scheme)
+		classicSounds.importAllSounds(sounds, config)
+		self.assertIn("role.LINK", self.items(folder))
+
+	def test_jaws_sounds_for_nvda_sounds_and_back(self):
+		config = os.path.join(self.folder, "nvda")
+		events = {event.nvdaName: event for event in soundMap.SOUND_EVENTS}
+		focus = self.wav("jaws", "Boink2.wav")
+		choices = [
+			soundMap.SoundChoice(events["focusMode"], focus, "Boink2.wav"),
+			soundMap.SoundChoice(events["browseMode"], self.wav("jaws", "Boink1.wav", frames=b"\x02\x00" * 60), "Boink1.wav"),
+		]
+		default = self.scheme(config, "Default")
+		classic = self.scheme(config, "Classic (from JAWS)", {"nvdaSound.browseMode": {"sound": "Sounds/mine.wav", "soundOnly": False}, "role.LINK": {"sound": "Sounds/link.wav"}})
+		self.wav("nvda", "ClassicSpeech", "Schemes", "Classic (from JAWS)", "Sounds", "mine.wav", frames=b"\x09\x00" * 5)
+		shutil.copyfile(focus, os.path.join(classic, "Sounds", "Boink2.wav"))
+		result = classicSounds.applyNvdaSounds(choices, config)
+		self.assertEqual((result.added, result.kept, result.failed), (3, ["Classic (from JAWS): browseMode"], []))
+		self.assertEqual(self.items(default)["nvdaSound.focusMode"]["sound"], "Sounds/Boink2.wav")
+		self.assertTrue(os.path.isfile(os.path.join(default, "Sounds", "Boink1.wav")))
+		classicItems = self.items(classic)
+		self.assertEqual(classicItems["nvdaSound.browseMode"]["sound"], "Sounds/mine.wav", "a sound the scheme already had is kept")
+		self.assertEqual(classicItems["nvdaSound.focusMode"]["sound"], "Sounds/Boink2.wav", "an identical sound already there is reused")
+		self.assertEqual(classicSounds.readScheme(classic)["extra"], "kept")
+		record = result.record
+		self.assertTrue(classicSounds.isApplied(record))
+		self.assertEqual(record["schemes"]["Classic (from JAWS)"]["files"], {})
+		self.assertEqual(record["sounds"], {"focusMode": "Boink2.wav", "browseMode": "Boink1.wav"})
+		self.assertIn("2 of NVDA's sounds", classicSounds.statusText(record))
+		self.assertEqual(classicSounds.applyNvdaSounds(choices, config, record).added, 0, "applying again adds nothing")
+		# ClassicSpeech's switch: on by default, and turned on and off only when it changes.
+		section = {"schemeData": json.dumps({"version": 2, "enabled": False, "activeScheme": "Default"})}
+		self.assertTrue(classicSounds.enableSchemes(section))
+		self.assertFalse(classicSounds.enableSchemes(section))
+		self.assertEqual(json.loads(section["schemeData"])["activeScheme"], "Default")
+		self.assertTrue(classicSounds.schemesEnabled({}))
+		# The user changes one sound in ClassicSpeech; restoring NVDA's sounds leaves it.
+		changed = classicSounds.readScheme(default)
+		changed["items"]["nvdaSound.browseMode"] = {"sound": "Sounds/other.wav", "soundOnly": False}
+		classicSounds._writeScheme(default, changed)
+		self.wav("nvda", "ClassicSpeech", "Schemes", "Default", "Sounds", "other.wav", frames=b"\x07\x00" * 7)
+		restored = classicSounds.restoreNvdaSounds(config, record)
+		self.assertEqual((restored.removed, restored.kept, restored.failed), (2, ["Default: browseMode"], []))
+		self.assertEqual(sorted(self.items(default)), ["nvdaSound.browseMode"])
+		self.assertFalse(os.path.exists(os.path.join(default, "Sounds", "Boink2.wav")), "the sounds it copied go")
+		self.assertFalse(os.path.exists(os.path.join(default, "Sounds", "Boink1.wav")))
+		self.assertEqual(sorted(self.items(classic)), ["nvdaSound.browseMode", "role.LINK"])
+		self.assertTrue(os.path.exists(os.path.join(classic, "Sounds", "Boink2.wav")), "a sound that was there before stays")
+		self.assertTrue(classicSounds.disableSchemes(section))
+		self.assertFalse(classicSounds.schemesEnabled(section))
+
+	def test_no_scheme_yet_and_nvda_sounds_copied(self):
+		config = os.path.join(self.folder, "nvda")
+		events = {event.nvdaName: event for event in soundMap.SOUND_EVENTS}
+		result = classicSounds.applyNvdaSounds([soundMap.SoundChoice(events["textError"], self.wav("jaws", "BuzzerShort.wav"), "BuzzerShort.wav")], config)
+		self.assertEqual(result.schemes, ["Default"], "ClassicSpeech's Default scheme is made when there is none")
+		self.assertIn("nvdaSound.textError", self.items(os.path.join(config, "ClassicSpeech", "Schemes", "Default")))
+		waves = os.path.dirname(self.wav("NVDA", "waves", "browseMode.wav"))
+		self.wav("NVDA", "waves", "focusMode.wav")
+		copies = classicSounds.backupNvdaSounds(waves, os.path.join(config, "jawsMigrator"), "2026.2.0")
+		self.assertEqual(sorted(os.listdir(copies)), ["browseMode.wav", "focusMode.wav"])
+		self.assertTrue(copies.endswith(os.path.join("nvdaSounds", "2026.2.0")))
 
 
 class SafetyTests(unittest.TestCase):

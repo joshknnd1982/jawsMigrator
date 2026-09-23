@@ -17,7 +17,7 @@ import threading
 
 import wx
 
-from .. import backup, jawsIndex, managers, migrator, nvdaEnv, safety, selection, systemCheck, voices
+from .. import backup, classicSounds, jawsIndex, managers, migrator, nvdaEnv, safety, selection, systemCheck, voices
 from .common import BORDER, TITLE, messageBox, openFile, readOnlyText, showText, speak
 
 KEEP_VOICE_LABEL = "Don't change NVDA's synthesizer or voice"
@@ -482,36 +482,49 @@ class SoundsPage(Page):
 	title = "Sound effects"
 
 	def build(self, parent):
-		self.details = self.labeled("&JAWS sound effects for NVDA's sounds:", readOnlyText(parent, size=(640, 200)))
+		self.details = self.labeled("&JAWS sounds for NVDA's sounds:", readOnlyText(parent, size=(640, 180)))
 		self.radio = wx.RadioBox(
 			parent,
-			label="&Replace NVDA's sounds with JAWS sound effects?",
-			choices=["No, keep NVDA's own sounds", "Yes, use the JAWS sound effects"],
+			label="&Play JAWS sounds in place of NVDA's sounds?",
+			choices=["No, keep NVDA's own sounds", "Yes, play the JAWS sounds, through ClassicSpeech"],
 			majorDimension=1,
 			style=wx.RA_SPECIFY_COLS,
 		)
 		self.add(self.radio)
-		self.text("NVDA's own sound files are never changed. You can switch JAWS sound effects on and off at any time in NVDA's settings, JAWS Migration Assistant, or with NVDA+Shift+J then S.")
+		self.allSounds = self.add(wx.CheckBox(parent, label="&Copy every JAWS sound into ClassicSpeech"))
+		self.text(
+			"ClassicSpeech plays the JAWS sounds, in every one of its schemes. NVDA's own sound files are never changed, and a copy of "
+			"them is kept. Switch between JAWS sounds and NVDA's own at any time with NVDA+Shift+J then S, or from NVDA menu, Tools, "
+			"JAWS Migration Assistant.",
+		)
 
 	def onShow(self):
 		plan = self.plan
-		lines = [f"{len(plan.index.wavFiles())} JAWS sound files were found.", ""]
+		allSounds = classicSounds.uniqueSounds(plan.index.wavFiles())
+		lines = [f"{len(allSounds)} JAWS sound files were found.", ""]
 		for choice in plan.sounds:
 			lines.append(f"{choice.event.label}: {choice.jawsName} (JAWS plays it for {choice.event.jawsLabel})")
 		if plan.missingSounds:
 			lines.append("")
 			lines.extend(plan.missingSounds)
+		lines.append("")
+		lines.append("NVDA keeps its own sounds for starting, exiting and the Remote Access clipboard, which JAWS has no sounds for.")
 		self.details.SetValue("\n".join(lines))
 		self.radio.SetSelection(1 if plan.options.sounds else 0)
+		self.radio.EnableItem(1, bool(plan.sounds))
+		self.allSounds.SetLabel(f"&Copy all {len(allSounds)} JAWS sounds into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}")
+		self.allSounds.SetValue(plan.options.allSounds)
 
 	def isRelevant(self) -> bool:
-		return self.plan is not None and bool(self.plan.sounds)
+		# JAWS sounds play through ClassicSpeech; without it this step is left out.
+		return self.plan is not None and self.plan.classicSpeech and bool(self.plan.index.wavFiles())
 
 	def focus(self):
 		self.radio.SetFocus()
 
 	def collect(self, options):
-		options.sounds = self.radio.GetSelection() == 1
+		options.sounds = self.radio.GetSelection() == 1 and bool(self.plan.sounds)
+		options.allSounds = self.allSounds.GetValue()
 
 
 #: NVDA's keyboard layouts, and keeping the one NVDA uses.
@@ -969,7 +982,12 @@ class MigrationWizard(wx.Dialog):
 				lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures, including those of the {layouts} keyboard layout{'s' if len(names) > 1 else ''}.")
 			else:
 				lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures, from the keys every JAWS keyboard layout shares.")
-		lines.append("NVDA uses JAWS sound effects." if options.sounds else "NVDA keeps its own sounds.")
+		if not plan.classicSpeech:
+			lines.append("NVDA keeps its own sounds: JAWS sounds play through ClassicSpeech, which is not installed.")
+		else:
+			lines.append("JAWS sounds play in place of NVDA's sounds, through ClassicSpeech; NVDA's own sounds are copied first." if options.sounds else "NVDA keeps its own sounds.")
+			if options.allSounds and plan.index.wavFiles():
+				lines.append(f"All {len(classicSounds.uniqueSounds(plan.index.wavFiles()))} JAWS sounds are copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}.")
 		if options.addonsToInstall:
 			names = [addon.name for addon in managers.RECOMMENDED_ADDONS if addon.addonId in options.addonsToInstall]
 			lines.append("Then these add-ons are installed from the Add-on Store: " + ", ".join(names) + ".")
@@ -1080,8 +1098,10 @@ class MigrationWizard(wx.Dialog):
 			lines.append(f"{len(result.schemesWritten)} schemes were copied into ClassicSpeech.")
 		if result.voiceProfilesWritten:
 			lines.append(f"{len(result.voiceProfilesWritten)} ClassicSpeech voice profile categories were written.")
-		if result.soundsCopied:
-			lines.append(f"{len(result.soundsCopied)} JAWS sound effects replace NVDA's sounds.")
+		if result.nvdaSounds is not None:
+			lines.append(classicSounds.statusText(result.nvdaSounds.record))
+		if result.allSounds is not None:
+			lines.append(f"{result.allSounds.sounds} JAWS sounds were copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}.")
 		lines.extend(result.messages)
 		if result.backup is not None:
 			lines.append("")

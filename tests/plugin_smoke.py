@@ -74,6 +74,8 @@ def main():
 		tools = tray.toolsMenu.GetMenuItems()
 		submenu = [item.GetItemLabelText() for item in tools[0].GetSubMenu().GetMenuItems()] if tools else []
 		check("Choose what to import..." in submenu and "Migrate JAWS settings to NVDA..." in submenu, f"NVDA menu, Tools, JAWS Migration Assistant: {submenu}")
+		soundItems = ("Use JAWS sounds in place of NVDA's sounds", "Restore NVDA's own sounds", "Copy all JAWS sounds into ClassicSpeech")
+		check(all(item in submenu for item in soundItems), "the JAWS sounds actions are in the Tools submenu")
 		check(settingsDialogs.NVDASettingsDialog.categoryClasses and settingsDialogs.NVDASettingsDialog.categoryClasses[0].__name__ == "JawsMigratorSettingsPanel", "the Settings panel is registered")
 		calls = []
 		plugin.openImportSettings = lambda: calls.append("openImportSettings")
@@ -85,6 +87,15 @@ def main():
 		check(frame.opened == ["inputGestures"], "NVDA's Input Gestures dialog opens")
 		layer = jawsMigrator.LAYER_GESTURES
 		check(layer.get("kb:o") == "openImportSettings" and layer.get("kb:g") == "openInputGestures", "NVDA+Shift+J then O and G")
+		check(layer.get("kb:s") == "toggleJawsSounds" and layer.get("kb:a") == "copyJawsSounds", "NVDA+Shift+J then S and A")
+		# Without ClassicSpeech, JAWS sounds are refused and nothing changes.
+		from jawsMigrator import migrator
+
+		facts = types.SimpleNamespace(classicSpeech=types.SimpleNamespace(installed=False, usable=False), jaws=[object()], jawsWithSettings=[])
+		outcome = migrator.useJawsSounds(facts)
+		check(not outcome.succeeded and "ClassicSpeech" in outcome.message, f"JAWS sounds need ClassicSpeech: {outcome.message[:70]}...")
+		check(not migrator.copyAllJawsSounds(facts).succeeded, "copying all JAWS sounds needs ClassicSpeech too")
+		check(not migrator.restoreNvdaSounds().succeeded, "restoring NVDA's sounds when nothing was changed says so")
 		check(all(hasattr(plugin, f"script_{name}") for name in set(layer.values())), "every layer command has a script")
 		plugin.terminate()
 		check([item.GetItemLabelText() for item in tray.preferencesMenu.GetMenuItems()] == ["Settings..."], "unloading removes the Preferences item")
