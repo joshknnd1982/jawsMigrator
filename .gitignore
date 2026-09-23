@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+dist/
+*.nvda-addon
+*.sha256
+addon/doc/en/readme.html
+.vscode/
+.idea/
