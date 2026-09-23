@@ -63,12 +63,27 @@ class JawsSymbol:
 _SYMBOL_LINE = re.compile(r"^(?P<char>\S+)\s+(?P<flags>[01]{8})\s*(?P<text>.*)$")
 
 
+def readSymbolFile(path: str) -> jawsFiles.IniFile:
+	"""Read a JAWS symbol file (``.sbl``), keeping every symbol line.
+
+	Some JAWS symbol files number two different symbols with the same ``symbolN`` key
+	(for example the Polish section of ``SAPI 5x.sbl``); an ordinary INI read keeps only
+	the last of them.
+	"""
+	return jawsFiles.readIni(path, keepRepeatedKeys=True)
+
+
 def parseSymbols(section: jawsFiles.IniSection | None) -> dict:
-	"""``{character: JawsSymbol}`` for one language section of a ``.sbl`` file."""
+	"""``{character: JawsSymbol}`` for one language section of a ``.sbl`` file.
+
+	Lines are read in file order, and a later line for the same character replaces an earlier
+	one. A section from :func:`readSymbolFile` has every line; one from a plain
+	:func:`jawsFiles.readIni` has only the last line for each ``symbolN`` key.
+	"""
 	result = {}
 	if section is None:
 		return result
-	for key, value in section.items():
+	for key, value in section.allItems():
 		if not key.lower().startswith("symbol"):
 			continue
 		match = _SYMBOL_LINE.match(value.strip())
@@ -120,13 +135,36 @@ def _identifier(character: str) -> str:
 	return character
 
 
+def symbolLine(character: str, symbol: JawsSymbol) -> str | None:
+	r"""The line for ``symbol`` in an NVDA symbols file, or None when NVDA could not read it back.
+
+	NVDA reads symbol files with a reader that also ends a line at U+001C to U+001E, U+0085,
+	U+2028 and U+2029, as ``str.splitlines`` does, and splits fields at tabs. Only the first
+	character of a symbol can be escaped (``\n``, ``\t``...), so a symbol that is or contains
+	such a character, or text with a tab or line break, cannot be stored.
+	"""
+	identifier = _identifier(character)
+	preserve = "always" if symbol.keepsSymbol else "-"
+	line = f"{identifier}\t{symbol.spokenText or '-'}\t{symbol.nvdaLevel}\t{preserve}"
+	if not identifier or line.splitlines() != [line] or line.count("\t") != 3:
+		return None
+	return line
+
+
 def mergeIntoSymbolFile(path: str, symbols: dict) -> int:
 	"""Add or replace symbols in an NVDA user symbols file (``symbols-<locale>.dic``).
 
-	Lines already in the file for other symbols, and its complex symbols, are kept as written.
-	Returns the number of symbols written.
+	Lines already in the file for other symbols, and its complex symbols, are kept as written,
+	apart from lines without a symbol, which NVDA cannot load (a line break character in an
+	older line splits it in two). Symbols NVDA could not read back (see :func:`symbolLine`)
+	are left out. Returns the number of symbols written.
 	"""
-	if not symbols:
+	wanted = {}
+	for character, symbol in symbols.items():
+		line = symbolLine(character, symbol)
+		if line is not None:
+			wanted[line.split("\t", 1)[0]] = line
+	if not wanted:
 		return 0
 	safety.checkWritable(path)
 	complexLines: list[str] = []
@@ -145,11 +183,8 @@ def mergeIntoSymbolFile(path: str, symbols: dict) -> int:
 				if not stripped:
 					continue
 				(complexLines if section == "complex" else symbolLines).append(line)
-	wanted = {_identifier(character): symbol for character, symbol in symbols.items()}
-	kept = [line for line in symbolLines if line.split("\t", 1)[0] not in wanted]
-	for identifier, symbol in wanted.items():
-		preserve = "always" if symbol.keepsSymbol else "-"
-		kept.append(f"{identifier}\t{symbol.spokenText or '-'}\t{symbol.nvdaLevel}\t{preserve}")
+	kept = [line for line in symbolLines if line.split("\t", 1)[0] and line.split("\t", 1)[0] not in wanted]
+	kept.extend(wanted.values())
 	os.makedirs(os.path.dirname(path), exist_ok=True)
 	with codecs.open(path, "w", "utf_8_sig", errors="replace") as stream:
 		if complexLines:

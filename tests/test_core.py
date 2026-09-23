@@ -89,10 +89,17 @@ class JawsFilesTests(Temp):
 
 class VoicesTests(Temp):
 	def test_ranges(self):
-		self.assertEqual(voices.JAWS_SYNTHS["eloq"].rate.toPercent(95), 95)
+		# JAWS shows Eloquence rate 95 as 64 percent; NVDA gets the same percentage.
+		self.assertEqual(voices.JAWS_SYNTHS["eloq"].rate.toPercent(95), 64)
+		self.assertEqual(voices.JAWS_SYNTHS["eloq"].rate.toPercent(200), 100)
+		self.assertEqual(voices.JAWS_SYNTHS["eloq"].pitch.toPercent(65), 65)
 		self.assertEqual(voices.JAWS_SYNTHS["sapi 5x"].rate.toPercent(10), 50)
 		self.assertEqual(voices.JAWS_SYNTHS["sapi 5x"].rate.toPercent(20), 100)
-		self.assertEqual(voices.JAWS_SYNTHS["dtsoft"].rate.toPercent(250), 50)
+		self.assertEqual(voices.JAWS_SYNTHS["dtsoft"].rate.toPercent(250), 33)
+		# A synthesizer whose JAWS ranges aren't known keeps NVDA's rate, pitch and volume.
+		self.assertIsNone(voices.synthInfo("somethingNew").rate)
+		profile = voices.VoiceProfile(name="Infovox", primarySynthesizer="info37am")
+		self.assertEqual(voices.scaledVoiceSettings(profile, voices.VoiceContext("enu", "Global", rate=50, pitch=50, volume=80)), {})
 
 	def test_profile_layering_and_contexts(self):
 		shared = self.write(
@@ -112,14 +119,15 @@ class VoicesTests(Temp):
 		self.assertEqual([g["person"] for g in groups], ["Samantha Premium High", "*"])
 		self.assertEqual(groups[1]["pitch"], (15.0, True))
 		self.assertTrue(voices.aliasIsNeutral("*|0|0;*|0|0"))
+		self.assertTrue(voices.aliasIsNeutral("*|20%|0"), "only the person carries over, so a pitch-only alias changes nothing")
 		self.assertFalse(voices.aliasIsNeutral("Rocko|5%|0"))
-		self.assertEqual(voices.applyDelta(65, (20.0, True), voices.PERCENT), 78)
+		self.assertEqual(voices.aliasChanges(voices.parseVoiceAlias("Rocko|5%|-10")[0]), "pitch +5%, rate -10")
 
 	def test_matching(self):
 		variants = {"1": "Reed", "2": "Shelley", "5": "Glen", "6": "FastFlo"}
 		self.assertEqual(voices.matchVariant(variants, "Shelly"), "2")
 		self.assertEqual(voices.matchVariant(variants, "Glen"), "5")
-		self.assertEqual(voices.matchVariant(variants, "Bobby"), "6")
+		self.assertIsNone(voices.matchVariant(variants, "Bobby"), "no guessing: IBMTTS has no Bobby")
 		options = voices.findNvdaEquivalents(
 			"eloq",
 			"Reed",
@@ -130,6 +138,65 @@ class VoicesTests(Temp):
 		)
 		self.assertEqual(options[0].driver, "ibmeci")
 		self.assertEqual(options[1].voiceName, "Outloud Reed")
+
+
+class ClassicVoiceTests(Temp):
+	def resolver(self):
+		from jawsMigrator import classicSpeechWriter
+
+		variants = {"1": "Reed", "2": "Shelley", "4": "Rocko", "5": "Glen"}
+		return classicSpeechWriter.VoiceResolver("ibmeci", "IBMTTS", voices.synthInfo("eloq"), {}, variants, currentVariant="1")
+
+	def test_only_the_person_carries_over(self):
+		resolver = self.resolver()
+		record, note = resolver.aliasRecord("Rocko|5%|0")
+		self.assertEqual(record, {"baseline": {"variant": "4"}, "overrides": {"variant": "4"}})
+		self.assertIn("pitch +5%", note)
+		self.assertEqual(resolver.aliasRecord("Glen|0|0")[0]["overrides"], {"variant": "5"}, "no rate, pitch or volume: NVDA's apply")
+		self.assertIsNone(resolver.aliasRecord("Reed|0|0")[0], "the voice NVDA already speaks with needs nothing")
+		self.assertIsNone(resolver.aliasRecord("*|20%|0")[0], "a pitch-only alias changes nothing")
+		self.assertIsNone(resolver.aliasRecord("Bobby|0|0")[0], "no guessing for a person the synthesizer lacks")
+		self.assertEqual(resolver.aliasRecord("Bobby|0|0;Shelly|0|0")[0]["overrides"], {"variant": "2"}, "the alias's fallback is used, as in JAWS")
+		glen = voices.VoiceContext("enu", "JAWSCursor", rate=95, pitch=58, volume=100, voiceName="Glen")
+		self.assertEqual(resolver.contextRecord(glen)[0], {"baseline": {"variant": "5"}, "overrides": {"variant": "5"}})
+		self.assertIsNone(resolver.contextRecord(voices.VoiceContext("enu", "Message", rate=95, pitch=60, voiceName="Reed"))[0])
+
+	def test_repairing_what_versions_1_0_to_1_2_wrote(self):
+		from jawsMigrator import classicRepair
+
+		config = os.path.join(self.folder, "nvda")
+		folder = os.path.join(config, "ClassicSpeech", "Schemes", "Classic (from JAWS)")
+		os.makedirs(folder)
+		old = {
+			"fmt.bold": {"voice": {"enabled": True, "engine": "", "bySynth": {"ibmeci": {"baseline": {"variant": "5"}, "overrides": {"pitch": 65, "rate": 95}}}}},
+			"fmt.italic": {"voice": {"enabled": True, "engine": "", "bySynth": {"ibmeci": {"baseline": {"variant": "1"}, "overrides": {"pitch": 78, "rate": 95}}}}},
+			"role.LINK": {"sound": "Sounds/link.wav", "soundOnly": False},
+		}
+		with open(os.path.join(folder, "scheme.json"), "w", encoding="utf-8") as stream:
+			json.dump({"format": "ClassicSpeech scheme", "version": 1, "name": "Classic (from JAWS)", "items": old}, stream)
+		self.assertEqual(classicRepair.schemesNeedingRepair(config), ["Classic (from JAWS)"])
+		configured = {"ibmeci": {"voice": "65536", "variant": "1", "rate": 64}}
+		result = classicRepair.RepairResult()
+		classicRepair.repairSchemes(config, configured.get, result)
+		items = classicSounds.readScheme(folder)["items"]
+		self.assertEqual(items["fmt.bold"]["voice"]["bySynth"]["ibmeci"]["overrides"], {}, "Glen stays, without a fixed rate or pitch")
+		self.assertEqual(items["fmt.bold"]["voice"]["bySynth"]["ibmeci"]["baseline"], {"variant": "5"})
+		self.assertNotIn("fmt.italic", items, "a voice that only changed rate and pitch goes")
+		self.assertIn("role.LINK", items)
+		self.assertEqual(classicRepair.schemesNeedingRepair(config), [])
+		section = {"voiceProfileData": json.dumps({"ibmeci": {
+			"focusNavigation": {"baseline": {"variant": "1", "rate": 95}, "overrides": {"rate": 95, "pitch": 65, "volume": 100}},
+			"reviewObjectNavigation": {"baseline": {"variant": "1"}, "overrides": {"variant": "5", "rate": 95, "pitch": 58, "volume": 100}},
+			"mouse": {"baseline": {"variant": "1"}, "overrides": {"variant": "4"}},
+		}})}
+		self.assertTrue(classicRepair.voiceProfilesNeedingRepair(section))
+		result = classicRepair.RepairResult()
+		classicRepair.repairVoiceProfiles(section, configured.get, result)
+		registry = json.loads(section["voiceProfileData"])["ibmeci"]
+		self.assertNotIn("focusNavigation", registry)
+		self.assertEqual(registry["reviewObjectNavigation"]["overrides"], {"variant": "5"})
+		self.assertEqual(registry["mouse"]["overrides"], {"variant": "4"}, "a profile the user made is not touched")
+		self.assertFalse(classicRepair.voiceProfilesNeedingRepair(section))
 
 
 class SettingsMapTests(unittest.TestCase):
@@ -154,6 +221,12 @@ class SettingsMapTests(unittest.TestCase):
 		self.assertFalse(values["virtualBuffers.autoSayAllOnPageLoad"])
 		self.assertFalse(values["virtualBuffers.useScreenLayout"])
 		self.assertTrue(values["virtualBuffers.autoPassThroughOnCaretMove"])
+
+	def test_no_start_and_exit_sounds_as_in_jaws(self):
+		_result, values = self.mapping("[options]\nTypingEcho=1\n")
+		self.assertIs(values["general.playStartAndExitSounds"], False)
+		application = settingsMap.mapSettings(jawsFiles.parseIni("[options]\nTypingEcho=1\n"), isApplication=True)
+		self.assertNotIn("general.playStartAndExitSounds", {change.key for change in application.changes}, "not in application profiles")
 
 	def test_defaults_that_would_hide_information(self):
 		_result, values = self.mapping("[options]\nDetailsAnnouncement=0\n")
@@ -624,7 +697,7 @@ class SelectionTests(unittest.TestCase):
 		apollo = voices.VoiceProfile(name="Apollo 2", primarySynthesizer="apollo2")
 		plan.profiles = [
 			migrator.ProfilePlan("Eloquence", eloquence, {}, {"LinkVoice": "Shelly", "NormalVoice": "*|0|0"}, voices.NvdaVoiceOption("ibmeci", "IBMTTS"), primary=True),
-			migrator.ProfilePlan("Microsoft Mobile", mobile, {}, {"LinkVoice": "*|15%|0", "HeadingLevel1Voice": "*|5%|0"}, voices.NvdaVoiceOption("oneCore", "OneCore")),
+			migrator.ProfilePlan("Microsoft Mobile", mobile, {}, {"LinkVoice": "*|15%|0", "HeadingLevel1Voice": "Rocko|5%|0"}, voices.NvdaVoiceOption("oneCore", "OneCore")),
 			migrator.ProfilePlan("Apollo 2", apollo, {}, {}, None),
 		]
 		plan.sleepCandidates = [("baseball", ["baseball"])]

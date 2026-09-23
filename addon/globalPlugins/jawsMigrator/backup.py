@@ -904,6 +904,9 @@ def planAddonRestore(info: BackupInfo, installed: list[AddonRecord]) -> list[Add
 		return []
 	wanted = backedUpAddons(info)
 	current = _currentAddons(installed)
+	# When NVDA restarts it removes an installed copy before installing the one put back, and removing
+	# an add-on takes it off NVDA's list of disabled add-ons: the copy put back then starts enabled.
+	installedCopies = {record.name.lower() for record in installed if not record.pendingInstall}
 	actions = []
 	for key, record in sorted(current.items()):
 		if key not in wanted and not record.pendingRemove:
@@ -913,10 +916,14 @@ def planAddonRestore(info: BackupInfo, installed: list[AddonRecord]) -> list[Add
 		version = str(backed.get("version") or "")
 		record = current.get(key)
 		disabled = _disabledIn(info.addonState, name)
+		if disabled and key in installedCopies:
+			stays = "; it was disabled, but NVDA turns it on when it replaces the copy installed now, so disable it again in the Add-on Store after NVDA restarts"
+		else:
+			stays = ", disabled as it was" if disabled else ""
 		if record is None or record.pendingRemove and record.version != version:
-			actions.append(AddonAction(name, REINSTALL, f"{name} {version} is put back from the backup" + (", disabled as it was" if disabled else "")))
+			actions.append(AddonAction(name, REINSTALL, f"{name} {version} is put back from the backup" + stays))
 		elif record.version != version:
-			actions.append(AddonAction(name, REINSTALL, f"{name} goes back from version {record.version} to {version}, from the backup"))
+			actions.append(AddonAction(name, REINSTALL, f"{name} goes back from version {record.version} to {version}, from the backup" + stays))
 		else:
 			if record.pendingRemove:
 				actions.append(AddonAction(name, KEEP, f"{name} {version} is kept instead of being removed"))

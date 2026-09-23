@@ -22,9 +22,14 @@ class Profile(dict):
 
 
 class View:
-	def __init__(self, conf, path):
+	def __init__(self, conf, path, baseOnly=False):
 		self._conf = conf
 		self._path = path
+		# NVDA keeps some sections in its normal configuration only (ConfigManager.BASE_ONLY_SECTIONS).
+		self._baseOnly = baseOnly
+
+	def _profiles(self):
+		return [self._conf.base] if self._baseOnly else self._conf.profiles
 
 	def _lookup(self, profile, key):
 		node = profile
@@ -38,7 +43,7 @@ class View:
 
 	def __getitem__(self, key):
 		isSection = False
-		for profile in reversed(self._conf.profiles):
+		for profile in reversed(self._profiles()):
 			value, found = self._lookup(profile, key)
 			if found:
 				if isinstance(value, dict):
@@ -46,21 +51,28 @@ class View:
 					continue
 				if not isSection:
 					return value
-		return View(self._conf, self._path + [key])
+		return View(self._conf, self._path + [key], self._baseOnly)
 
 	def get(self, key, default=None):
 		value = self[key]
 		return default if isinstance(value, View) and not self._conf.sectionExists(self._path + [key]) else value
 
 	def __contains__(self, key):
-		return any(self._lookup(profile, key)[1] for profile in self._conf.profiles)
+		return any(self._lookup(profile, key)[1] for profile in self._profiles())
 
 	def __setitem__(self, key, value):
-		node = self._conf.profiles[-1]
+		# As NVDA's AggregatedSection: a value the configuration already has is not written again,
+		# so a profile only holds what differs from the configuration below it.
+		if not isinstance(value, dict):
+			current = self[key]
+			if not isinstance(current, View) and current == value:
+				return
+		target = self._profiles()[-1]
+		node = target
 		for part in self._path:
 			node = node.setdefault(part, {})
 		node[key] = value
-		self._conf.dirty.add(self._conf.profiles[-1].name)
+		self._conf.dirty.add(target.name)
 
 
 class ConfigManager:
@@ -83,7 +95,11 @@ class ConfigManager:
 				return True
 		return False
 
+	BASE_ONLY_SECTIONS = {"general", "update", "development", "addonStore", "remote", "math", "screenCurtain"}
+
 	def __getitem__(self, key):
+		if key in self.BASE_ONLY_SECTIONS:
+			return View(self, [key], baseOnly=True)
 		return View(self, [])[key]
 
 	def __setitem__(self, key, value):
@@ -121,6 +137,25 @@ class ConfigManager:
 			self._profileCache[name] = profile
 		return self._profileCache[name]
 
+	def getProfile(self, name):
+		# As NVDA: only a profile already loaded; KeyError otherwise.
+		return self._profileCache[name]
+
+	def deleteProfile(self, name):
+		# As NVDA: the file, the loaded copy, its triggers, and the profile if it is active.
+		path = os.path.join(self.configDir, "profiles", name + ".ini")
+		if not os.path.isfile(path):
+			raise LookupError(f"No such profile: {name}")
+		os.remove(path)
+		self._profileCache.pop(name, None)
+		self.dirty.discard(name)
+		stale = [spec for spec, profile in self.triggersToProfiles.items() if profile == name]
+		for spec in stale:
+			del self.triggersToProfiles[spec]
+		if stale:
+			self.saveProfileTriggers()
+		self.profiles = [profile for profile in self.profiles if profile.name != name]
+
 	def manualActivateProfile(self, name):
 		if len(self.profiles) > 1 and self.profiles[-1].manual:
 			self.profiles.pop().manual = False
@@ -138,6 +173,14 @@ class ConfigManager:
 	def saveProfileTriggers(self):
 		with open(os.path.join(self.configDir, "profileTriggers.ini"), "w", encoding="utf-8") as stream:
 			json.dump(self.triggersToProfiles, stream, indent=1)
+
+	def _loadProfileTriggers(self):
+		# NVDA reads profileTriggers.ini only when it starts (ConfigManager.__init__).
+		try:
+			with open(os.path.join(self.configDir, "profileTriggers.ini"), encoding="utf-8") as stream:
+				self.triggersToProfiles = json.load(stream)
+		except (OSError, ValueError):
+			self.triggersToProfiles = {}
 
 	def save(self):
 		self.saved += 1
@@ -192,7 +235,12 @@ class FakeSynth:
 			self._conf["speech"][self.name][setting.id] = getattr(self, setting.id)
 
 
-def install(configDir, appDir, frame):
+def install(configDir, appDir, frame, classicSpeechRunning=True):
+	"""Stand-ins for NVDA's modules, over the settings folder ``configDir``.
+
+	With ``classicSpeechRunning``, ClassicSpeech runs as it does in NVDA: its settings helper can be
+	imported and keeps its settings in the base configuration's ``classicSpeech`` section.
+	"""
 	nvdaStubs.install(frame)
 	conf = ConfigManager(configDir)
 	conf.base.update({"speech": {"synth": "espeak", "symbolLevel": 100}, "keyboard": {"keyboardLayout": "desktop"}})
@@ -216,17 +264,28 @@ def install(configDir, appDir, frame):
 	module("buildVersion", version="2026.2", version_year=2026, version_major=2, version_minor=0)
 	current = {"synth": FakeSynth("espeak", conf)}
 
+	def voiceDictPath(synth):
+		return os.path.join(configDir, "speechDicts", "voiceDicts.v1", synth.name, f"{synth.name}-{synth.voice}.dic")
+
+	def changeVoice(synth, voice):
+		# As NVDA: select the voice, then load that voice's own speech dictionary.
+		if voice:
+			synth.voice = voice
+		voiceDict.load(voiceDictPath(synth))
+
 	def setSynth(name, isFallback=False):
 		if name not in FakeSynth.voicesByDriver:
 			return False
 		current["synth"] = FakeSynth(name, conf)
 		conf["speech"]["synth"] = name
+		changeVoice(current["synth"], None)
 		return True
 
 	module(
 		"synthDriverHandler",
 		getSynth=lambda: current["synth"],
 		setSynth=setSynth,
+		changeVoice=changeVoice,
 		getSynthList=lambda: [("ibmeci", "IBMTTS"), ("sapi5", "Microsoft Speech API version 5"), ("espeak", "eSpeak NG")],
 	)
 
@@ -251,17 +310,25 @@ def install(configDir, appDir, frame):
 		fileName = None
 
 		def save(self, fileName=None):
+			# As NVDA: the voice dictionaries' folder is made when a dictionary is first saved.
+			os.makedirs(os.path.dirname(fileName or self.fileName), exist_ok=True)
 			with open(fileName or self.fileName, "w", encoding="utf-8") as stream:
 				for entry in self:
 					stream.write(f"{entry.pattern}\t{entry.replacement}\t{int(entry.caseSensitive)}\t{int(entry.type)}\n")
 
 		def load(self, fileName):
+			self.clear()
 			self.fileName = fileName
+			if os.path.isfile(fileName):
+				for line in open(fileName, encoding="utf-8"):
+					parts = line.rstrip("\r\n").split("\t")
+					if len(parts) == 4:
+						self.append(SpeechDictEntry(parts[0], parts[1], "", bool(int(parts[2])), EntryType(int(parts[3]))))
 
 	defaultDict = SpeechDict()
 	defaultDict.fileName = os.path.join(configDir, "speechDicts", "default.dic")
 	voiceDict = SpeechDict()
-	voiceDict.fileName = os.path.join(configDir, "speechDicts", "voiceDicts.v1", "voice.dic")
+	voiceDict.fileName = voiceDictPath(current["synth"])
 	os.makedirs(os.path.dirname(voiceDict.fileName), exist_ok=True)
 	definitions = types.SimpleNamespace(
 		_speechDictDefinitions=[
@@ -284,6 +351,11 @@ def install(configDir, appDir, frame):
 	module("speech", getCurrentLanguage=lambda: "en_US")
 	module("core", resetConfiguration=lambda: None, restart=lambda: None)
 	module("languageHandler", getLanguage=lambda: "en")
+	settingsHelper = "globalPlugins._speech_core.settings.config_core"
+	if classicSpeechRunning:
+		module(settingsHelper, _ensure_classic_speech_section=lambda: conf.base.setdefault("classicSpeech", {}))
+	else:
+		sys.modules.pop(settingsHelper, None)
 
 	class GestureMap:
 		def __init__(self, fileName):
@@ -291,16 +363,19 @@ def install(configDir, appDir, frame):
 			self.fileName = fileName
 			# Load what the user already has, as NVDA does at start up.
 			section = None
+			lines = []
 			if os.path.isfile(fileName):
-				for line in open(fileName, encoding="utf-8"):
-					line = line.strip()
-					if line.startswith("[") and line.endswith("]"):
-						section = line[1:-1]
-					elif "=" in line and section:
-						script, gestures = (part.strip() for part in line.split("=", 1))
-						module, className = section.rsplit(".", 1)
-						for gesture in gestures.split(","):
-							self.add(gesture.strip(), module, className, None if script == "None" else script)
+				with open(fileName, encoding="utf-8") as stream:
+					lines = stream.read().splitlines()
+			for line in lines:
+				line = line.strip()
+				if line.startswith("[") and line.endswith("]"):
+					section = line[1:-1]
+				elif "=" in line and section:
+					script, gestures = (part.strip() for part in line.split("=", 1))
+					module, className = section.rsplit(".", 1)
+					for gesture in gestures.split(","):
+						self.add(gesture.strip(), module, className, None if script == "None" else script)
 
 		def add(self, gesture, module, className, script, replace=False):
 			self._map.setdefault(gesture.lower(), []).append((module, className, script))

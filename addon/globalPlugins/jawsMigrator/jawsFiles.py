@@ -100,6 +100,9 @@ class IniSection:
 	name: str
 	#: lower-cased key -> (key as written, value)
 	entries: "OrderedDict[str, tuple[str, str]]" = field(default_factory=OrderedDict)
+	#: Every ``(key as written, value)`` line in file order, repeated keys included, or None.
+	#: Only kept for files read with ``keepRepeatedKeys`` (symbol files reuse ``symbolN`` keys).
+	lines: "list[tuple[str, str]] | None" = None
 
 	def get(self, key: str, default=None):
 		entry = self.entries.get(key.lower())
@@ -110,6 +113,8 @@ class IniSection:
 
 	def set(self, key: str, value: str) -> None:
 		self.entries[key.lower()] = (key, value)
+		if self.lines is not None:
+			self.lines.append((key, value))
 
 	def __contains__(self, key: str) -> bool:
 		return key.lower() in self.entries
@@ -120,6 +125,13 @@ class IniSection:
 	def items(self):
 		"""``(key as written, value)`` pairs in file order."""
 		return list(self.entries.values())
+
+	def allItems(self):
+		"""Every ``(key as written, value)`` line in file order, repeated keys included when they were kept.
+
+		For a section read without ``keepRepeatedKeys`` this is the same as :meth:`items`.
+		"""
+		return list(self.lines) if self.lines is not None else self.items()
 
 	def keys(self):
 		return [key for key, _value in self.entries.values()]
@@ -163,7 +175,7 @@ class IniFile:
 _SECTION_LINE = re.compile(r"^\s*\[(?P<name>.*)\]\s*(?:;.*)?$")
 
 
-def parseIni(text: str, path: str | None = None, inlineComments: bool = False) -> IniFile:
+def parseIni(text: str, path: str | None = None, inlineComments: bool = False, keepRepeatedKeys: bool = False) -> IniFile:
 	"""Parse JAWS INI-style text.
 
 	Lines starting with ``;`` are comments. Keys are split from values at the first
@@ -171,6 +183,10 @@ def parseIni(text: str, path: str | None = None, inlineComments: bool = False) -
 	parses. When a key repeats within a section, the last value wins, which is how
 	JAWS itself reads these files. ``inlineComments`` strips ``value ; comment`` tails,
 	which JAWS writes in ``.jcf`` and ``jfw.ini`` but never in key maps or schemes.
+
+	``keepRepeatedKeys`` also keeps every line of each section, repeated keys included, in
+	file order (:meth:`IniSection.allItems`). Symbol files need it: some number two different
+	symbols with the same ``symbolN`` key. Lookups by key still give the last value.
 	"""
 	result = IniFile(path=path)
 	current = None
@@ -181,6 +197,8 @@ def parseIni(text: str, path: str | None = None, inlineComments: bool = False) -
 		match = _SECTION_LINE.match(line)
 		if match and "=" not in line.split("]", 1)[0][1:]:
 			current = result.ensureSection(match.group("name").strip())
+			if keepRepeatedKeys and current.lines is None:
+				current.lines = []
 			continue
 		separator = line.find("=", 1)
 		if separator < 0:
@@ -192,12 +210,14 @@ def parseIni(text: str, path: str | None = None, inlineComments: bool = False) -
 		if current is None:
 			# Keys before any section header: keep them in an unnamed section.
 			current = result.ensureSection("")
+			if keepRepeatedKeys and current.lines is None:
+				current.lines = []
 		current.set(key, value)
 	return result
 
 
-def readIni(path: str, inlineComments: bool = False) -> IniFile:
-	return parseIni(readText(path), path=path, inlineComments=inlineComments)
+def readIni(path: str, inlineComments: bool = False, keepRepeatedKeys: bool = False) -> IniFile:
+	return parseIni(readText(path), path=path, inlineComments=inlineComments, keepRepeatedKeys=keepRepeatedKeys)
 
 
 def mergeIni(*files: IniFile | None) -> IniFile:
@@ -252,12 +272,47 @@ class JdfEntry:
 		return ""
 
 
+_CHARACTER_CODE = re.compile(r"\\([0-9]+)")
+#: The largest character code, 0x10FFFF, has seven digits.
+_MAX_CODE_DIGITS = 7
+
+
+def decodeCharacterCodes(text: str) -> str:
+	r"""Turn the ``\NNN`` character codes of a JAWS dictionary rule into the characters they stand for.
+
+	The number is decimal: ``\8211`` is the character U+2013 (an en dash). Codes 128 to 159 are
+	Windows-1252 characters, as JAWS's own rules use them: ``\150`` is also an en dash and ``\145``
+	a left single quotation mark. A backslash that is not followed by digits is kept as it is, and
+	so is a code no character has (``\0``, surrogates, anything above U+10FFFF).
+	"""
+	if "\\" not in text:
+		return text
+
+	def character(match) -> str:
+		digits = match.group(1)
+		if len(digits) > _MAX_CODE_DIGITS:
+			return match.group(0)
+		number = int(digits)
+		if 128 <= number <= 159:
+			try:
+				return bytes([number]).decode("cp1252")
+			except UnicodeDecodeError:
+				# 0x81, 0x8D, 0x8F, 0x90 and 0x9D have no Windows-1252 character; Windows keeps the code.
+				return chr(number)
+		if number == 0 or number > 0x10FFFF or 0xD800 <= number <= 0xDFFF:
+			return match.group(0)
+		return chr(number)
+
+	return _CHARACTER_CODE.sub(character, text)
+
+
 def parseJdf(text: str, path: str | None = None) -> list[JdfEntry]:
 	"""Parse a JAWS dictionary (``.jdf``).
 
 	Each line is ``<d>word<d>replacement<d>language<d>synthesizer<d>voice<d>case<d>flags<d>``
 	where ``<d>`` is whatever character the line starts with (usually a period).
-	Older files only have ``<d>word<d>replacement<d>``.
+	Older files only have ``<d>word<d>replacement<d>``. The word and the replacement may
+	name characters by code, such as ``\\8211`` (see :func:`decodeCharacterCodes`).
 	"""
 	entries = []
 	for lineNumber, rawLine in enumerate(text.splitlines(), start=1):
@@ -274,8 +329,8 @@ def parseJdf(text: str, path: str | None = None) -> list[JdfEntry]:
 		if len(parts) < 2 or not parts[0]:
 			continue
 		entry = JdfEntry(
-			word=parts[0],
-			replacement=parts[1],
+			word=decodeCharacterCodes(parts[0]),
+			replacement=decodeCharacterCodes(parts[1]),
 			sourceFile=path or "",
 			lineNumber=lineNumber,
 		)
@@ -333,7 +388,7 @@ JAWS_LANGUAGES = {
 	"arb": (0x0401, "ar_SA"),
 	"heb": (0x040D, "he_IL"),
 	"kkz": (0x043F, "kk_KZ"),
-	"ltv": (0x0426, "lv_LV"),
+	"lvi": (0x0426, "lv_LV"),
 	"chs": (0x0804, "zh_CN"),
 	"cht": (0x0404, "zh_TW"),
 	"jpn": (0x0411, "ja_JP"),

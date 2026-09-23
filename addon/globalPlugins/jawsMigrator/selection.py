@@ -115,7 +115,7 @@ def buildItems(plan) -> list[ImportItem]:
 		("other:sharedDictionaries", f"Freedom Scientific's own dictionary rules ({sharedRules})", False, sharedRules > 0),
 		("other:symbols", f"Punctuation and symbols you changed ({len(plan.symbols)})", True, True),
 		("other:jawsSymbolNames", f"JAWS's names for all punctuation symbols ({len(plan.jawsSymbolDefaults)})", False, bool(plan.jawsSymbolDefaults)),
-		("other:classicVoices", "JAWS voice contexts as ClassicSpeech Voice Profiles", True, plan.classicSpeech),
+		("other:classicVoices", "The voices JAWS uses for the JAWS cursor and messages, as ClassicSpeech Voice Profiles (the person only)", False, plan.classicSpeech),
 		("other:classicSettings", "JAWS verbosity, number and text settings in ClassicSpeech", True, plan.classicSpeech),
 		("other:archive", "Keep a copy of your JAWS settings with NVDA's settings", True, True),
 	]
@@ -213,7 +213,7 @@ def apply(plan, selection: Selection) -> None:
 	options.keyboardLayouts = [layout.id for layout in plan.keyboardLayouts if chosen(f"keyboard:layout:{layout.id}", layout.id == plan.jawsKeyboardLayout)]
 	options.sounds = chosen("other:sounds", False)
 	options.allSounds = chosen("other:allSounds")
-	options.classicVoices = chosen("other:classicVoices")
+	options.classicVoices = chosen("other:classicVoices", False)
 	options.classicSettings = chosen("other:classicSettings")
 	options.archive = chosen("other:archive")
 	plan.appSettings = {name: mapping for name, mapping in plan.appSettings.items() if chosen(f"app:{name}")}

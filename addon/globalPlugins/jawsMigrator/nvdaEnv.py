@@ -65,7 +65,12 @@ def nvdaVersionTuple() -> tuple:
 
 
 def configDir() -> str:
-	"""NVDA's user configuration folder, wherever this copy of NVDA keeps it."""
+	"""NVDA's user configuration folder, wherever this copy of NVDA keeps it.
+
+	Outside NVDA (in tests without a stand-in for it) there is none, and a folder in the temporary
+	folder stands in, so nothing run outside NVDA reads or writes the settings of an NVDA installed
+	on this computer.
+	"""
 	try:
 		from NVDAState import WritePaths
 
@@ -77,7 +82,7 @@ def configDir() -> str:
 
 		return globalVars.appArgs.configPath
 	except Exception:
-		return os.path.join(os.environ.get("APPDATA", ""), "nvda")
+		return os.path.join(tempfile.gettempdir(), "jawsMigrator-outside-nvda")
 
 
 def appDir() -> str:
@@ -185,14 +190,20 @@ def is64BitProcess() -> bool:
 
 @dataclass
 class AddonState:
+	"""One copy of an add-on. During an update NVDA lists two: the installed one and the one waiting to replace it."""
+
 	addonId: str
 	summary: str = ""
 	version: str = ""
 	path: str = ""
 	disabled: bool = False
 	pendingRemove: bool = False
+	#: This copy waits to be installed when NVDA restarts; it never runs before that.
 	pendingInstall: bool = False
+	#: This copy's code runs in this NVDA session.
 	running: bool = False
+	#: NVDA does not run it because it is not compatible with this version of NVDA.
+	blocked: bool = False
 
 	@property
 	def usable(self) -> bool:
@@ -202,6 +213,8 @@ class AddonState:
 		state = []
 		if self.disabled:
 			state.append("disabled")
+		if self.blocked:
+			state.append("not running: NVDA considers it incompatible with this version")
 		if self.pendingRemove:
 			state.append("will be removed when NVDA restarts")
 		if self.pendingInstall:
@@ -218,6 +231,7 @@ def installedAddons() -> list[AddonState]:
 
 		for addon in addonHandler.getAvailableAddons():
 			manifest = addon.manifest
+			waiting = bool(getattr(addon, "isPendingInstall", False))
 			result.append(
 				AddonState(
 					addonId=str(addon.name),
@@ -226,8 +240,11 @@ def installedAddons() -> list[AddonState]:
 					path=str(getattr(addon, "path", "")),
 					disabled=bool(getattr(addon, "isDisabled", False)),
 					pendingRemove=bool(getattr(addon, "isPendingRemove", False)),
-					pendingInstall=bool(getattr(addon, "isPendingInstall", False)),
-					running=bool(getattr(addon, "isRunning", False)),
+					pendingInstall=waiting,
+					# NVDA's isRunning also says True for a copy waiting to replace an installed one,
+					# because it only looks at the installed folder; that copy never runs before a restart.
+					running=bool(getattr(addon, "isRunning", False)) and not waiting,
+					blocked=bool(getattr(addon, "isBlocked", False)),
 				),
 			)
 	except Exception:
@@ -250,6 +267,7 @@ def installedAddons() -> list[AddonState]:
 							summary=value("summary"),
 							version=value("version"),
 							path=os.path.join(folder, name),
+							pendingInstall=name.lower().endswith(".pendinginstall"),
 						),
 					)
 		except OSError:
@@ -268,8 +286,13 @@ def addonState(addonId: str, addons: list[AddonState] | None = None) -> AddonSta
 @dataclass
 class ClassicSpeechInfo:
 	installed: bool = False
+	#: ClassicSpeech runs in this NVDA session and is not being removed, so its settings can be changed.
 	usable: bool = False
+	#: ClassicSpeech's code runs in this NVDA session (it may still be marked for removal).
+	running: bool = False
 	version: str = ""
+	#: The version waiting to replace the running one when NVDA restarts, or "".
+	pendingVersion: str = ""
 	dataFolder: str = ""
 	schemesFolder: str = ""
 	settingsFile: str = ""
@@ -277,17 +300,53 @@ class ClassicSpeechInfo:
 
 
 def classicSpeechInfo(addons: list[AddonState] | None = None) -> ClassicSpeechInfo:
+	"""ClassicSpeech as it is in this NVDA session.
+
+	It counts as usable only while it runs. Its settings then live in NVDA's configuration, where it
+	saves them to ClassicSpeech\\settings.ini itself. While it doesn't run they are only in that file,
+	and writing them through NVDA would put a ``[classicSpeech]`` section in nvda.ini that ClassicSpeech
+	later takes for old settings and moves over settings.ini.
+
+	Right after an update NVDA lists two copies: the old one, still running and marked for removal,
+	and the new one, waiting to be installed. The old copy is usable for the rest of this session. A
+	running copy marked for removal with no new copy waiting is being removed, so it is not usable.
+	"""
 	info = ClassicSpeechInfo()
-	state = addonState(CLASSIC_SPEECH_ID, addons)
 	info.dataFolder = os.path.join(configDir(), "ClassicSpeech")
 	info.schemesFolder = os.path.join(info.dataFolder, "Schemes")
 	info.settingsFile = os.path.join(info.dataFolder, "settings.ini")
-	if state is None:
+	wanted = CLASSIC_SPEECH_ID.lower()
+	copies = [addon for addon in (addons if addons is not None else installedAddons()) if addon.addonId.lower() == wanted]
+	if not copies:
 		return info
 	info.installed = True
-	info.usable = state.usable
-	info.version = state.version
-	info.describe = state.describe()
+	running = next((copy for copy in copies if copy.running), None)
+	waiting = next((copy for copy in copies if copy.pendingInstall), None)
+	current = running or next((copy for copy in copies if not copy.pendingInstall), None) or waiting or copies[0]
+	info.running = running is not None
+	info.version = current.version
+	beingRemoved = running is not None and running.pendingRemove and waiting is None
+	info.usable = info.running and not beingRemoved
+	if waiting is not None and waiting is not current:
+		info.pendingVersion = waiting.version
+	notes = []
+	if running is None:
+		if current.pendingInstall:
+			notes.append("will be installed when NVDA restarts")
+		elif current.blocked:
+			notes.append("not running: NVDA considers it incompatible with this version")
+		elif current.disabled:
+			notes.append("disabled")
+		elif current.pendingRemove:
+			notes.append("will be removed when NVDA restarts")
+		else:
+			notes.append("not running until NVDA restarts")
+	elif beingRemoved:
+		notes.append("will be removed when NVDA restarts")
+	if info.pendingVersion:
+		notes.append(f"version {info.pendingVersion} starts after NVDA restarts")
+	name = f"{current.summary or CLASSIC_SPEECH_ID} {info.version}".strip()
+	info.describe = f"{name} ({'; '.join(notes)})" if notes else name
 	return info
 
 

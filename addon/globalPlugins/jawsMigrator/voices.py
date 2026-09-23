@@ -7,10 +7,11 @@
 A JAWS voice profile (``.vpf``) has one section per language and context, such as
 ``[enu-Global]`` or ``[enu-PCCursor]``, holding the rate, pitch, volume,
 punctuation level and person (voice name) for that context. Values are in the
-JAWS units of the profile's synthesizer: Eloquence uses 0 to 100, SAPI 5 uses 0
-to 20, DECtalk uses words per minute, and so on. NVDA always uses 0 to 100, so
-each synthesizer's range is described here, anchored at its JAWS default so that
-a JAWS default rate becomes NVDA's default rate of 50 where the scales differ.
+JAWS units of the profile's synthesizer: Eloquence rate runs 0 to 148, SAPI 5
+uses 0 to 20, DECtalk uses words per minute, and so on. JAWS shows each one as a
+percentage of that range (Eloquence rate 95 shows as 64%), and NVDA's settings
+are percentages, so the percentage carries over: JAWS 64% becomes NVDA 64%. Where
+a synthesizer's JAWS range isn't known, the value is not migrated at all.
 
 The user's copy of a profile only holds what they changed; it is layered over the
 shared copy, as JAWS does. Nothing in this module needs NVDA.
@@ -49,30 +50,25 @@ CLASSIC_SPEECH_CONTEXTS = {
 
 @dataclass(frozen=True)
 class ParameterRange:
+	"""One JAWS synthesizer setting's range, in the synthesizer's own units, as JAWS stores it.
+
+	JAWS shows the value as a percentage of this range; that percentage becomes NVDA's.
+	"""
+
 	minimum: float
 	maximum: float
-	#: The JAWS default, which maps to NVDA's default when ``anchored``.
-	default: float
-	#: When False the JAWS value is already a 0 to 100 percentage and is copied.
-	anchored: bool = True
+	#: JAWS's factory default, for reports.
+	default: float = 0
 
-	def toPercent(self, value, nvdaDefault: int = 50) -> int | None:
-		if value is None:
+	def toPercent(self, value) -> int | None:
+		if value is None or self.maximum <= self.minimum:
 			return None
-		value = float(value)
-		if not self.anchored:
-			return max(0, min(100, int(round(value))))
-		value = max(self.minimum, min(self.maximum, value))
-		if value <= self.default:
-			span = self.default - self.minimum
-			percent = nvdaDefault * ((value - self.minimum) / span) if span else nvdaDefault
-		else:
-			span = self.maximum - self.default
-			percent = nvdaDefault + (100 - nvdaDefault) * ((value - self.default) / span) if span else nvdaDefault
-		return max(0, min(100, int(round(percent))))
+		value = max(self.minimum, min(self.maximum, float(value)))
+		return int(round((value - self.minimum) * 100.0 / (self.maximum - self.minimum)))
 
 
-PERCENT = ParameterRange(0, 100, 50, anchored=False)
+#: A JAWS setting that is already a percentage.
+PERCENT = ParameterRange(0, 100, 50)
 
 
 @dataclass(frozen=True)
@@ -82,9 +78,10 @@ class JawsSynthInfo:
 	#: Short family name used to look for an NVDA equivalent.
 	family: str
 	label: str
-	rate: ParameterRange = PERCENT
-	pitch: ParameterRange = PERCENT
-	volume: ParameterRange = PERCENT
+	#: JAWS ranges; None where the range isn't known, so the setting is not migrated.
+	rate: ParameterRange | None = None
+	pitch: ParameterRange | None = None
+	volume: ParameterRange | None = None
 	#: Words to look for in NVDA synthesizer names and descriptions.
 	nvdaDriverWords: tuple = ()
 	#: Words to look for in SAPI 5 and OneCore voice names and vendors.
@@ -100,17 +97,18 @@ JAWS_SYNTHS = {
 	"eloq": JawsSynthInfo(
 		"eloquence",
 		"Eloquence",
-		rate=PERCENT,
-		pitch=PERCENT,
-		volume=PERCENT,
+		# JAWS 2026 shows Eloquence rate 95 as 64 percent, and its default 57; pitch and volume are Eloquence's own 0 to 100.
+		rate=ParameterRange(0, 148, 57),
+		pitch=ParameterRange(0, 100, 65),
+		volume=ParameterRange(0, 100, 100),
 		nvdaDriverWords=_ELOQUENCE_WORDS,
 		voiceWords=("eloquence", "eti", "viavoice", "via voice", "ibm", "outloud"),
 		nvdaDrivers=("ibmeci", "eloquence", "eci", "ttseloquence"),
 	),
 	# JAWS "SAPI 5X" loads 32-bit voices; NVDA 2026 reaches those through its sapi5_32 driver.
-	"sapi 5x": JawsSynthInfo("sapi5", "SAPI 5 (32-bit)", rate=_SAPI_RATE, pitch=_SAPI_RATE, nvdaDrivers=("sapi5_32", "sapi5")),
-	"sapi 5x 64": JawsSynthInfo("sapi5", "SAPI 5 64-bit", rate=_SAPI_RATE, pitch=_SAPI_RATE, nvdaDrivers=("sapi5", "sapi5_32")),
-	"msmobile": JawsSynthInfo("onecore", "Microsoft Mobile (OneCore)", rate=_SAPI_RATE, pitch=_SAPI_RATE, nvdaDrivers=("oneCore",)),
+	"sapi 5x": JawsSynthInfo("sapi5", "SAPI 5 (32-bit)", rate=_SAPI_RATE, pitch=_SAPI_RATE, volume=PERCENT, nvdaDrivers=("sapi5_32", "sapi5")),
+	"sapi 5x 64": JawsSynthInfo("sapi5", "SAPI 5 64-bit", rate=_SAPI_RATE, pitch=_SAPI_RATE, volume=PERCENT, nvdaDrivers=("sapi5", "sapi5_32")),
+	"msmobile": JawsSynthInfo("onecore", "Microsoft Mobile (OneCore)", rate=_SAPI_RATE, pitch=_SAPI_RATE, volume=PERCENT, nvdaDrivers=("oneCore",)),
 	"vocalizerexpressive": JawsSynthInfo(
 		"vocalizer",
 		"Vocalizer Expressive",
@@ -452,29 +450,27 @@ def parseVoiceAlias(value: str) -> list[dict]:
 
 
 def aliasIsNeutral(value: str) -> bool:
-	"""True when an alias keeps the current voice and changes neither pitch nor rate."""
-	first = parseVoiceAlias(value)[0]
-	return first["person"] == "*" and not first["pitch"][0] and not first["rate"][0]
+	"""True when an alias keeps the current voice.
+
+	Only an alias's person carries over into ClassicSpeech (see classicSpeechWriter), so an
+	alias that only changes pitch or rate (``*|20%|0``) changes nothing there.
+	"""
+	return parseVoiceAlias(value)[0]["person"] == "*"
 
 
-def applyDelta(base: float, delta: tuple, parameter: "ParameterRange") -> int:
-	"""Apply an alias change to an NVDA 0 to 100 value."""
-	amount, isPercent = delta
-	if not amount:
-		return int(round(base))
-	if isPercent:
-		value = base * (1 + amount / 100.0)
-	else:
-		span = (parameter.maximum - parameter.minimum) or 100
-		value = base + amount * 100.0 / span
-	return max(0, min(100, int(round(value))))
+def aliasChanges(group: dict) -> str:
+	"""The pitch and rate changes of one alias group, as text, such as ``pitch +5%``."""
+	parts = []
+	for name in ("pitch", "rate"):
+		amount, isPercent = group[name]
+		if amount:
+			parts.append(f"{name} {amount:+g}{'%' if isPercent else ''}")
+	return ", ".join(parts)
 
 
 #: JAWS Eloquence person names that the NVDA drivers spell differently.
 PERSON_SYNONYMS = {
 	"shelly": ("shelley",),
-	"bobby": ("fastflo", "flo", "child"),
-	"flo": ("fastflo",),
 }
 
 
@@ -633,8 +629,7 @@ ELOQUENCE_VARIANTS = {
 	"sandy": "3",
 	"rocko": "4",
 	"glen": "5",
-	"flo": "6",
-	"fastflo": "6",
+	"shelly": "2",
 	"grandma": "7",
 	"grandpa": "8",
 }
@@ -687,8 +682,10 @@ def scaledVoiceSettings(profile: VoiceProfile, context: VoiceContext) -> dict:
 	info = profile.synth
 	result = {}
 	for name, parameter in (("rate", info.rate), ("pitch", info.pitch), ("volume", info.volume)):
-		value = getattr(context, name)
-		percent = parameter.toPercent(value, nvdaDefault=100 if name == "volume" and parameter.anchored and parameter.default == parameter.maximum else 50)
+		if parameter is None:
+			# The JAWS range of this setting isn't known for this synthesizer: leave NVDA's.
+			continue
+		percent = parameter.toPercent(getattr(context, name))
 		if percent is not None:
 			result[name] = percent
 	return result

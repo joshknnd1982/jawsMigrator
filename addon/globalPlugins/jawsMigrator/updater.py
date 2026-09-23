@@ -95,7 +95,7 @@ def isNewer(candidate, installed):
 	return new + (0,) * (width - len(new)) > old + (0,) * (width - len(old))
 
 
-def releaseFromGithub(data):
+def releaseFromGithub(data, product=PRODUCT):
 	"""The Release described by GitHub's JSON for a release, or None."""
 	if not isinstance(data, dict) or data.get("draft") or data.get("prerelease"):
 		return None
@@ -114,7 +114,7 @@ def releaseFromGithub(data):
 		checksum = next((asset for asset in assets if asset.get("name") == wanted), None)
 	return Release(
 		version=version,
-		name=str(data.get("name") or f"{PRODUCT} {version}"),
+		name=str(data.get("name") or f"{product} {version}"),
 		notes=str(data.get("body") or ""),
 		pageUrl=str(data.get("html_url") or ""),
 		addonName=str(addon.get("name") or "") if addon else "",
@@ -187,18 +187,19 @@ def _headers(version, repository):
 	}
 
 
-def fetchLatestRelease(version, repository, session=None):
+def fetchLatestRelease(version, repository, session=None, product=PRODUCT):
+	"""The latest release of ``repository`` on GitHub. ``version`` is this add-on's, for the user agent."""
 	getter = session or _requests()
 	try:
 		response = getter.get(API_URL.format(repository=repository), headers=_headers(version, repository), timeout=CHECK_TIMEOUT_SECONDS)
 	except Exception as error:
 		raise UpdateError("GitHub could not be reached. Check your internet connection.") from error
 	if response.status_code == 404:
-		raise UpdateError(f"There are no {PRODUCT} releases on GitHub yet.")
+		raise UpdateError(f"There are no {product} releases on GitHub yet.")
 	if response.status_code != 200:
 		raise UpdateError(f"GitHub answered with error {response.status_code}.")
 	try:
-		release = releaseFromGithub(response.json())
+		release = releaseFromGithub(response.json(), product)
 	except Exception as error:
 		raise UpdateError("GitHub's answer could not be read.") from error
 	if release is None:
@@ -290,7 +291,13 @@ class UpdateChecker:
 		from . import state
 
 		self._timer = None
-		if self._stopped or self._busy:
+		if self._stopped:
+			return
+		if self._busy:
+			if manual:
+				import ui
+
+				ui.message(f"A {PRODUCT} update check is already running.")
 			return
 		addon = installedAddon()
 		if addon is None:
@@ -350,23 +357,28 @@ class UpdateChecker:
 
 		summary = f"{PRODUCT} {release.version} is available. You have version {version}."
 		notes = notesAsText(release.notes) or "This release has no notes."
-		if not release.addonUrl:
-			showUpdateOffer(
+		# While the offer is open, another check must not open a second one.
+		self._busy = True
+		try:
+			if not release.addonUrl:
+				showUpdateOffer(
+					f"{PRODUCT} update",
+					summary,
+					notes,
+					question=f"This release has no add-on file to install. Download it from {release.pageUrl or RELEASES_URL.format(repository=repository)}",
+					closeLabel="&Close",
+				)
+				return
+			answer = showUpdateOffer(
 				f"{PRODUCT} update",
 				summary,
 				notes,
-				question=f"This release has no add-on file to install. Download it from {release.pageUrl or RELEASES_URL.format(repository=repository)}",
-				closeLabel="&Close",
+				question="Download and install it now? NVDA asks you to confirm the installation, then offers to restart. Your settings, backups and migration reports are kept.",
+				installLabel="&Download and install",
+				closeLabel="&Not now",
 			)
-			return
-		answer = showUpdateOffer(
-			f"{PRODUCT} update",
-			summary,
-			notes,
-			question="Download and install it now? NVDA asks you to confirm the installation, then offers to restart. Your settings, backups and migration reports are kept.",
-			installLabel="&Download and install",
-			closeLabel="&Not now",
-		)
+		finally:
+			self._busy = False
 		if answer == wx.ID_YES:
 			self._download(release, version, repository)
 

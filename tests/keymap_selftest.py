@@ -5,6 +5,11 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "addon", "globalPlugins"))
+sys.path.insert(0, os.path.dirname(__file__))
+# Importing jawsMigrator runs its __init__, which imports NVDA's modules: stand-ins first.
+import nvdaStubs  # noqa: E402
+
+nvdaStubs.install()
 from jawsMigrator.jawsKeyMap import *  # noqa: E402,F403
 from jawsMigrator.jawsKeyMap import _convertKey  # noqa: E402
 

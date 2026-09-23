@@ -9,13 +9,13 @@ An NVDA add-on that brings a JAWS user's settings into NVDA. It reads everything
 - Keyboard assignments and quick navigation keys.
 - Sounds, and settings for single applications.
 
-Each one is mapped to its closest NVDA equivalent. You choose exactly which settings, schemes, voice profiles, voice aliases and keyboard layouts come over. Anything NVDA can't use is kept in an archive and explained in a report.
+Each one is mapped to its NVDA equivalent, strictly: NVDA announces what JAWS announced, in the voice JAWS used, and nothing more. You choose exactly which settings, schemes, voice profiles, voice aliases and keyboard layouts come over. Anything NVDA can't use is kept in an archive and explained in a report.
 
 Before anything changes, NVDA's settings, every add-on and the add-ons' own settings are backed up, so you can always go back to how NVDA was.
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.2
+- Version: 1.3
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -32,12 +32,13 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 - [Sounds](#sounds)
 - [Keyboard commands](#keyboard-commands)
 - [The assistant's own commands](#the-assistants-own-commands)
-- [Recommended add-ons](#recommended-add-ons)
+- [Add-ons: always the newest versions](#add-ons-always-the-newest-versions)
 - [Backups and restoring](#backups-and-restoring)
 - [JAWS is never changed](#jaws-is-never-changed)
 - [Adapting to each computer](#adapting-to-each-computer)
 - [Leasey](#leasey)
 - [Updates](#updates)
+- [Debug logs](#debug-logs)
 - [Where things are kept](#where-things-are-kept)
 - [Limits](#limits)
 - [Building from source](#building-from-source)
@@ -48,15 +49,16 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 1. **Checks the computer.** It finds every installed JAWS version, its build and languages, and your personal and shared JAWS settings. It also checks Windows, your copy of NVDA, the synthesizers and voices NVDA can use, and ClassicSpeech. If JAWS is not installed, an accessible message box says so; press OK and carry on with your day. If JAWS was uninstalled but its settings are still there, it offers to migrate those.
 2. **Indexes all JAWS settings.** It catalogs every JAWS settings file, sound and synthesizer for the chosen JAWS version, by JAWS manager. Your personal settings are for the Windows user who is signed in. Shared settings apply to everyone on the computer.
 3. **Lets you choose** your settings, the shared settings, or both, layered as JAWS layers them. It also lets you choose what to migrate, down to single settings, schemes, voice profiles, voice aliases and keyboard layouts, and where it goes.
-4. **Migrates** into a separate NVDA configuration profile named "JAWS settings" (recommended), or into NVDA's normal configuration.
+4. **Migrates** into NVDA's normal configuration (recommended), or into a separate NVDA configuration profile.
 5. **Backs up NVDA first**: its settings, every add-on and the add-ons' own settings. If anything goes wrong, the settings are put back automatically. You can restore any backup later, add-ons included.
-6. **Writes a report** of everything that changed, everything kept for NVDA, and everything JAWS had that NVDA has no equivalent for.
+6. **Writes a report** of everything that changed, everything kept for NVDA, and everything JAWS had that NVDA has no equivalent for, and a [detailed debug log](#debug-logs).
 
 ## Installing
 
-1. Download `jawsMigrator-1.2.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.3.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
+4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
 
 ## Using the assistant
 
@@ -68,12 +70,12 @@ The assistant is a single dialog with Back, Next and Cancel buttons. Each step i
 2. **Which JAWS settings.** Your settings and the shared settings (recommended), only yours, or only the shared ones.
 3. **What was found.** A summary of every JAWS manager's files and entries, JAWS's synthesizers and their NVDA equivalents, and whether Eloquence or IBM ViaVoice is available. The View the full index button shows every file.
 4. **Choose what to migrate.** A checklist with counts: Settings Center, voices, application profiles, sleep mode applications, dictionaries, punctuation, keyboard commands, and the archive. If you saved a choice in [JAWS Migration Assistant settings](#choosing-what-to-import), the step says so and starts from it.
-5. **Where the JAWS settings go.** A separate profile, or NVDA's normal configuration. For a profile, you can turn it on every time NVDA starts, and right away.
+5. **Where the JAWS settings go.** NVDA's normal configuration (recommended), or a separate profile. NVDA's settings are backed up first either way. A separate profile is only on while nothing else replaces it: NVDA can have one profile turned on by hand at a time, and add-ons such as Custom Browse Mode turn on their own, which switches the JAWS profile off, so speech and verbosity change back and forth. Settings you change while the profile is on also go into it.
 6. **Voices.** Which NVDA synthesizer and voice replaces your JAWS voice, and which JAWS voice profiles to migrate.
-7. **ClassicSpeech** (only when it is installed). Which JAWS speech and sound schemes to copy, which one to turn on, and whether to copy voice profiles, voice aliases, and verbosity, number and text settings.
+7. **ClassicSpeech** (only when it is installed). Which JAWS speech and sound schemes to copy, which one to turn on (none, unless you choose one), and whether to copy the JAWS cursor and message voices as Voice Profiles, and verbosity, number and text settings.
 8. **Sound effects** (only when ClassicSpeech is installed). Whether JAWS sounds play in place of NVDA's sounds, with the list of which JAWS sound replaces which NVDA sound, and whether to copy every JAWS sound into ClassicSpeech.
 9. **Keyboard commands.** Whether JAWS keystrokes become NVDA input gestures, which [JAWS keyboard layouts](#keyboard-layouts) to bring over (desktop, laptop and so on), NVDA's keyboard layout afterwards, whether to use JAWS quick navigation letters in browse mode, and whether JAWS keystrokes may replace NVDA's own. The list shows every keystroke that will be added.
-10. **Recommended add-ons.** Which of the four recommended add-ons to install, what each does, and what happens if you don't.
+10. **Add-ons.** ClassicSpeech and the five recommended add-ons: which to install, what each does, and what happens if you don't. Add-ons you already have are updated to their newest versions, unless you uncheck them. See [Add-ons: always the newest versions](#add-ons-always-the-newest-versions).
 11. **Ready to migrate.** A summary of what will happen. Press Migrate.
 
 Every checklist in the assistant has Select all and Select none buttons.
@@ -112,8 +114,8 @@ Items this computer can't use (for example a voice profile for a synthesizer NVD
 
 | JAWS manager | What happens |
 | --- | --- |
-| Settings Center (`.jcf`) | Every option with an NVDA equivalent is set. Examples: typing echo, keyboard layout and NVDA key, speech interruption, screen echo (dynamic content), language switching, phonetic reading after a pause, capitals, verbosity (access keys, tooltips, position information), progress bars, mouse echo, touch typing, audio ducking. Also browse mode (simple layout, line length, lines per page, Say All on page load, forms mode, audio indication), document formatting (headings, lists, tables, landmarks, links, graphics, table headers and coordinates, font attributes) and braille (mode, word wrap, cursor shapes and blink rate, messages, scroll rate, English braille tables). |
-| Settings for one application (`.jcf` for that program) | An NVDA configuration profile named "JAWS - program" that turns on in that program. |
+| Settings Center (`.jcf`) | Every option with an NVDA equivalent is set to what JAWS does (details below this table). Examples: typing echo, keyboard layout and NVDA key, speech interruption, screen echo (dynamic content), language switching, phonetic reading after a pause, capitals, verbosity (access keys, tooltips, position information), progress bars, mouse echo, touch typing, audio ducking. Also browse mode (simple layout, line length, lines per page, Say All on page load, forms mode, audio indication), document formatting (headings, lists, tables, landmarks, links, graphics, table headers and coordinates, font attributes) and braille (mode, word wrap, cursor shapes and blink rate, messages, scroll rate, English braille tables). |
+| Settings for one application (`.jcf` for that program) | An NVDA configuration profile named "JAWS - program" that turns on in that program, when it holds settings that differ from NVDA's normal configuration. A trigger you already have for that program is kept. Settings for web sites and parts of Windows, which can't turn a profile on, are listed in the report. Empty "JAWS - program" profiles an earlier version left are removed. |
 | Sleep mode in an application | NVDA sleeps in that application too. You can change this in NVDA's Settings, JAWS Migration Assistant. |
 | Quick Settings (`.qs`, `.qsm`) | Quick Settings saves into the application's `.jcf`, which is migrated as above. |
 | Voice profiles (`.vpf`) | See [Voices](#voices-voice-profiles-and-voice-aliases). |
@@ -123,7 +125,7 @@ Items this computer can't use (for example a voice profile for a synthesizer NVD
 | Keyboard Manager (`.jkm`) | NVDA input gestures for JAWS commands NVDA also has. See [Keyboard commands](#keyboard-commands). |
 | Navigation Quick Keys | NVDA browse mode quick navigation letters, when you choose JAWS letters. |
 | Mark Colors in Braille | NVDA's font attribute reporting includes braille when JAWS marked bold, italic or underline. |
-| Skim Reading Tool | "Allow skim reading in Say All" when JAWS rapid skim reading was on. Skim reading rules are archived. |
+| Skim Reading Tool | Skim reading rules are archived. NVDA's "Allow skim reading in Say All" is left as it is: JAWS's AllowRapidSkimRead only says whether a document can be read in full at once. |
 | Window Class Reassign | Archived and listed. Enhanced Control Support from the Add-on Store adds support for more controls. |
 | Prompt Create and custom labels | Archived and listed. Custom Labels from the Add-on Store lets you label controls in NVDA. |
 | Graphics Labeler (`.jgf`) | Archived. NVDA cannot recognize graphics by their pixels. |
@@ -136,6 +138,15 @@ Items this computer can't use (for example a voice profile for a synthesizer NVD
 | Message Center | Nothing to migrate (Freedom Scientific news). Archived. |
 | Notification History | Archived. Custom Notifications from the Add-on Store chooses how notifications are read. |
 | Script Manager (`.jss`, `.jsb`, `.jsh`, `.jsd`, `.jsm`) | JAWS scripts cannot run in NVDA. Your scripts are archived and listed in the report, with the commands they add. |
+
+Settings Center options in more detail:
+
+- With your settings and the shared settings (the recommended choice), NVDA is set to what JAWS does as it runs, your changes layered over the shared settings. Where an older JAWS has no entry for something at all, JAWS's own default is used.
+- Browse mode announcements follow JAWS's web verbosity level (Low, Medium or High) and its table of what each level announces. At Medium, JAWS's default, JAWS doesn't say "clickable", so NVDA's "Report if clickable" is turned off. Frames, banners and other items JAWS leaves out at your level are left out in NVDA too.
+- Font names, font sizes, colors and attributes follow the speech and sounds scheme JAWS uses, as JAWS itself does. JAWS's default scheme, Classic, announces none of them. JAWS's old Format and Text options are no longer used by JAWS and are listed in the report.
+- With only your settings, NVDA changes only what you changed in JAWS. If you changed a verbosity level, everything that level decides comes over.
+- A few JAWS defaults would hide information NVDA gives, such as object descriptions, which JAWS gives through its tutor messages. Those only come over when you changed them in JAWS.
+- JAWS plays no sound when it starts or exits, so NVDA's "Play sounds when starting or exiting NVDA" is turned off.
 
 Dictionary rules in more detail:
 
@@ -151,50 +162,51 @@ Dictionary rules in more detail:
 The assistant reads every JAWS voice profile, yours and the shared ones. Your changes are layered over JAWS's defaults, as JAWS does. Each profile's contexts are read: Global, PC cursor, JAWS cursor, keyboard, menus and dialogs, and messages.
 
 - **Your JAWS voice** becomes NVDA's voice. The assistant looks for the NVDA synthesizer that speaks the same voices. It prefers a native NVDA add-on driver, such as IBMTTS for Eloquence, then matching SAPI 5 or OneCore voices, in your JAWS language. Eloquence and IBM ViaVoice are looked for both as NVDA add-ons and as SAPI 5 voices. JAWS person names (Reed, Shelley, Glen, Rocko, Grandma and the others) select the matching voice or variant.
-- **Rate, pitch and volume** are converted from each JAWS synthesizer's own units into NVDA's 0 to 100. Eloquence uses 0 to 100 already. SAPI 5 uses 0 to 20. DECtalk uses words per minute, and so on.
+- **Rate, pitch and volume** come from your JAWS voice profile's Global voice, as the percentage JAWS shows for them, so a JAWS rate of 64% becomes an NVDA rate of 64. JAWS keeps them in each synthesizer's own units (Eloquence rate 95 is 64%, SAPI 5 uses 0 to 20, DECtalk words per minute...). They are set once, in NVDA's voice settings, and from then on only you change them: nothing the assistant writes speeds speech up or slows it down in some places.
 - **Punctuation level** and **capital pitch change** are migrated too.
 - **Every other voice profile** with an NVDA synthesizer on this computer is saved as that synthesizer's NVDA settings. When you switch NVDA to it later, your JAWS settings for it are already there.
-- **Voice aliases** (for example HeadingLevel1Voice, LinkVoice, QuotationVoice, and the Rent-A-Crowd aliases) are migrated into ClassicSpeech, as described next.
+- **Voice aliases** (for example HeadingLevel1Voice, LinkVoice, QuotationVoice, and the Rent-A-Crowd aliases) are migrated into ClassicSpeech, as described next. An alias that only changes pitch or rate is not a different voice there, so it keeps your NVDA voice.
 
 ## ClassicSpeech
 
 When [ClassicSpeech](https://github.com/joshknnd1982/classicspeech-nvda) is installed, the assistant also copies these into it, in ClassicSpeech's own formats:
 
-- **Voice Profiles.** Each JAWS context becomes a ClassicSpeech category:
-  - PC cursor becomes Focus and navigation.
+- **Voice Profiles**, only if you choose them. Each JAWS context whose voice is a different person becomes a ClassicSpeech category, with that person only; rate, pitch and volume always stay yours:
   - JAWS cursor becomes Review and object navigation, and Mouse.
-  - Keyboard becomes Keyboard entry.
   - JAWS messages become System and notifications.
+  - PC cursor becomes Focus and navigation, and keyboard becomes Keyboard entry, but only if JAWS used another person there; usually they speak in your own voice, so they are left out.
   - This is done for every migrated voice profile's NVDA synthesizer.
 - **Speech and Sound Schemes.** Every JAWS scheme becomes a ClassicSpeech scheme with its sounds, including SayAll Text With Sounds, Web RentACrowd, ProofReading and your own schemes:
   - JAWS control types become NVDA roles, including heading levels and landmarks.
   - JAWS control states become NVDA states.
   - Text attributes become formatting items (bold, italic, spelling errors, revisions, comments...).
-  - Sounds are copied with the scheme.
+  - A voice is only given where ClassicSpeech uses it as JAWS does. When JAWS only speaks its announcement in another voice (such as "link" in the message voice, in the Classic scheme), the text is not read in that voice, and the report says so. When JAWS reads the text itself in another voice (links and headings in Web RentACrowd, attributes in the ProofReading schemes), so does ClassicSpeech.
+  - Sounds are copied with the scheme. The "clickable" sound is left out: ClassicSpeech would play it on every link.
   - Compressed JAWS sounds are converted so NVDA can play them.
-  - The scheme JAWS used can be turned on in ClassicSpeech.
+  - No scheme is turned on unless you choose one; then ClassicSpeech keeps speaking and sounding as it does. You choose on every migration, and the scheme JAWS uses is marked in the list.
 - **Voice aliases.** Each alias becomes a ClassicSpeech voice for every migrated synthesizer:
-  - The alias's person becomes the matching NVDA voice or variant.
-  - Its pitch and rate changes are applied to the migrated voice.
+  - The alias's person becomes the matching NVDA voice or variant. Rate, pitch and volume are never stored, so speech keeps the rate, pitch and volume you set in NVDA everywhere.
+  - An alias whose person is your own voice, or that only changes pitch or rate, is left out.
   - Aliases list fallbacks after a semicolon, and the first person the NVDA synthesizer has is used, as JAWS does.
   - Rent-A-Crowd's links, headings and quotations keep their different voices.
-  - A "JAWS voice aliases" scheme gives every alias its natural item, even aliases no JAWS scheme used.
+  - A "JAWS voice aliases" scheme gives every alias its natural item, even aliases no JAWS scheme used. JAWS itself uses an alias only where a scheme says so, so turn this scheme on only if you want that.
 - **Verbosity, number and text processing.** JAWS Beginner, Intermediate and Advanced verbosity become ClassicSpeech's verbosity profiles. Number processing, single digits, currency, dates, mixed case, repeated characters and new line announcements are also copied.
 
 Each migration also saves `.classicspeech-voices` and `.classicspeech-scheme` files. ClassicSpeech's Import buttons can bring those into ClassicSpeech on another computer.
 
-Without ClassicSpeech, everything NVDA itself supports is migrated. The report lists what ClassicSpeech would add.
+Versions 1.0 to 1.2 of the assistant stored rate, pitch and volume in ClassicSpeech's voices, which made speech speed up, slow down or change pitch in places (on radio buttons, for example). Version 1.3 repairs those voices once, a little after NVDA starts, after backing up NVDA's settings: each keeps only its person, and ClassicSpeech Voice Profiles that only held a copy of your voice are removed.
+
+Without ClassicSpeech, everything NVDA itself supports is migrated. The report lists what ClassicSpeech would add. The assistant offers to install ClassicSpeech when it opens, and whenever you ask for something that needs it.
 
 ## Sounds
 
-JAWS sounds play through [ClassicSpeech](https://github.com/joshknnd1982/classicspeech-nvda). Without ClassicSpeech, NVDA keeps its own sounds, and the assistant says so rather than changing anything.
+JAWS sounds play through [ClassicSpeech](https://github.com/joshknnd1982/classicspeech-nvda). Without ClassicSpeech, NVDA keeps its own sounds; the assistant offers to install ClassicSpeech instead of changing anything.
 
 ### Every JAWS sound in ClassicSpeech
 
 The assistant can copy every JAWS sound it finds (`.wav`, your own and the shared ones) into ClassicSpeech, as a scheme named "JAWS Sounds (from JAWS)":
 
-`%APPDATA%
-vda\ClassicSpeech\Schemes\JAWS Sounds (from JAWS)\Sounds`
+`%APPDATA%\nvda\ClassicSpeech\Schemes\JAWS Sounds (from JAWS)\Sounds`
 
 Sounds JAWS keeps compressed are converted so NVDA can play them. Where you have your own copy of a JAWS sound, yours is used, as in JAWS. The scheme changes nothing by itself; its sounds are at hand in ClassicSpeech's Speech and Sound Schemes, for any item. Copying again later keeps what you set up in the scheme.
 
@@ -214,15 +226,14 @@ NVDA plays its own sounds when you switch between focus and browse mode, and for
 | Remote Access connected, controlled, joined and disconnected | Tandem connect and disconnect (or your choice) |
 | Error written to the NVDA log | Error buzzer |
 
-JAWS has no sounds for NVDA starting or exiting, or for the Remote Access clipboard, so NVDA keeps its own for those.
+JAWS plays no sound when it starts or exits, so NVDA's start and exit sounds are turned off (Play sounds when starting or exiting NVDA, in NVDA's General settings). Restoring NVDA's own sounds turns them on again if they were on before. JAWS has no sounds for the Remote Access clipboard, so NVDA keeps its own for those.
 
 To switch quickly, press NVDA+Shift+J then S. The first press plays JAWS sounds; the next restores NVDA's own. The same actions are in NVDA menu, Tools, JAWS Migration Assistant (Use JAWS sounds in place of NVDA's sounds, and Restore NVDA's own sounds), and in NVDA's Settings, JAWS Migration Assistant. The migration's Sound effects step does it too.
 
 How it works, and how to go back:
 
 - ClassicSpeech plays a scheme's "NVDA sound" items in place of NVDA's own sounds. The assistant gives every ClassicSpeech scheme the JAWS sounds, each copied into that scheme's own Sounds folder, so the JAWS sounds play whichever scheme is active. A sound you already chose for an item in a scheme is left as it is. If ClassicSpeech's speech and sound schemes were off, they are turned on, since the sounds need them.
-- NVDA's own sound files, in NVDA's program folder, are never changed. Before the JAWS sounds go in, a copy of NVDA's own sounds is kept in `jawsMigrator
-vdaSounds`, and NVDA's settings, add-ons and add-on settings are backed up.
+- NVDA's own sound files, in NVDA's program folder, are never changed. Before the JAWS sounds go in, a copy of NVDA's own sounds is kept in `jawsMigrator\nvdaSounds`, and NVDA's settings, add-ons and add-on settings are backed up.
 - Restore NVDA's own sounds takes out exactly what the assistant added, and turns ClassicSpeech's schemes off again if the assistant had turned them on. Sounds you changed in ClassicSpeech since are left as you set them. The JAWS sounds copied into "JAWS Sounds (from JAWS)" stay.
 - Restoring a backup also puts everything back as it was.
 
@@ -262,9 +273,13 @@ Layouts of other JAWS versions and languages are found the same way. Freedom Sci
 ### Everything else about keystrokes
 
 - Before any gesture is added, gestures.ini is backed up.
+- Each keystroke is decided separately for NVDA's desktop and laptop keyboard layouts, so a keystroke only gets a command in the layouts where it is free or the same.
+- On the Laptop layout, where Caps Lock is the JAWS key, Caps Lock keystrokes decide what NVDA+key does, because NVDA can't tell Caps Lock from Insert. For example, Caps Lock+H and Caps Lock+J don't open NVDA's Input Gestures dialog or menu.
 - Keystrokes NVDA already uses for the same command are left alone.
-- Keystrokes NVDA uses for something else stay NVDA's, unless you choose otherwise.
+- Keystrokes NVDA uses for something else stay NVDA's, unless you choose otherwise. That includes JAWS's browse mode keystrokes such as Control+Insert+R: NVDA+Control+R still reloads NVDA's settings.
 - JAWS quick navigation letters can be used in browse mode, so R moves to regions and A to radio buttons, as in JAWS.
+- No JAWS keystroke gets an NVDA command that passes the keystroke on to the program. In edit fields, NVDA's sentence commands do that, so Caps Lock+Y would type a Y; those JAWS keystrokes only work in browse mode.
+- Versions 1.0 to 1.2 added some keystrokes that do such things. Version 1.3 removes them once, a little after NVDA starts, after backing up NVDA's settings; keystrokes you added yourself are left alone.
 - Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own.
 - Application key maps and JAWS-only commands are listed too.
 
@@ -290,20 +305,31 @@ Press NVDA+Shift+J, then:
 | R | Open the last migration report |
 | B | Restore NVDA settings from a backup |
 | U | Check for updates |
+| C | Install ClassicSpeech, or update it to its newest version |
 | I | Hear the JAWS, Windows and NVDA versions on this computer |
 | H or F1 | List these commands |
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
 
-The NVDA menu, Tools, JAWS Migration Assistant has the same actions, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
+The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open the debug log, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
 
 - automatic update checks;
 - turning on the JAWS settings profile when NVDA starts;
 - the list of applications where NVDA sleeps.
 
-## Recommended add-ons
+## Add-ons: always the newest versions
 
-The assistant checks whether four Add-on Store add-ons are installed. It lets you choose which to install, and explains what happens without each:
+The assistant uses ClassicSpeech, and recommends five add-ons from NVDA's Add-on Store. Whenever it installs one, it gets the newest version at that moment: ClassicSpeech's newest release from [its GitHub page](https://github.com/joshknnd1982/classicspeech-nvda) (ClassicSpeech is not in the Add-on Store), and the newest stable version for your NVDA from the Add-on Store. Nothing is installed from an old copy.
+
+The migration's Add-ons step lists each one:
+
+- **Not installed:** a check box to install it, with what it does and what happens if you don't install it.
+- **Installed:** a check box, checked, to update it to its newest version. If it is already the newest, or newer, it is left as it is.
+- **Turned off, or being removed:** left as it is, and the step says so.
+
+| Add-on | What it adds | Without it |
+| --- | --- | --- |
+| ClassicSpeech | Speech and sound schemes, voices for voice aliases, JAWS sounds and verbosity, like JAWS's Speech and Sounds Manager | Your JAWS schemes, voice aliases and sounds don't come over, and NVDA keeps its own sounds |
 
 | Add-on | What it adds | Without it |
 | --- | --- | --- |
@@ -311,14 +337,16 @@ The assistant checks whether four Add-on Store add-ons are installed. It lets yo
 | Custom Labels | Your own labels for unlabeled controls, like JAWS Prompt Create and custom labels | Controls you named in JAWS are read without your names; the report lists them |
 | Custom Browse Mode | An NVDA profile that turns on in browse mode, like JAWS's separate web settings | Browse mode uses the same settings as everything else, as NVDA normally does |
 | Custom Notifications | How notifications are read: full text, just the application, speech or braille | NVDA keeps reading every notification in full |
+| Control Usage Assistant | Tells you how to use the control you are on, like JAWS's screen-sensitive help (Insert+F1); for people new to computers, Windows or NVDA | You look up how to use a control in NVDA's user guide |
 
-The add-ons you choose are:
+The add-ons you choose are, after the migration and its backup:
 
-1. looked up in NVDA's Add-on Store catalog, choosing the newest stable version that works with your NVDA;
-2. downloaded and checked against the Add-on Store's SHA-256 checksum;
-3. installed with NVDA's own installer.
+1. looked up: ClassicSpeech's newest GitHub release, or the newest stable Add-on Store version that works with your NVDA;
+2. compared with the version you have, so only a missing or older add-on is downloaded;
+3. downloaded and checked against the published SHA-256 checksum, and checked to be the add-on it claims to be;
+4. installed with NVDA's own installer, which replaces an older version and keeps its settings.
 
-They start after NVDA restarts.
+They start, or switch to the new version, after NVDA restarts. To install or update ClassicSpeech at any other time, use the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech, or press NVDA+Shift+J then C; NVDA's settings are backed up first.
 
 ## Backups and restoring
 
@@ -389,6 +417,15 @@ The assistant checks [its GitHub releases](https://github.com/joshknnd1982/jawsM
 
 The update dialog shows the release notes in a box you can read line by line. It offers to download the new version. The download must match the release's SHA-256 checksum. NVDA's own installer then asks you to confirm, installs it, keeps your settings, backups and reports, and offers to restart. This is the same updater ClassicSpeech uses. Automatic checks can be turned off in NVDA's Settings, JAWS Migration Assistant.
 
+## Debug logs
+
+For finding problems, the assistant keeps detailed logs:
+
+- `jawsMigrator\debug.log`: what the assistant did outside migrations, such as repairs, sounds and add-on installs, and any errors. NVDA menu, Tools, JAWS Migration Assistant, Open the debug log opens it.
+- `debug.log` in each migration's folder: every step of that migration. It lists the JAWS values read (rates in JAWS's own units, voice aliases, the web verbosity level...), the NVDA and ClassicSpeech settings written and where, each scheme item and voice decision, the keystrokes, the add-ons installed, and any error with its details.
+
+Errors also go to NVDA's own log. When reporting a problem, attach the debug log and NVDA's log (NVDA menu, Tools, View log).
+
 ## Where things are kept
 
 Everything the assistant writes is inside NVDA's settings folder, usually `%APPDATA%\nvda`:
@@ -397,11 +434,11 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 | --- | --- |
 | `jawsMigrator\backups\<date>` | Backups of NVDA's settings, add-ons and add-on settings (`backup.json` lists every file and add-on) |
 | `jawsMigrator\archive\JAWS <version> <date>` | Copies of your JAWS settings (and the shared settings, when chosen) |
-| `jawsMigrator\migrations\<date>` | The report (`report.html`, `report.txt`), the JAWS index (`jaws-index.json`, `jaws-index.txt`), gestures.ini as it was, and ClassicSpeech voice and scheme files |
-| `jawsMigrator
-vdaSounds\<NVDA version>` | A copy of NVDA's own sounds, kept before JAWS sounds are used in their place |
+| `jawsMigrator\migrations\<date>` | The report (`report.html`, `report.txt`), the migration's `debug.log`, the JAWS index (`jaws-index.json`, `jaws-index.txt`), gestures.ini as it was, and ClassicSpeech voice and scheme files |
+| `jawsMigrator\debug.log` | The assistant's general debug log |
+| `jawsMigrator\nvdaSounds\<NVDA version>` | A copy of NVDA's own sounds, kept before JAWS sounds are used in their place |
 | `jawsMigrator\state.json` | The assistant's own settings, including your choice of JAWS items to import |
-| `profiles\JAWS settings.ini`, `profiles\JAWS - program.ini` | Migrated NVDA configuration profiles |
+| `profiles\JAWS - program.ini` (and `profiles\JAWS settings.ini` if you chose a separate profile) | Migrated NVDA configuration profiles |
 | `ClassicSpeech\Schemes\<scheme> (from JAWS)` | Migrated ClassicSpeech schemes |
 | `ClassicSpeech\Schemes\JAWS Sounds (from JAWS)\Sounds` | Every JAWS sound, ready for ClassicSpeech |
 
@@ -409,7 +446,7 @@ vdaSounds\<NVDA version>` | A copy of NVDA's own sounds, kept before JAWS sounds
 
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
-- Rates and pitches are converted by scale, anchored at each JAWS synthesizer's default, so a voice may need a small adjustment afterwards.
+- Rates and pitches are converted from the percentage JAWS shows. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
 - JAWS voices from synthesizers with no NVDA equivalent on the computer (for example old hardware synthesizers) cannot be used. The report says which ones.
 - NVDA speech dictionaries are not per application. Rules from JAWS application dictionaries go into the default dictionary; you can leave them out.
 - Braille tables are chosen automatically for English only. For other languages, choose the table in NVDA's Braille settings.

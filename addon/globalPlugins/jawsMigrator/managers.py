@@ -209,8 +209,8 @@ MANAGERS = (
 		"skimReading",
 		"Skim Reading Tool",
 		"Reads the first line or sentence of each paragraph, or text matching your rules.",
-		"NVDA can let navigation continue Say All (Keyboard settings, 'Allow skim reading in Say All'), which is set when "
-		"JAWS rapid skim reading was on. Skim reading rules are kept in the migration archive.",
+		"NVDA has no skim reading tool. Skim reading rules are kept in the migration archive; NVDA's 'Allow skim reading "
+		"in Say All' is left as it is, because JAWS has no matching preference.",
 		PARTIAL,
 		jcfSections=("skim",),
 		jcfKeys=(("options", "allowrapidskimread"), ("options", "skimreadingindication")),
@@ -270,6 +270,14 @@ RECOMMENDED_ADDONS = (
 		"like the JAWS notification settings.",
 		"NVDA keeps reading every notification in full, its normal behavior. Your JAWS notification history is kept "
 		"in the migration archive.",
+	),
+	StoreAddon(
+		"controlUsageAssistant",
+		"Control Usage Assistant",
+		"Tells you how to use the control you are on, such as which keys work in a list or an edit field. It helps people "
+		"new to computers, Windows or NVDA, much like JAWS's screen-sensitive help (Insert+F1).",
+		"NVDA itself doesn't explain how to use the control you are on; you would look it up in NVDA's user guide. "
+		"Nothing else changes.",
 	),
 )
 

@@ -291,16 +291,20 @@ def runChecks(facts: SystemFacts, profileName: str = "JAWS settings") -> list[Ch
 	# Speech
 	if facts.classicSpeech.installed:
 		level = OK if facts.classicSpeech.usable else WARNING
-		detail = "JAWS voice profiles and speech and sounds schemes will be copied into ClassicSpeech."
+		detail = "JAWS speech and sounds schemes, voice aliases, sounds and verbosity can be copied into ClassicSpeech."
 		if not facts.classicSpeech.usable:
-			detail = "ClassicSpeech is disabled or being removed, so JAWS voice profiles and schemes cannot be copied into it."
+			detail = (
+				f"ClassicSpeech isn't running now ({facts.classicSpeech.describe}), so nothing can be copied into it. "
+				"Restart NVDA, or turn it on in NVDA's Add-on Store, then open the assistant again."
+			)
 		add(Check(level, f"ClassicSpeech {facts.classicSpeech.version} is installed", detail))
 	else:
 		add(
 			Check(
 				NOTE,
 				"ClassicSpeech is not installed",
-				"Everything NVDA supports natively is migrated. Per-cursor voices and JAWS speech and sounds schemes need ClassicSpeech.",
+				"Everything NVDA supports natively is migrated. JAWS speech and sounds schemes, voice aliases and sounds need "
+				"ClassicSpeech; the assistant offers to install its newest version.",
 			),
 		)
 	if facts.synths:

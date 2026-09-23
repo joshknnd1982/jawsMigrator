@@ -13,11 +13,15 @@ Contents:
 - ``jawsKeyToNvdaGesture()``: converts the left side of a .jkm line into an NVDA gesture identifier.
 - ``DEFAULT_JKM_SECTIONS``: which .jkm sections hold convertible keyboard bindings, and their layout.
 - ``SCRIPT_MAP`` / ``QUICK_NAV_MAP``: JAWS script name -> ``(module, class, script, description)``
-  of a functionally equivalent NVDA script. ``ADDITIONAL_TARGETS`` lists extra classes for the few
-  commands NVDA implements separately in browse mode and in editable text. ``getNvdaTargets()`` looks
-  a JAWS script up in all three.
+  of a functionally equivalent NVDA script. ``COMMAND_KEY_TARGETS`` replaces a quick navigation target
+  for keystrokes that are not quick navigation keys. ``ADDITIONAL_TARGETS`` can list extra classes for
+  a command. ``getNvdaTargets()`` looks a JAWS script up in all of them.
+- ``SENDS_KEYSTROKE_CLASSES`` / ``SENDS_KEYSTROKE_SCRIPTS``: NVDA scripts that pass the pressed
+  keystroke on to the application. No map may point at them; ``getNvdaTargets()`` drops them.
 - ``PASSTHROUGH_SCRIPTS`` / ``isPassThroughBinding()``: JAWS scripts that only pass a standard Windows
   key through and speak the result. NVDA does this natively, so these bindings need no NVDA gesture.
+- ``isQuickNavKey()``: whether a keystroke is a browse mode quick navigation key (a letter, digit or
+  punctuation key, alone or with Shift).
 - ``parseJkm()`` / ``readJkmFile()``: a small .jkm reader.
 
 Every NVDA target was checked against the NVDA 2026.2 source: a ``script_<name>`` method on that
@@ -31,7 +35,8 @@ Limitations:
   bindings cannot be expressed as NVDA keyboard gestures, so they convert to ``None``.
 - JAWSKey, Insert and CapsLock all become ``NVDA``. NVDA cannot tell which NVDA key was pressed,
   so in [Laptop Keys] ``Insert+H`` (HotKeyHelp) and ``JAWSKey+H`` (CapsLock+H, SaySentence) produce
-  the same gesture. Prefer the JAWSKey binding in laptop sections, because JAWSKey is CapsLock there.
+  the same gesture. Where Caps Lock is the JAWS key (the Laptop layout), ``keyPlan.planKeys`` lets the
+  JAWSKey/CapsLock keystroke decide what the NVDA gesture does, even when NVDA has no equivalent for it.
 - JAWS separates numpad arrows (``UpArrow``) from the dedicated cursor keys (``ExtendedUpArrow``).
   Both become NVDA's dedicated key names (``upArrow``, ``home``, ...). No ``numpad8``-style
   alternatives are generated.
@@ -298,6 +303,19 @@ def jawsKeyToNvdaGesture(jawsKey: str, layout: str) -> str | None:
 		braille, touch or mouse keys, modifier-only chords and keys with unknown tokens.
 	"""
 	return _convertKey(jawsKey, layout)[0]
+
+
+def isQuickNavKey(jawsKey: str) -> bool:
+	"""True for a browse mode quick navigation key: a letter, digit or punctuation key, alone or with Shift.
+
+	In browse mode only these keys may take over NVDA's own quick navigation letters without asking.
+	Other keystrokes in [virtual keys], such as ``Control+JAWSKey+R``, are commands like any other.
+	"""
+	gesture = _convertKey(jawsKey, "common")[0]
+	if gesture is None:
+		return False
+	keys = gesture.split(":", 1)[1].split("+")
+	return len(keys[-1]) == 1 and all(key == "shift" for key in keys[:-1])
 
 
 def normalizeScriptName(scriptName: str) -> str:
@@ -1124,26 +1142,53 @@ QUICK_NAV_MAP = {
 	),
 }
 
-# NVDA implements a few commands separately for browse mode and for editable text (Word, edit fields).
-# To cover both, bind the gesture to these targets as well as to the primary target.
-ADDITIONAL_TARGETS = {
-	"saynextsentence": (
-		(
-			"editableText",
-			"EditableText",
-			"caret_nextSentence",
-			"Move the caret to the next sentence and read it (Word and other editable text)",
-		),
+# JAWS script name -> target for keystrokes that are not quick navigation keys (see isQuickNavKey), where
+# the QUICK_NAV_MAP target would do something else. JAWS's SayNextParagraph (Caps Lock+Control+O in the
+# Laptop layout) moves to the next paragraph of any kind; NVDA's quick navigation "text paragraph" (p)
+# skips paragraphs that don't end like sentences, so only the P quick navigation key keeps that target.
+COMMAND_KEY_TARGETS = {
+	"saynextparagraph": (
+		"cursorManager",
+		"CursorManager",
+		"moveByParagraph_forward",
+		"Move to the next paragraph and read it (browse mode documents)",
 	),
-	"saypriorsentence": (
-		(
-			"editableText",
-			"EditableText",
-			"caret_previousSentence",
-			"Move the caret to the previous sentence and read it (Word and other editable text)",
-		),
+	"saypriorparagraph": (
+		"cursorManager",
+		"CursorManager",
+		"moveByParagraph_back",
+		"Move to the previous paragraph and read it (browse mode documents)",
 	),
 }
+
+# Extra targets bound together with the primary one: JAWS script name -> tuple of targets. Empty for now.
+# NVDA's editable text versions of commands (editableText.EditableText's caret_nextSentence...) are not
+# usable here: they send the pressed keystroke on to the application (see SENDS_KEYSTROKE_CLASSES).
+ADDITIONAL_TARGETS = {}
+
+# NVDA scripts that pass the pressed keystroke on to the application (gesture.send()), at least in some
+# cases. Bound to a JAWS keystroke they would send that keystroke, NVDA key included: in an edit field
+# Caps Lock+Y bound to caret_previousSentence turns Caps Lock on and types "Y". getNvdaTargets() never
+# returns them. Checked against NVDA 2026.2: every caret script of editableText.EditableText sends the
+# key first unless the control declares sentence support (only Word's object model does), and the
+# browse mode scripts below pass their key on.
+SENDS_KEYSTROKE_CLASSES = frozenset({("editableText", "EditableText")})
+SENDS_KEYSTROKE_SCRIPTS = frozenset(
+	{
+		("browseMode", "BrowseModeTreeInterceptor", "passThrough"),
+		("browseMode", "BrowseModeTreeInterceptor", "disablePassThrough"),
+		("browseMode", "BrowseModeDocumentTreeInterceptor", "collapseOrExpandControl"),
+		("browseMode", "BrowseModeDocumentTreeInterceptor", "tab"),
+		("browseMode", "BrowseModeDocumentTreeInterceptor", "shiftTab"),
+		("cursorManager", "CursorManager", "copyToClipboard"),
+	},
+)
+
+
+def sendsKeystroke(module: str, className: str, script: str) -> bool:
+	"""Whether an NVDA script passes the keystroke that ran it on to the application."""
+	return (module, className) in SENDS_KEYSTROKE_CLASSES or (module, className, script) in SENDS_KEYSTROKE_SCRIPTS
+
 
 # JAWS scripts that send a standard Windows key through and speak the result. NVDA handles those keys
 # natively, so bindings of plain Windows keys to these scripts need no NVDA gesture.
@@ -1237,30 +1282,44 @@ PASSTHROUGH_SCRIPTS = frozenset(
 )
 
 
-def getNvdaTargets(scriptName: str) -> tuple[tuple[str, str, str, str], ...]:
+def getNvdaTargets(scriptName: str, jawsKey: str | None = None) -> tuple[tuple[str, str, str, str], ...]:
 	"""Return every NVDA ``(module, class, script, description)`` target for a JAWS script, primary first.
 	:param scriptName: A JAWS script name in any case, optionally with arguments, e.g. ``"SayLine"``.
-	:return: An empty tuple if NVDA has no equivalent.
+	:param jawsKey: The keystroke the script is bound to, when known. A keystroke that is not a quick
+		navigation key gets the ``COMMAND_KEY_TARGETS`` target where there is one.
+	:return: An empty tuple if NVDA has no equivalent. Scripts that would send the keystroke on to the
+		application (see ``sendsKeystroke``) are never returned.
 	"""
 	name = normalizeScriptName(scriptName)
-	primary = SCRIPT_MAP.get(name) or QUICK_NAV_MAP.get(name)
+	primary = None
+	if jawsKey is not None and name in COMMAND_KEY_TARGETS and not isQuickNavKey(jawsKey):
+		primary = COMMAND_KEY_TARGETS[name]
+	if primary is None:
+		primary = SCRIPT_MAP.get(name) or QUICK_NAV_MAP.get(name)
 	if primary is None:
 		return ()
-	return (primary,) + ADDITIONAL_TARGETS.get(name, ())
+	targets = (primary,) + tuple(ADDITIONAL_TARGETS.get(name, ()))
+	return tuple(target for target in targets if not sendsKeystroke(*target[:3]))
 
 
 def isPassThroughBinding(jawsKey: str, scriptName: str) -> bool:
 	"""True if this binding only passes a standard Windows key through, which NVDA handles natively.
 	Bindings that use the JAWS key (for example ``JAWSKey+U=SayPriorLine`` in the laptop layout) are
-	JAWS commands, not pass-through keys, so they return False.
+	JAWS commands, not pass-through keys, so they return False. So are letter, digit and punctuation
+	keys without Control or Windows, such as the Classic Laptop layout's ``Alt+L=SayNextWord``: Windows
+	gives those keys to the application to type or to use as access keys.
 	"""
 	if normalizeScriptName(scriptName) not in PASSTHROUGH_SCRIPTS:
 		return False
 	key = (jawsKey or "").strip().rstrip("*")
 	if not key or "&" in key or key.lower().startswith("braille"):
 		return False
-	tokens = {t.replace(" ", "").lower() for t in key.split("+")}
-	return not (tokens & JAWS_MODIFIER_TOKENS)
+	tokens = [t.replace(" ", "").lower() for t in key.split("+")]
+	if set(tokens) & JAWS_MODIFIER_TOKENS:
+		return False
+	mainKey = KEY_NAMES.get(tokens[-1], tokens[-1])
+	modifiers = {KEY_NAMES.get(token, token) for token in tokens[:-1]}
+	return not (len(mainKey) == 1 and not modifiers & {"control", "windows"})
 
 
 def readJkmFile(path: str) -> str:

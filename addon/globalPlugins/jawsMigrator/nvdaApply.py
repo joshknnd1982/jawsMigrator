@@ -25,13 +25,38 @@ def _log():
 
 # -- configuration profiles -------------------------------------------------------------
 
+#: What NVDA's Configuration Profiles dialog calls the base configuration.
+NORMAL_CONFIGURATION = "normal configuration"
+
+
+def existingProfileName(name: str | None) -> str | None:
+	"""The existing configuration profile called ``name``, spelled as it is on disk, or None.
+
+	A profile is a file, and Windows file names ignore case: when "JAWS settings" exists,
+	"jaws settings" is that profile, and NVDA would refuse to create it again.
+	"""
+	if not name:
+		return None
+	import config
+
+	wanted = name.lower()
+	for existing in config.conf.listProfiles():
+		if existing.lower() == wanted:
+			return existing
+	return None
+
+
+def _profilePath(profileName: str) -> str:
+	return os.path.join(nvdaEnv.configDir(), "profiles", f"{profileName}.ini")
+
 
 @contextlib.contextmanager
 def writingTo(profileName: str | None):
 	"""Make NVDA write settings into ``profileName``, or the normal configuration when None.
 
 	Profile triggers are suspended and any manually activated profile is put back afterwards,
-	so NVDA ends up exactly as it was, apart from the settings that were written.
+	so NVDA ends up exactly as it was, apart from the settings that were written. An existing
+	profile whose name differs only in case is the one written to.
 	"""
 	import config
 
@@ -43,8 +68,12 @@ def writingTo(profileName: str | None):
 	conf.disableProfileTriggers()
 	try:
 		if profileName:
-			if profileName not in conf.listProfiles():
+			existing = existingProfileName(profileName)
+			if existing is None:
+				safety.checkWritable(_profilePath(profileName))
 				conf.createProfile(profileName)
+			else:
+				profileName = existing
 			conf.manualActivateProfile(profileName)
 		else:
 			conf.manualActivateProfile(None)
@@ -58,6 +87,19 @@ def writingTo(profileName: str | None):
 			conf.manualActivateProfile(None)
 		if triggersWereEnabled:
 			conf.enableProfileTriggers()
+
+
+def getValue(path: tuple):
+	"""NVDA's current value of a setting, or None when it has none."""
+	try:
+		import config
+
+		section = config.conf
+		for part in path:
+			section = section[part]
+		return section
+	except Exception:
+		return None
 
 
 def setValue(conf, path: tuple, value) -> None:
@@ -76,10 +118,33 @@ def setValue(conf, path: tuple, value) -> None:
 	section[path[-1]] = value
 
 
-def applySettings(changes: list, synthName: str | None) -> tuple[list, list]:
-	"""Apply NVDA setting changes in the profile being written. Returns ``(applied, failed)``."""
+def writingConfigurationName() -> str:
+	"""The configuration NVDA writes settings to now: the active profile's name, or the normal configuration."""
 	import config
 
+	profiles = config.conf.profiles
+	if len(profiles) > 1:
+		return str(getattr(profiles[-1], "name", "") or NORMAL_CONFIGURATION)
+	return NORMAL_CONFIGURATION
+
+
+def normalConfigurationOnly(path) -> bool:
+	"""Whether NVDA keeps the setting at ``path`` in its normal configuration only (ConfigManager.BASE_ONLY_SECTIONS)."""
+	import config
+
+	return bool(path) and path[0] in getattr(config.conf, "BASE_ONLY_SECTIONS", ())
+
+
+def applySettings(changes: list, synthName: str | None) -> tuple[list, list]:
+	"""Apply NVDA setting changes in the configuration being written (see ``writingTo``). Returns ``(applied, failed)``.
+
+	While a profile is being written, settings NVDA keeps in its normal configuration only (such as
+	"Play sounds when starting or exiting NVDA") are left out, because setting them would change the
+	normal configuration that a profile leaves as it is. They come back in ``failed``, saying why.
+	"""
+	import config
+
+	writingProfile = len(config.conf.profiles) > 1
 	applied = []
 	failed = []
 	for change in changes:
@@ -91,6 +156,15 @@ def applySettings(changes: list, synthName: str | None) -> tuple[list, list]:
 				failed.append((change, "no synthesizer to apply it to"))
 				continue
 			path = ("speech", synthName) + tuple(path)
+		if writingProfile and normalConfigurationOnly(path):
+			failed.append(
+				(
+					change,
+					f'NVDA keeps this setting in its normal configuration only, and these settings went into the profile "{writingConfigurationName()}", '
+					"so your normal configuration was left as it is",
+				),
+			)
+			continue
 		try:
 			setValue(config.conf, path, change.value)
 			applied.append(change)
@@ -100,16 +174,102 @@ def applySettings(changes: list, synthName: str | None) -> tuple[list, list]:
 	return applied, failed
 
 
-def setProfileTrigger(appName: str, profileName: str) -> bool:
-	"""Make ``profileName`` turn on in the application ``appName`` (its executable name)."""
+#: What ``setProfileTrigger`` did.
+TRIGGER_SET = "set"
+TRIGGER_KEPT = "kept"
+TRIGGER_FAILED = "failed"
+
+
+def setProfileTrigger(appName: str, profileName: str) -> tuple[str, str]:
+	"""Make ``profileName`` turn on in the application ``appName``: its program's name, without ".exe".
+
+	Returns ``(TRIGGER_SET, "")`` when done. A trigger that already turns on another existing profile
+	is the user's and is never taken over: nothing changes, and ``(TRIGGER_KEPT, that profile)`` comes
+	back. ``(TRIGGER_FAILED, reason)`` when NVDA could not save it.
+	"""
+	import config
+
+	spec = f"app:{appName.lower()}"
+	try:
+		triggers = config.conf.triggersToProfiles
+		current = triggers.get(spec)
+		if current and current != profileName:
+			owner = existingProfileName(current)
+			if owner is not None and owner.lower() != profileName.lower():
+				return TRIGGER_KEPT, owner
+		safety.checkWritable(os.path.join(nvdaEnv.configDir(), "profileTriggers.ini"))
+		triggers[spec] = profileName
+		config.conf.saveProfileTriggers()
+		return TRIGGER_SET, ""
+	except Exception as error:
+		_log().exception("jawsMigrator: could not add a profile trigger for %s", appName)
+		return TRIGGER_FAILED, str(error) or error.__class__.__name__
+
+
+def _holdsValues(section, top: bool = True) -> bool:
+	# dict.items: the stored values, without ConfigObj's interpolation.
+	for key, value in dict.items(section):
+		if top and key == "schemaVersion":
+			continue
+		if isinstance(value, dict):
+			if _holdsValues(value, top=False):
+				return True
+		else:
+			return True
+	return False
+
+
+def profileFileHoldsSettings(path: str) -> bool:
+	"""Whether a profile file holds any setting besides its ``schemaVersion``. True when it can't be read.
+
+	NVDA's profile files are ConfigObj files: ``[section]`` headers, ``key = value`` lines and ``#`` comments.
+	"""
+	try:
+		with open(path, encoding="utf-8-sig", errors="replace") as stream:
+			lines = stream.read().splitlines()
+	except OSError:
+		return True
+	inSection = False
+	for line in lines:
+		text = line.strip()
+		if not text or text.startswith("#"):
+			continue
+		if text.startswith("["):
+			inSection = True
+			continue
+		key = text.split("=", 1)[0].strip()
+		if inSection or key != "schemaVersion":
+			return True
+	return False
+
+
+def profileHoldsSettings(profileName: str) -> bool:
+	"""Whether a configuration profile holds any setting of its own.
+
+	NVDA only writes a setting into a profile when it differs from the configuration below it, so a
+	profile given nothing but the normal configuration's values holds only its ``schemaVersion``.
+	A profile NVDA has loaded is checked as NVDA holds it, one it hasn't loaded as its file is; one
+	that can be read neither way counts as holding settings, so it is never taken for empty.
+	"""
 	import config
 
 	try:
-		config.conf.triggersToProfiles[f"app:{appName.lower()}"] = profileName
-		config.conf.saveProfileTriggers()
+		profile = config.conf.getProfile(profileName)
+	except (KeyError, AttributeError):
+		return profileFileHoldsSettings(_profilePath(profileName))
+	return _holdsValues(profile)
+
+
+def deleteProfile(profileName: str) -> bool:
+	"""Delete a configuration profile and its triggers, as NVDA's Configuration Profiles dialog does."""
+	import config
+
+	try:
+		safety.checkWritable(_profilePath(profileName))
+		config.conf.deleteProfile(profileName)
 		return True
 	except Exception:
-		_log().exception("jawsMigrator: could not add a profile trigger for %s", appName)
+		_log().exception("jawsMigrator: could not delete the profile %s", profileName)
 		return False
 
 
@@ -117,8 +277,10 @@ def activateProfile(profileName: str | None) -> bool:
 	import config
 
 	try:
-		if profileName and profileName not in config.conf.listProfiles():
-			return False
+		if profileName:
+			profileName = existingProfileName(profileName)
+			if profileName is None:
+				return False
 		config.conf.manualActivateProfile(profileName or None)
 		return True
 	except Exception:
@@ -151,6 +313,21 @@ def _supported(synth) -> set:
 	return {setting.id for setting in synth.supportedSettings}
 
 
+def selectVoice(synth, voiceId: str) -> None:
+	"""Select a voice the way NVDA's own settings do, so NVDA also loads that voice's speech dictionary.
+
+	Setting ``synth.voice`` alone keeps the dictionary of the voice NVDA had before; rules added to the
+	voice dictionary would then be saved into that other voice's file.
+	"""
+	import synthDriverHandler
+
+	change = getattr(synthDriverHandler, "changeVoice", None)
+	if change is None:
+		synth.voice = voiceId
+	else:
+		change(synth, voiceId)
+
+
 def applyVoice(driver: str, voiceId: str, jawsVoiceName: str, languageCode: str | None, values: dict) -> list[str]:
 	"""Switch to ``driver`` and set its voice, variant, rate, pitch and volume. Returns messages."""
 	import synthDriverHandler
@@ -179,7 +356,7 @@ def applyVoice(driver: str, voiceId: str, jawsVoiceName: str, languageCode: str 
 			chosen = voices.matchVoice(available, jawsVoiceName, languageCode)
 		if chosen and chosen != synth.voice:
 			try:
-				synth.voice = chosen
+				selectVoice(synth, chosen)
 				messages.append(f"Voice: {available.get(chosen, (chosen,))[0]}")
 			except Exception as error:
 				messages.append(f"The voice could not be selected: {error}")
@@ -229,8 +406,13 @@ def restoreSnapshot(synth, values: dict) -> None:
 			pass
 
 
-def voiceRecord(synth, voiceId: str | None, variantId: str | None, values: dict) -> dict:
-	"""A ClassicSpeech voice record: the voice's own settings plus the changes JAWS made."""
+def voiceRecord(synth, voiceId: str | None, variantId: str | None) -> dict:
+	"""A ClassicSpeech voice record that selects a voice or variant, as ClassicSpeech's own editor makes one.
+
+	The baseline is that voice's own settings, which ClassicSpeech only shows; it applies just
+	the voice and variant. Nothing else is overridden, so the rate, pitch and volume the user
+	sets in NVDA apply to this voice too.
+	"""
 	original = snapshot(synth)
 	try:
 		if voiceId:
@@ -238,16 +420,15 @@ def voiceRecord(synth, voiceId: str | None, variantId: str | None, values: dict)
 				synth.voice = voiceId
 			except Exception:
 				pass
+		if variantId:
+			try:
+				synth.variant = variantId
+			except Exception:
+				pass
 		baseline = snapshot(synth)
 	finally:
 		restoreSnapshot(synth, original)
-	overrides = {}
-	if variantId and baseline.get("variant") != variantId:
-		overrides["variant"] = variantId
-	for key, value in values.items():
-		if key in baseline and baseline.get(key) != value:
-			overrides[key] = value
-	return {"baseline": baseline, "overrides": overrides}
+	return {"baseline": baseline, "overrides": {"variant": variantId} if variantId else {}}
 
 
 def currentSynthName() -> str:
@@ -383,7 +564,9 @@ def addGestures(bindings: list) -> tuple[int, list]:
 	"""Bind gestures in NVDA's user gesture map and save gestures.ini.
 
 	``bindings`` holds objects with ``gesture``, ``module``, ``className`` and ``script``;
-	``script`` None unbinds the gesture for that class.
+	``script`` None unbinds the gesture for that class. An optional ``unbind`` list of
+	``(module, class)`` also unbinds the gesture for those classes, whose own binding NVDA
+	would otherwise find first (see keyPlan.GestureBinding).
 	"""
 	import inputCore
 
@@ -396,6 +579,12 @@ def addGestures(bindings: list) -> tuple[int, list]:
 			added += 1
 		except Exception as error:
 			failed.append((binding, str(error)))
+			continue
+		for module, className in getattr(binding, "unbind", None) or ():
+			try:
+				gestureMap.add(binding.gesture, module, className, None)
+			except Exception as error:
+				failed.append((binding, f"{module}.{className} could not be unbound: {error}"))
 	if added:
 		gestureMap.save()
 	return added, failed
@@ -418,17 +607,25 @@ def _sameKeys(first: str, second: str) -> bool:
 
 
 def gestureBoundScripts(gesture: str) -> list:
-	"""``(module, class, script)`` that NVDA or the user already bind to the keys of ``gesture``."""
+	"""What NVDA or the user already bind to the keys of ``gesture``.
+
+	Returns ``(module, class, script, identifier, source)`` tuples. ``identifier`` is the gesture
+	identifier of that binding (a ``kb(laptop):`` one only works in NVDA's laptop keyboard layout);
+	``source`` is ``"user"`` (gestures.ini), ``"locale"`` or ``"class"`` (the class binds it itself,
+	named after the class that does). ``script`` is None where a gesture map unbinds the keystroke
+	for that class; keyPlan leaves out what is unbound.
+	"""
 	import inputCore
 
 	results = []
-	for gestureMap in (inputCore.manager.userGestureMap, inputCore.manager.localeGestureMap):
+	for source, gestureMap in (("user", inputCore.manager.userGestureMap), ("locale", inputCore.manager.localeGestureMap)):
 		try:
 			for identifier, scripts in getattr(gestureMap, "_map", {}).items():
 				if _sameKeys(identifier, gesture):
-					results.extend(tuple(entry) for entry in scripts)
+					results.extend((module, className, script, identifier, source) for module, className, script in scripts)
 		except Exception:
 			pass
+	seen = set()
 	for cls in _gestureClasses():
 		for base in cls.__mro__:
 			# Gestures a class binds itself, including those from @script decorators.
@@ -438,21 +635,30 @@ def gestureBoundScripts(gesture: str) -> list:
 			for identifier, scriptName in gestures.items():
 				try:
 					if scriptName and _sameKeys(identifier, gesture):
-						results.append((cls.__module__, cls.__name__, str(scriptName)))
+						entry = (base.__module__, base.__name__, str(scriptName), identifier, "class")
+						if entry not in seen:
+							seen.add(entry)
+							results.append(entry)
 				except Exception:
 					continue
-	# A user "None" binding removes NVDA's own; don't count what the user already unbound.
-	unbound = {(module, className) for module, className, script in results if script is None}
-	return [entry for entry in results if entry[2] is not None and (entry[0], entry[1]) not in unbound]
+	return results
 
 
 def _gestureClasses() -> list:
+	"""The NVDA classes whose own gestures a JAWS keystroke may clash with.
+
+	Their base classes are searched too; the subclasses are listed because they bind gestures
+	of their own (NVDA+F5 refreshes browse mode documents in VirtualBuffer).
+	"""
 	classes = []
 	for moduleName, className in (
 		("globalCommands", "GlobalCommands"),
 		("browseMode", "BrowseModeTreeInterceptor"),
+		("browseMode", "BrowseModeDocumentTreeInterceptor"),
+		("virtualBuffers", "VirtualBuffer"),
 		("cursorManager", "CursorManager"),
 		("documentBase", "DocumentWithTableNavigation"),
+		("editableText", "EditableText"),
 	):
 		try:
 			module = __import__(moduleName, fromlist=[className])
@@ -475,41 +681,97 @@ def gesturesForScript(module: str, className: str, script: str) -> list[str]:
 	"""Gestures NVDA currently binds to a script, as display text such as ``NVDA+f7``."""
 	import inputCore
 
-	found = []
+	def classGestures() -> list:
+		# The gestures the class binds to the script itself, less those gestures.ini unbinds for it.
+		try:
+			cls = getattr(__import__(module, fromlist=[className]), className)
+		except Exception:
+			return []
+		normalize = getattr(inputCore, "normalizeGestureIdentifier", str.lower)
+		unbound = set()
+		try:
+			for identifier, scripts in getattr(inputCore.manager.userGestureMap, "_map", {}).items():
+				if (module, className, None) in [tuple(entry) for entry in scripts]:
+					unbound.add(identifier)
+		except Exception:
+			pass
+		result = []
+		seen = set()
+		for base in cls.__mro__:
+			gestures = base.__dict__.get(f"_{base.__name__}__gestures")
+			if not isinstance(gestures, dict):
+				continue
+			for identifier, scriptName in gestures.items():
+				try:
+					normalized = normalize(identifier)
+				except Exception:
+					continue
+				if normalized in seen:
+					# A subclass binds these keys to something else.
+					continue
+				seen.add(normalized)
+				if scriptName == script and normalized not in unbound:
+					result.append(normalized)
+		return result
+
+	identifiers = []
 	try:
 		mappings = inputCore.manager.getAllGestureMappings()
 		for category in mappings.values():
 			for info in category.values():
 				if info.moduleName == module and info.className == className and info.scriptName == script:
-					for gesture in info.gestures:
-						try:
-							source, main = inputCore.getDisplayTextForGestureIdentifier(gesture)
-							found.append(main)
-						except Exception:
-							found.append(gesture)
+					identifiers.extend(info.gestures)
 	except Exception:
 		_log().debugWarning("jawsMigrator: could not read gesture mappings", exc_info=True)
+	if not identifiers:
+		# NVDA only lists the commands of what has the focus: browse mode and table commands are
+		# missing outside a browse mode document, though their keys work there.
+		identifiers = classGestures()
+	found = []
+	for gesture in identifiers:
+		try:
+			_source, main = inputCore.getDisplayTextForGestureIdentifier(gesture)
+			found.append(main)
+		except Exception:
+			found.append(gesture)
 	return found
 
 
 # -- ClassicSpeech ------------------------------------------------------------------------------
 
 
-def classicSpeechSection():
-	"""ClassicSpeech's settings, kept in NVDA's base configuration while NVDA runs."""
+class ClassicSpeechNotRunning(RuntimeError):
+	"""ClassicSpeech doesn't run in this NVDA session, so its settings can't be changed through NVDA."""
+
+
+def _classicSpeechSettingsModule():
 	try:
 		import importlib
 
-		core = importlib.import_module("globalPlugins._speech_core.settings.config_core")
-		return core._ensure_classic_speech_section()
+		return importlib.import_module("globalPlugins._speech_core.settings.config_core")
 	except Exception:
-		_log().debugWarning("jawsMigrator: ClassicSpeech's settings helper is unavailable", exc_info=True)
-	import config
+		return None
 
-	base = config.conf.profiles[0]
-	if "classicSpeech" not in base:
-		base["classicSpeech"] = {}
-	return base["classicSpeech"]
+
+def classicSpeechRunning() -> bool:
+	"""Whether ClassicSpeech's code runs in this NVDA session, keeping its settings in NVDA's configuration."""
+	return hasattr(_classicSpeechSettingsModule(), "_ensure_classic_speech_section")
+
+
+def classicSpeechSection():
+	"""ClassicSpeech's settings, which it keeps in NVDA's base configuration while it runs.
+
+	Raises ClassicSpeechNotRunning when it doesn't run. Its settings are then only in its own
+	ClassicSpeech\\settings.ini, and a ``[classicSpeech]`` section written into nvda.ini would be taken
+	by ClassicSpeech, the next time it starts, for settings of an old version, and moved over that file.
+	"""
+	core = _classicSpeechSettingsModule()
+	if not hasattr(core, "_ensure_classic_speech_section"):
+		raise ClassicSpeechNotRunning(
+			"ClassicSpeech isn't running in this NVDA session, so its settings were not changed. "
+			"Enable ClassicSpeech in NVDA's Add-on Store, restart NVDA, then try again.",
+		)
+	return core._ensure_classic_speech_section()
 
 
 def applyClassicSpeechSettings(changes: list) -> tuple[list, list]:
@@ -552,11 +814,60 @@ def saveConfig() -> None:
 	config.conf.save()
 
 
+@contextlib.contextmanager
+def _addonChangesLeftForRestart():
+	"""Keep add-on installs, removals, enables and disables pending while NVDA reloads its configuration.
+
+	``core.resetConfiguration`` runs ``addonHandler.initialize``, which does what NVDA does when it
+	starts: it finishes pending removals and installs (``getAvailableAddons(refresh=True,
+	isFirstLoad=True)``, running add-ons' uninstall tasks) and applies pending disables. Done now,
+	that would delete or replace add-ons that are loaded and running. NVDA does it when it restarts.
+	``addonHandler.terminate`` does nothing, so NVDA's add-on state stays as it was.
+	"""
+	try:
+		import addonHandler
+	except ImportError:
+		yield
+		return
+	original = getattr(addonHandler, "initialize", None)
+	if original is None:
+		yield
+		return
+
+	def initializeLater():
+		_log().info("jawsMigrator: add-on changes stay pending until NVDA restarts")
+
+	addonHandler.initialize = initializeLater
+	try:
+		yield
+	finally:
+		addonHandler.initialize = original
+
+
+def reloadProfileTriggers() -> None:
+	"""Read profileTriggers.ini again. NVDA reads it only when it starts, not when it reloads its configuration."""
+	import config
+
+	load = getattr(config.conf, "_loadProfileTriggers", None)
+	if load is None:
+		return
+	try:
+		load()
+	except Exception:
+		_log().exception("jawsMigrator: could not reload the configuration profile triggers")
+
+
 def resetToSavedConfiguration() -> None:
-	"""Reload NVDA's settings from disk, as NVDA+control+r does."""
+	"""Reload NVDA's settings from disk, as NVDA+control+r does.
+
+	Unlike NVDA+control+r, add-on changes waiting for a restart stay waiting, and the profile
+	triggers are read again, since the files may have just been put back from a backup.
+	"""
 	import core
 
-	core.resetConfiguration()
+	with _addonChangesLeftForRestart():
+		core.resetConfiguration()
+	reloadProfileTriggers()
 	reloadDefaultDictionary()
 
 

@@ -12,9 +12,14 @@
   ``.classicspeech-scheme`` package that can be imported on another computer.
 * Voice aliases: every alias a scheme uses is turned into a ClassicSpeech voice
   for that synthesizer: the alias's person (Reed, Glen, Shelley...) becomes the
-  matching NVDA voice or variant, and its pitch and rate changes are applied to
-  the migrated voice. When the person is missing, the alias's fallback is used,
-  as JAWS does.
+  matching NVDA voice or variant. When the person is missing, the alias's
+  fallback is used, as JAWS does.
+
+Only the person carries over, never a rate, pitch or volume. JAWS changes those
+by percentages of the current voice, but ClassicSpeech keeps fixed values, which
+would override the rate, pitch and volume the user sets in NVDA wherever the
+voice is used. So the user's own NVDA settings apply everywhere. A voice that
+would select the person NVDA already speaks with is left out.
 
 Must run in NVDA's main thread, with the target synthesizer active.
 """
@@ -27,7 +32,7 @@ import re
 import tempfile
 import zipfile
 
-from . import nvdaApply, safety, schemeMap, voices, wavUtil
+from . import debugLog, nvdaApply, safety, schemeMap, voices, wavUtil
 
 VOICES_FORMAT = "ClassicSpeech voice profiles"
 SCHEME_FORMAT = "ClassicSpeech scheme"
@@ -61,20 +66,22 @@ def folderNameFor(name: str) -> str:
 
 
 class VoiceResolver:
-	"""Turns JAWS persons, pitches and rates into NVDA values for one synthesizer.
+	"""Turns JAWS persons (Reed, Glen, a SAPI voice...) into one NVDA synthesizer's voice or variant.
 
-	This base class works from the voices NVDA's configuration and the registry
-	describe, without loading the synthesizer. ``LiveVoiceResolver`` works with the
-	synthesizer NVDA is speaking with and records its native values too.
+	This base class works from the voices NVDA's configuration and the registry describe,
+	without loading the synthesizer. ``LiveVoiceResolver`` works with the synthesizer NVDA is
+	speaking with. ``currentVoice`` and ``currentVariant`` are the ones NVDA speaks with, so a
+	person that is already speaking needs no ClassicSpeech voice.
 	"""
 
-	def __init__(self, driverName: str, driverDescription: str, jawsSynth: voices.JawsSynthInfo, baseValues: dict, knownVoices=None, knownVariants=None):
+	def __init__(self, driverName: str, driverDescription: str, jawsSynth: voices.JawsSynthInfo, knownVoices=None, knownVariants=None, currentVoice=None, currentVariant=None):
 		self.driverName = driverName
 		self.driverDescription = driverDescription or driverName
 		self.jawsSynth = jawsSynth
-		self.baseValues = dict(baseValues)
 		self.voices = dict(knownVoices or {})
 		self.variants = dict(knownVariants or {})
+		self.currentVoice = currentVoice
+		self.currentVariant = currentVariant
 
 	def person(self, name: str) -> tuple[str | None, str | None]:
 		"""``(voiceId, variantId)`` for a JAWS person, or ``(None, None)`` when the synthesizer lacks it."""
@@ -90,53 +97,53 @@ class VoiceResolver:
 					return voiceId, None
 		return None, None
 
-	def record(self, voiceId: str | None, variantId: str | None, values: dict) -> dict:
-		"""A ClassicSpeech record: the voice and variant to select, then the changes."""
+	def isCurrent(self, voiceId: str | None, variantId: str | None) -> bool:
+		sameVoice = voiceId is None or str(voiceId) == str(self.currentVoice)
+		sameVariant = variantId is None or str(variantId) == str(self.currentVariant)
+		return sameVoice and sameVariant
+
+	def record(self, voiceId: str | None, variantId: str | None) -> dict:
+		"""A ClassicSpeech record that selects a voice or variant, as ClassicSpeech's editor makes one."""
 		baseline = {}
 		if voiceId:
 			baseline["voice"] = voiceId
 		if variantId:
 			baseline["variant"] = variantId
-		overrides = {key: value for key, value in values.items() if value is not None}
-		return {"baseline": baseline, "overrides": overrides}
+		return {"baseline": baseline, "overrides": {"variant": variantId} if variantId else {}}
 
-	def contextRecord(self, profile: voices.VoiceProfile, context: voices.VoiceContext) -> tuple[dict, str]:
-		values = voices.scaledVoiceSettings(profile, context)
-		voiceId, variantId = self.person(context.voiceName)
-		note = context.voiceName or "current voice"
-		if context.voiceName and not (voiceId or variantId):
-			note = f"{context.voiceName} is not available in {self.driverDescription}; the current voice is used"
-		return self.record(voiceId, variantId, values), note
+	def _personRecord(self, name: str) -> tuple[dict | None, str]:
+		voiceId, variantId = self.person(name)
+		if not (voiceId or variantId):
+			return None, f"{name} is not available in {self.driverDescription}, so the current voice is kept"
+		if self.isCurrent(voiceId, variantId):
+			return None, f"{name} is the voice NVDA already speaks with"
+		return self.record(voiceId, variantId), name
 
-	def aliasRecord(self, aliasValue: str) -> tuple[dict, str]:
+	def contextRecord(self, context: voices.VoiceContext) -> tuple[dict | None, str]:
+		"""The ClassicSpeech voice for a JAWS voice context (JAWS cursor, messages...): its person, or None."""
+		if not context.voiceName:
+			return None, "the context has no voice of its own"
+		return self._personRecord(context.voiceName)
+
+	def aliasRecord(self, aliasValue: str) -> tuple[dict | None, str]:
+		"""The ClassicSpeech voice for a JAWS voice alias: the first of its persons this synthesizer has, or None."""
 		groups = voices.parseVoiceAlias(aliasValue)
-		chosen = None
-		voiceId = variantId = None
+		dropped = [voices.aliasChanges(group) for group in groups if voices.aliasChanges(group)]
+		kept = f"; its {dropped[0]} is left to NVDA's own settings" if dropped else ""
 		for group in groups:
 			if group["person"] == "*":
-				chosen = group
-				break
+				return None, "the alias keeps the current voice" + kept
 			voiceId, variantId = self.person(group["person"])
 			if voiceId or variantId:
-				chosen = group
-				break
-		note = ""
-		if chosen is None:
-			chosen = groups[0]
-			note = f"{chosen['person']} is not available in {self.driverDescription}; the current voice is used"
-		values = {}
-		for key, parameter in (("pitch", self.jawsSynth.pitch), ("rate", self.jawsSynth.rate)):
-			base = self.baseValues.get(key)
-			if base is None:
-				continue
-			values[key] = voices.applyDelta(base, chosen[key], parameter)
-		return self.record(voiceId, variantId, values), note or (chosen["person"] if chosen["person"] != "*" else "current voice")
+				record, note = self._personRecord(group["person"])
+				return record, note + kept
+		return None, f"none of the alias's persons is available in {self.driverDescription}, so the current voice is kept"
 
 
 class LiveVoiceResolver(VoiceResolver):
-	"""A resolver for the synthesizer NVDA is speaking with, recording each voice's native values."""
+	"""A resolver for the synthesizer NVDA is speaking with."""
 
-	def __init__(self, synth, jawsSynth: voices.JawsSynthInfo, baseValues: dict):
+	def __init__(self, synth, jawsSynth: voices.JawsSynthInfo):
 		supported = {setting.id for setting in synth.supportedSettings}
 		knownVoices = {}
 		knownVariants = {}
@@ -150,11 +157,19 @@ class LiveVoiceResolver(VoiceResolver):
 				knownVariants = {vid: info.displayName for vid, info in synth.availableVariants.items()}
 			except Exception:
 				knownVariants = {}
-		super().__init__(synth.name, synth.description, jawsSynth, baseValues, knownVoices, knownVariants)
+		super().__init__(
+			synth.name,
+			synth.description,
+			jawsSynth,
+			knownVoices,
+			knownVariants,
+			currentVoice=getattr(synth, "voice", None) if "voice" in supported else None,
+			currentVariant=getattr(synth, "variant", None) if "variant" in supported else None,
+		)
 		self.synth = synth
 
-	def record(self, voiceId: str | None, variantId: str | None, values: dict) -> dict:
-		return nvdaApply.voiceRecord(self.synth, voiceId, variantId, values)
+	def record(self, voiceId: str | None, variantId: str | None) -> dict:
+		return nvdaApply.voiceRecord(self.synth, voiceId, variantId)
 
 
 def writeVoiceProfiles(section, synthName: str, records: dict) -> None:
@@ -204,12 +219,15 @@ def buildSchemeItems(converted: schemeMap.ConvertedScheme, resolvers: list, soun
 			bySynth = {}
 			for resolver, aliases in resolvers:
 				value = {name.lower(): text for name, text in aliases.items()}.get(item.voiceAlias.lower())
-				if value is None or voices.aliasIsNeutral(value):
+				if value is None:
 					continue
 				record, note = resolver.aliasRecord(value)
+				debugLog.note(f"  {converted.name}: {itemId} voice alias {item.voiceAlias}={value} for {resolver.driverName}: {'person ' + note if record else note}")
+				if record is None:
+					if "not available" in note:
+						notes.append(f"{itemId} ({resolver.driverDescription}): {note}")
+					continue
 				bySynth[resolver.driverName] = record
-				if note and "not available" in note:
-					notes.append(f"{itemId} ({resolver.driverDescription}): {note}")
 			if bySynth:
 				settings["voice"] = {"enabled": True, "engine": "", "bySynth": bySynth}
 			elif not resolvers:

@@ -29,7 +29,7 @@ import ui
 import wx
 from scriptHandler import script
 
-from . import jawsDetect, jawsDocs, jawsFiles, jawsKeyMap, keyPlan, nvdaEnv, state, systemCheck, updater
+from . import debugLog, jawsDetect, jawsDocs, jawsFiles, jawsKeyMap, keyPlan, nvdaEnv, state, systemCheck, updater
 from .gui.common import TITLE, messageBox, openFile
 
 try:
@@ -48,6 +48,7 @@ LAYER_GESTURES = {
 	"kb:k": "jawsKeystrokeHelp",
 	"kb:s": "toggleJawsSounds",
 	"kb:a": "copyJawsSounds",
+	"kb:c": "installClassicSpeech",
 	"kb:r": "openReport",
 	"kb:b": "restoreBackup",
 	"kb:u": "checkForUpdates",
@@ -65,6 +66,7 @@ LAYER_HELP = (
 	"K, hear what a JAWS keystroke does in NVDA. "
 	"S, JAWS sounds in place of NVDA's own, on or off, through ClassicSpeech. "
 	"A, copy all JAWS sounds into ClassicSpeech. "
+	"C, install ClassicSpeech, or update it to its newest version. "
 	"R, open the last migration report. "
 	"B, restore NVDA settings from a backup. "
 	"U, check for updates. "
@@ -115,15 +117,25 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			settingsPanel.JawsMigratorSettingsPanel.plugin = self
 			nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
 		except Exception:
-			_log().exception("jawsMigrator: could not add the settings panel")
+			debugLog.error("could not add the settings panel")
 		self.updater.scheduleAutomaticCheck()
-		wx.CallLater(2000, self._activateProfileAtStartup)
+		self._startupProfileTimer = wx.CallLater(2000, self._activateProfileAtStartup)
+		# Voices written by versions 1.0 to 1.2 get their fixed rate, pitch and volume taken out, once.
+		self._repairTimer = wx.CallLater(20000, self._repairVoices)
 		if not state.get("welcomeShown"):
 			# Once, after installation: give NVDA time to finish starting and speaking first.
-			wx.CallLater(10000, self._firstRun)
+			self._firstRunTimer = wx.CallLater(10000, self._firstRun)
 
 	def terminate(self):
 		self.updater.stop()
+		# Nothing this instance scheduled may run once NVDA has unloaded it (for example after reloading plugins).
+		for name in ("_startupProfileTimer", "_firstRunTimer", "_repairTimer"):
+			try:
+				timer = getattr(self, name, None)
+				if timer is not None:
+					timer.Stop()
+			except Exception:
+				pass
 		try:
 			from .gui import settingsPanel
 
@@ -154,6 +166,75 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			_log().info("jawsMigrator: JAWS sounds now play through ClassicSpeech; version 1.1's own sound replacement is off")
 		self._sleepApps = {str(name).lower() for name in data.get("sleepApps") or []}
 
+	def _repairVoices(self):
+		"""Once, after an update: repair what versions 1.0 to 1.2 wrote, then explain their JAWS profile.
+
+		The repairs run one after another, each after its own backup. Meanwhile the assistant counts as
+		busy, so no migration, restore or sounds change runs at the same time.
+		"""
+		self._repairTimer = None
+		if self._busy:
+			self._repairTimer = wx.CallLater(60000, self._repairVoices)
+			return
+		from . import dictRepair, gestureRepair, migrator
+
+		steps = [
+			("the repair of ClassicSpeech voices", migrator.repairClassicSpeechVoices),
+			("the repair of dictionary rules", dictRepair.repairOnce),
+			("the repair of keystrokes", gestureRepair.repairOnce),
+		]
+		self._busy = True
+		self._runRepairs(steps)
+
+	def _runRepairs(self, steps):
+		if not steps:
+			self._busy = False
+			self._repairTimer = wx.CallLater(5000, self._profileNotice)
+			return
+		(what, repair), rest = steps[0], steps[1:]
+		from . import migrator
+
+		following = migrator.callOnce(lambda: wx.CallAfter(self._runRepairs, rest))
+		try:
+			repair(lambda message: ui.message(message), done=following)
+		except Exception:
+			debugLog.error(f"{what} failed")
+			following()
+
+	def _profileNotice(self):
+		"""Once: tell a user of versions 1.0 to 1.2 why their separate JAWS profile switches off, and what to do."""
+		self._repairTimer = None
+		name = state.get("jawsProfileName")
+		if state.get("profileNoticeShown") or not name or not state.get("activateJawsProfileAtStartup"):
+			return
+		if self._busy or self._secure:
+			self._repairTimer = wx.CallLater(60000, self._profileNotice)
+			return
+		state.set("profileNoticeShown", True)
+		if name not in nvdaEnv.profileNames():
+			return
+		answer = messageBox(
+			f'Your JAWS settings are in the NVDA configuration profile "{name}", which the JAWS Migration Assistant turns on '
+			"when NVDA starts. NVDA can have only one profile turned on this way, and some add-ons, such as Custom Browse Mode, "
+			"turn on their own profile, which switches yours off. Your JAWS settings then stop applying: speech can change "
+			'speed, and NVDA says things JAWS doesn\'t, such as "clickable" on web pages.\n\n'
+			"To keep your JAWS settings on all the time, migrate again and choose NVDA's normal configuration, now the "
+			"recommended choice. NVDA's settings are backed up first, and the profile then no longer turns on by itself.\n\n"
+			"Open the JAWS Migration Assistant now?",
+			TITLE,
+			wx.YES | wx.NO | wx.ICON_INFORMATION,
+		)
+		debugLog.note(f"explained the separate profile {name}; open the assistant: {answer == wx.YES}")
+		if answer == wx.YES:
+			self.openAssistant()
+
+	def openDebugLog(self):
+		path = debugLog.generalLogPath()
+		if path and os.path.isfile(path):
+			openFile(path)
+		else:
+			messageBox(f"There is no debug log yet. It will be at {path}. Each migration also writes debug.log in its own folder.", TITLE, wx.OK | wx.ICON_INFORMATION)
+
 	def _activateProfileAtStartup(self):
 		try:
 			name = state.get("jawsProfileName")
@@ -163,7 +244,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				if nvdaApply.activeManualProfile() is None:
 					nvdaApply.activateProfile(name)
 		except Exception:
-			_log().exception("jawsMigrator: could not turn on the JAWS settings profile")
+			debugLog.error("could not turn on the JAWS settings profile")
 
 	def _firstRun(self):
 		if state.get("welcomeShown"):
@@ -181,10 +262,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				("Use JAWS &sounds in place of NVDA's sounds", lambda event: self.useJawsSounds()),
 				("Restore NVDA's &own sounds", lambda event: self.restoreNvdaSounds()),
 				("Copy &all JAWS sounds into ClassicSpeech", lambda event: self.copyJawsSounds()),
+				("&Install or update ClassicSpeech...", lambda event: self.installClassicSpeech()),
 				("&Restore NVDA settings from a backup...", lambda event: self.openRestore()),
 				("Open the last migration &report", lambda event: self.openLastReport()),
 				("What does a &JAWS keystroke do in NVDA?", lambda event: wx.CallLater(300, self._startKeystrokeHelp)),
 				("Check for &updates", lambda event: self.checkForUpdates()),
+				("Open the &debug log", lambda event: self.openDebugLog()),
 				("&Help", lambda event: self.openHelp()),
 			)
 			for label, handler in items:
@@ -192,7 +275,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				nvdaGui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, handler, item)
 			self._menuItem = toolsMenu.AppendSubMenu(self._menu, "&JAWS Migration Assistant")
 		except Exception:
-			_log().exception("jawsMigrator: could not add the Tools menu")
+			debugLog.error("could not add the Tools menu")
 		try:
 			preferencesMenu = nvdaGui.mainFrame.sysTrayIcon.preferencesMenu
 			self._preferencesItem = preferencesMenu.Append(
@@ -202,18 +285,47 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 			nvdaGui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, lambda event: self.openImportSettings(), self._preferencesItem)
 		except Exception:
-			_log().exception("jawsMigrator: could not add the Preferences menu item")
+			debugLog.error("could not add the Preferences menu item")
 
 	# -- actions -------------------------------------------------------------------------
 
 	def onMenuOpen(self, event):
 		self.openAssistant()
 
+	def _nvdaSettingsDialogOpen(self) -> str:
+		"""The title of an open NVDA settings dialog (Settings, Input Gestures, a speech dictionary...), or "".
+
+		Closed with OK, such a dialog saves everything it shows, which would undo what the assistant
+		changed meanwhile: settings, keystrokes or dictionary rules.
+		"""
+		try:
+			from gui.settingsDialogs import SettingsDialog
+
+			created = SettingsDialog.DialogState.CREATED
+			for dialog, dialogState in list(SettingsDialog._instances.items()):
+				if dialogState == created and dialog.IsShown():
+					return dialog.GetTitle() or "an NVDA settings dialog"
+		except Exception:
+			pass
+		return ""
+
+	def _refuseWhileSettingsOpen(self, action: str) -> bool:
+		"""Say why ``action`` can't start while an NVDA settings dialog is open. True when it was refused."""
+		title = self._nvdaSettingsDialogOpen()
+		if not title:
+			return False
+		ui.message(
+			f"Close {title} first. When you press OK there, it saves the settings it shows, which would undo {action}.",
+		)
+		return True
+
 	def openAssistant(self, firstRun: bool = False):
 		if self._secure:
 			return
 		if self._busy:
 			ui.message("The JAWS Migration Assistant is already open.")
+			return
+		if self._refuseWhileSettingsOpen("the migration"):
 			return
 		self._busy = True
 		ui.message("JAWS Migration Assistant. Checking this computer.")
@@ -263,6 +375,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					wx.YES | wx.NO | wx.ICON_QUESTION,
 				) != wx.YES:
 					return
+			if not facts.classicSpeech.installed:
+				# ClassicSpeech carries JAWS schemes, voice aliases and sounds; offer its newest version first.
+				from .gui import classicSpeechOffer
+
+				if classicSpeechOffer.offerInstall(automatic=True):
+					# It runs after NVDA restarts; the assistant is opened again then.
+					self._factsCache = None
+					return
 			from .gui import wizard
 
 			wizard.runWizard(facts)
@@ -270,7 +390,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._factsCache = None
 			self.applyRuntimeSettings()
 		except Exception:
-			_log().exception("jawsMigrator: the assistant failed")
+			debugLog.error("the assistant failed")
 			messageBox("The JAWS Migration Assistant ran into an error. Details are in the NVDA log.", TITLE, wx.OK | wx.ICON_ERROR)
 		finally:
 			self._busy = False
@@ -308,7 +428,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 			importDialog.showImportSettings(facts, self)
 		except Exception:
-			_log().exception("jawsMigrator: the settings dialog failed")
+			debugLog.error("the settings dialog failed")
 			messageBox("The JAWS Migration Assistant settings could not be opened. Details are in the NVDA log.", TITLE, wx.OK | wx.ICON_ERROR)
 		finally:
 			self._busy = False
@@ -331,17 +451,49 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			if outcome is not None:
 				messageBox(outcome.message, TITLE, wx.OK | (wx.ICON_INFORMATION if outcome.succeeded else wx.ICON_WARNING))
 		except Exception as error:
-			_log().exception("jawsMigrator: the JAWS sounds action failed")
+			debugLog.error("the JAWS sounds action failed")
 			messageBox(f"That could not be done, and NVDA's sounds were not changed: {error}", TITLE, wx.OK | wx.ICON_ERROR)
 		finally:
+			self._busy = False
+
+	def _offerClassicSpeech(self) -> None:
+		"""JAWS sounds need ClassicSpeech, which is missing: offer to install its newest version."""
+		from .gui import classicSpeechOffer
+
+		if classicSpeechOffer.offerInstall(automatic=False):
+			self._factsCache = None
+
+	def installClassicSpeech(self):
+		"""Install ClassicSpeech, or update it to its newest release, after backing up."""
+		if self._secure:
+			return
+		if self._busy:
+			ui.message("The JAWS Migration Assistant is busy. Finish or close it first.")
+			return
+		self._busy = True
+		try:
+			from .gui import classicSpeechOffer
+
+			classicSpeechOffer.installOrUpdate()
+		except Exception as error:
+			debugLog.error("installing ClassicSpeech failed")
+			messageBox(f"ClassicSpeech could not be installed: {error}", TITLE, wx.OK | wx.ICON_ERROR)
+		finally:
+			self._factsCache = None
 			self._busy = False
 
 	def useJawsSounds(self):
 		"""Play JAWS sounds in place of NVDA's own sounds, through ClassicSpeech, after backing up."""
 		from . import backup, migrator
 
+		if self._refuseWhileSettingsOpen("the change of sounds"):
+			return
+
 		def action():
 			facts = self._facts()
+			if not facts.classicSpeech.installed:
+				self._offerClassicSpeech()
+				return None
 			problem = migrator.soundsProblem(facts)
 			if problem:
 				return migrator.SoundsOutcome(problem, False)
@@ -363,13 +515,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		"""Put NVDA's own sounds back: take out the JAWS sounds the assistant gave ClassicSpeech."""
 		from . import migrator
 
+		if self._refuseWhileSettingsOpen("the change of sounds"):
+			return
 		self._soundsAction(migrator.restoreNvdaSounds, "Restoring NVDA's own sounds")
 
 	def copyJawsSounds(self):
 		"""Copy every JAWS sound into ClassicSpeech, as the scheme JAWS Sounds (from JAWS)."""
 		from . import migrator
 
-		self._soundsAction(lambda: migrator.copyAllJawsSounds(self._facts()), "Copying all JAWS sounds into ClassicSpeech")
+		def action():
+			facts = self._facts()
+			if not facts.classicSpeech.installed:
+				self._offerClassicSpeech()
+				return None
+			return migrator.copyAllJawsSounds(facts)
+
+		self._soundsAction(action, "Copying all JAWS sounds into ClassicSpeech")
 
 	def toggleJawsSounds(self):
 		from . import classicSounds
@@ -384,12 +545,24 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			wx.CallAfter(nvdaGui.mainFrame.onInputGesturesCommand, None)
 		except Exception:
-			_log().exception("jawsMigrator: could not open the Input Gestures dialog")
+			debugLog.error("could not open the Input Gestures dialog")
 
 	def openRestore(self):
+		if self._secure:
+			return
+		# A restore must never run while a migration, a JAWS sounds action or another restore changes the same files.
+		if self._busy:
+			ui.message("The JAWS Migration Assistant is busy. Finish or close it first.")
+			return
+		if self._refuseWhileSettingsOpen("the restore"):
+			return
 		from .gui import restoreDialog
 
-		restoreDialog.showRestoreDialog()
+		self._busy = True
+		try:
+			restoreDialog.showRestoreDialog()
+		finally:
+			self._busy = False
 		self._factsCache = None
 		self.applyRuntimeSettings()
 
@@ -420,7 +593,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		try:
 			appModule = obj.appModule
-			if appModule is not None and not appModule.sleepMode and appModule.appName.lower() in self._sleepApps:
+			# Once per run of the application: when the user turns sleep mode off (NVDA+Shift+Z), NVDA sends
+			# the focus event again, and sleep mode must stay off.
+			if appModule is None or getattr(appModule, "_jawsMigratorSlept", False):
+				return
+			if appModule.appName.lower() in self._sleepApps:
+				appModule._jawsMigratorSlept = True
 				appModule.sleepMode = True
 		except Exception:
 			pass
@@ -499,6 +677,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def script_copyJawsSounds(self, gesture):
 		wx.CallAfter(self.copyJawsSounds)
 
+	@script(description="Installs ClassicSpeech, or updates it to its newest version, from GitHub")
+	def script_installClassicSpeech(self, gesture):
+		wx.CallAfter(self.installClassicSpeech)
+
 	@script(description="Opens the report of the last JAWS migration")
 	def script_openReport(self, gesture):
 		wx.CallAfter(self.openLastReport)
@@ -566,7 +748,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			keymap = self._jawsKeymap()
 		except Exception:
-			_log().exception("jawsMigrator: could not read the JAWS key map")
+			debugLog.error("could not read the JAWS key map")
 			keymap = None
 		if keymap is None:
 			ui.message("No JAWS key map was found on this computer.")
@@ -594,7 +776,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			parts.append(f"{keyName} does nothing special in JAWS.")
 		for jawsKey, jawsScript, _section in matches[:2]:
 			parts.append(f"In JAWS, {jawsKey} runs {jawsDocs.describe(docs, jawsScript)}.")
-			targets = jawsKeyMap.getNvdaTargets(jawsScript)
+			# The keystroke matters: paragraph commands on keys that aren't quick navigation keys have their own target.
+			targets = jawsKeyMap.getNvdaTargets(jawsScript, jawsKey)
 			if targets:
 				module, className, nvdaScript, description = targets[0]
 				from . import nvdaApply

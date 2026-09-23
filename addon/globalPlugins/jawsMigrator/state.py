@@ -42,6 +42,16 @@ DEFAULTS = {
 	"importSelection": {},
 	#: The JAWS sounds given to ClassicSpeech's schemes in place of NVDA's (see classicSounds).
 	"classicNvdaSounds": {},
+	#: The version of the one-time repair of ClassicSpeech voices from versions 1.0 to 1.2 (see classicRepair).
+	"voicesRepaired": 0,
+	#: The version of the one-time repair of dictionary rules from versions 1.0 to 1.2 (see dictRepair).
+	"dictionariesRepaired": 0,
+	#: The version of the one-time repair of keystrokes from versions 1.0 to 1.2 (see gestureRepair).
+	"gesturesRepaired": 0,
+	#: A user of versions 1.0 to 1.2 was told once why their separate JAWS profile switches off.
+	"profileNoticeShown": False,
+	#: The user asked not to be offered ClassicSpeech each time the assistant opens.
+	"classicSpeechOfferDeclined": False,
 }
 
 _lock = threading.RLock()

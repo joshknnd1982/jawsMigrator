@@ -17,11 +17,11 @@ import threading
 
 import wx
 
-from .. import backup, classicSounds, jawsIndex, managers, migrator, nvdaEnv, safety, selection, systemCheck, voices
-from .common import BORDER, TITLE, messageBox, openFile, readOnlyText, showText, speak
+from .. import addonUpdates, backup, classicSounds, debugLog, jawsIndex, migrator, nvdaEnv, safety, selection, systemCheck, voices
+from .common import BORDER, TITLE, WRAP_WIDTH, checkListClass, enableWithLabel, labeled, messageBox, openFile, readOnlyText, showText, speak
 
 KEEP_VOICE_LABEL = "Don't change NVDA's synthesizer or voice"
-LEAVE_SCHEME_LABEL = "Leave ClassicSpeech's current scheme"
+LEAVE_SCHEME_LABEL = "None: don't turn on a scheme, ClassicSpeech stays as it is"
 
 
 def _log():
@@ -46,6 +46,8 @@ class Page(wx.Panel):
 		outer.Add(self.box, proportion=1, flag=wx.EXPAND | wx.ALL, border=4)
 		self.SetSizer(outer)
 		self.firstControl = None
+		#: Paragraphs said with the step's name when it is shown (see intro): Tab never reaches them.
+		self.notes = []
 		self.build(self.box.GetStaticBox())
 
 	@property
@@ -61,14 +63,31 @@ class Page(wx.Panel):
 			self.firstControl = control
 		return control
 
-	def text(self, label: str):
+	def text(self, label: str, spoken: bool = False):
+		"""A paragraph, wrapped to the width of the step. A ``spoken`` one is said with the step's name."""
 		control = wx.StaticText(self.parentForControls(), label=label)
+		control.Wrap(WRAP_WIDTH)
 		self.box.Add(control, flag=wx.EXPAND | wx.TOP, border=6)
+		if spoken:
+			self.notes.append(control)
 		return control
 
-	def labeled(self, label: str, control, proportion=0):
-		self.box.Add(wx.StaticText(self.parentForControls(), label=label), flag=wx.TOP, border=6)
-		self.box.Add(control, proportion=proportion, flag=wx.EXPAND | wx.TOP, border=2)
+	def setText(self, control, label: str):
+		"""Change a paragraph made by ``text``; an ``&`` in it, as in a folder name, is shown as it is."""
+		control.SetLabel(label.replace("&", "&&"))
+		control.Wrap(WRAP_WIDTH)
+
+	def intro(self) -> str:
+		"""The step's spoken paragraphs, as one line of speech."""
+		return " ".join(" ".join(note.GetLabelText().split()) for note in self.notes if note.IsShown() and note.GetLabelText().strip())
+
+	def labeled(self, label: str, controlClass, *args, proportion: int = 0, **kwargs):
+		"""Make a label, then its control with ``controlClass(parent, *args, **kwargs)``; returns the control.
+
+		The label must come first: Windows names a control after the static text just before it, and the
+		label's access key moves focus to the control after it.
+		"""
+		control = labeled(self.parentForControls(), self.box, label, controlClass, *args, proportion=proportion, **kwargs)
 		if self.firstControl is None:
 			self.firstControl = control
 		return control
@@ -77,7 +96,11 @@ class Page(wx.Panel):
 		pass
 
 	def selectButtons(self, checkList, isAvailable=None):
-		"""Add Select all and Select none buttons that work on ``checkList``."""
+		"""Add Select all and Select none buttons that work on ``checkList``.
+
+		Select all checks only the items ``isAvailable(index)`` allows, which are the ones that can be migrated;
+		Select none clears every item.
+		"""
 		row = wx.BoxSizer(wx.HORIZONTAL)
 		selectAll = wx.Button(self.parentForControls(), label="Select &all")
 		selectNone = wx.Button(self.parentForControls(), label="Select n&one")
@@ -88,10 +111,10 @@ class Page(wx.Panel):
 		def setAll(checked: bool):
 			count = 0
 			for index in range(checkList.GetCount()):
-				if isAvailable is not None and not isAvailable(index):
-					continue
-				checkList.Check(index, checked)
-				count += 1
+				usable = isAvailable is None or isAvailable(index)
+				checkList.Check(index, checked and usable)
+				if usable or not checked:
+					count += 1
 			speak(f"{count} items {'selected' if checked else 'cleared'}")
 			self.onChecksChanged()
 
@@ -127,13 +150,13 @@ class SystemPage(Page):
 
 	def build(self, parent):
 		facts = self.wizard.facts
-		self.checks = self.labeled("&System check results:", readOnlyText(parent))
+		self.checks = self.labeled("&System check results:", readOnlyText)
 		self.checks.SetValue(systemCheck.checksAsText(systemCheck.runChecks(facts)))
 		candidates = facts.jawsWithSettings or facts.jaws
 		self.installations = candidates
-		self.jawsChoice = self.labeled("JAWS &version to migrate from:", wx.Choice(parent, choices=[j.displayName + ("" if j.programInstalled else " (settings only)") for j in candidates]))
+		self.jawsChoice = self.labeled("JAWS &version to migrate from:", wx.Choice, choices=[j.displayName + ("" if j.programInstalled else " (settings only)") for j in candidates])
 		self.jawsChoice.SetSelection(0 if candidates else wx.NOT_FOUND)
-		self.languageChoice = self.labeled("JAWS settings &language:", wx.Choice(parent))
+		self.languageChoice = self.labeled("JAWS settings &language:", wx.Choice)
 		self.jawsChoice.Bind(wx.EVT_CHOICE, lambda event: self._fillLanguages())
 		self._fillLanguages()
 
@@ -190,7 +213,8 @@ class SourcePage(Page):
 	def onShow(self):
 		jaws = self.wizard.systemPage.selectedJaws
 		language = self.wizard.systemPage.selectedLanguage
-		self.paths.SetLabel(
+		self.setText(
+			self.paths,
 			f"Your JAWS settings: {jaws.userLanguageDir(language)}\n"
 			f"Shared JAWS settings: {jaws.sharedLanguageDir(language)}\n"
 			f"Your NVDA settings are backed up before anything changes.",
@@ -206,7 +230,7 @@ class FoundPage(Page):
 	title = "What was found"
 
 	def build(self, parent):
-		self.found = self.labeled("&Found on this computer:", readOnlyText(parent))
+		self.found = self.labeled("&Found on this computer:", readOnlyText)
 		self.viewIndex = self.add(wx.Button(parent, label="View the full JAWS settings &index..."))
 		self.viewIndex.Bind(wx.EVT_BUTTON, self._onViewIndex)
 
@@ -264,20 +288,24 @@ class ChoosePage(Page):
 	title = "Choose what to migrate"
 
 	def build(self, parent):
-		self.note = self.text("")
-		self.list = self.labeled("&Migrate these:", wx.CheckListBox(parent, size=(640, 280)), proportion=1)
+		self.note = self.text("", spoken=True)
+		self.list = self.labeled("&Migrate these:", checkListClass(), size=(640, 280), proportion=1)
 		self.selectButtons(self.list)
 		self.keys = []
 		self.sleepChoice = None
+		#: The plan sleepChoice belongs to: reading the JAWS settings again (Back, another JAWS or scope) makes a new one.
+		self._sleepFor = None
 
 	def onShow(self):
 		plan = self.plan
 		if plan is None:
 			return
 		options = plan.options
-		if self.sleepChoice is None:
+		if self._sleepFor is not plan:
+			self._sleepFor = plan
 			self.sleepChoice = list(options.sleepApps) if options.selectionApplied else [name for name, _exes in plan.sleepCandidates]
-		self.note.SetLabel(
+		self.setText(
+			self.note,
 			"Narrowed by your saved choice in NVDA menu, Preferences, JAWS Migration Assistant settings."
 			if options.selectionApplied
 			else "Tip: to pick single settings, schemes, voice profiles and voice aliases, use NVDA menu, Preferences, JAWS Migration Assistant settings.",
@@ -288,7 +316,7 @@ class ChoosePage(Page):
 			chosenProfiles = options.voiceProfiles is None or bool(options.voiceProfiles)
 			entries.append(("voice", f"Voices: synthesizer, voice, rate, pitch, volume and punctuation from {sum(1 for p in plan.profiles if p.available)} voice profiles", options.voice and chosenProfiles))
 		if plan.appSettings:
-			entries.append(("appProfiles", f"Settings for single applications: {len(plan.appSettings)} NVDA profiles that turn on in those applications", options.appProfiles))
+			entries.append(("appProfiles", f"Settings for single applications: up to {len(plan.appSettings)} NVDA profiles that turn on in those applications", options.appProfiles))
 		if plan.sleepCandidates and (self.sleepChoice or not options.selectionApplied):
 			names = ", ".join(self.sleepChoice or [name for name, _exes in plan.sleepCandidates])
 			entries.append(("sleepApps", f"Make NVDA sleep where JAWS slept: {names}", bool(self.sleepChoice)))
@@ -330,6 +358,13 @@ class ChoosePage(Page):
 		options.archive = self.checked("archive")
 
 
+#: Where the JAWS settings can go, in the order the Target step lists them; the first is chosen at first.
+TARGET_CHOICES = (
+	(migrator.TARGET_NORMAL, "In NVDA's normal configuration, replacing the matching settings (recommended)"),
+	(migrator.TARGET_PROFILE, "In a separate NVDA configuration profile; your normal settings stay as they are"),
+)
+
+
 class TargetPage(Page):
 	title = "Where the JAWS settings go"
 
@@ -337,29 +372,41 @@ class TargetPage(Page):
 		self.radio = wx.RadioBox(
 			parent,
 			label="&Put the JAWS settings:",
-			choices=[
-				"In a separate NVDA configuration profile; your normal settings stay as they are (recommended)",
-				"In NVDA's normal configuration, replacing the matching settings",
-			],
+			choices=[label for _target, label in TARGET_CHOICES],
 			majorDimension=1,
 			style=wx.RA_SPECIFY_COLS,
 		)
+		self.radio.SetSelection(0)
 		self.add(self.radio)
-		self.name = self.labeled("Profile &name:", wx.TextCtrl(parent, value=migrator.DEFAULT_PROFILE_NAME))
+		self.text(
+			"Why the normal configuration is recommended: NVDA can have only one profile turned on by hand. Add-ons such as "
+			"Custom Browse Mode turn on a profile of their own and switch a JAWS settings profile off, so speech and verbosity "
+			"change back and forth. Settings you change while that profile is on also go into it. Either way, NVDA's settings "
+			"are backed up first.",
+			spoken=True,
+		)
+		# Access keys: N is the Next button's.
+		self.name = self.labeled("Profile na&me:", wx.TextCtrl, value=migrator.DEFAULT_PROFILE_NAME)
 		self.atStartup = self.add(wx.CheckBox(parent, label="Turn the profile on &every time NVDA starts"))
 		self.atStartup.SetValue(True)
-		self.now = self.add(wx.CheckBox(parent, label="Turn the profile on &now, when the migration finishes"))
+		self.now = self.add(wx.CheckBox(parent, label="Turn the profile on &when the migration finishes"))
 		self.now.SetValue(True)
 		self.radio.Bind(wx.EVT_RADIOBOX, lambda event: self._update())
 		self._update()
 
+	@property
+	def target(self) -> str:
+		index = self.radio.GetSelection()
+		return TARGET_CHOICES[index][0] if 0 <= index < len(TARGET_CHOICES) else TARGET_CHOICES[0][0]
+
 	def _update(self):
-		enabled = self.radio.GetSelection() == 0
-		for control in (self.name, self.atStartup, self.now):
+		enabled = self.target == migrator.TARGET_PROFILE
+		enableWithLabel(self.name, enabled)
+		for control in (self.atStartup, self.now):
 			control.Enable(enabled)
 
 	def canLeave(self) -> bool:
-		if self.radio.GetSelection() == 0:
+		if self.target == migrator.TARGET_PROFILE:
 			name = self.name.GetValue().strip()
 			if not name or any(character in name for character in '\\/:*?"<>|'):
 				messageBox('Type a profile name without any of these characters: \\ / : * ? " < > |', TITLE, wx.OK | wx.ICON_ERROR, self.wizard)
@@ -368,7 +415,7 @@ class TargetPage(Page):
 		return True
 
 	def collect(self, options):
-		options.target = migrator.TARGET_PROFILE if self.radio.GetSelection() == 0 else migrator.TARGET_NORMAL
+		options.target = self.target
 		options.profileName = self.name.GetValue().strip() or migrator.DEFAULT_PROFILE_NAME
 		options.activateAtStartup = self.atStartup.GetValue()
 		options.activateNow = self.now.GetValue()
@@ -378,15 +425,25 @@ class VoicePage(Page):
 	title = "Voices"
 
 	def build(self, parent):
-		self.summary = self.labeled("JAWS voice profile in &use:", readOnlyText(parent, size=(640, 120)))
-		self.choice = self.labeled("NVDA &voice for your JAWS voice:", wx.Choice(parent))
+		self.summary = self.labeled("JAWS voice profile in &use:", readOnlyText, size=(640, 120))
+		self.choice = self.labeled("NVDA &voice for your JAWS voice:", wx.Choice)
 		self.profiles = self.labeled(
 			"JAWS voice &profiles to migrate (each becomes the settings of its NVDA synthesizer):",
-			wx.CheckListBox(parent, size=(640, 180)),
+			checkListClass(),
+			size=(640, 180),
 			proportion=1,
 		)
-		self.selectButtons(self.profiles, lambda index: self.plan.profiles[index].option is not None)
+		self.selectButtons(self.profiles, self._usable)
 		self.profileNames = []
+
+	def _usable(self, index: int) -> bool:
+		"""Whether the profile can be migrated, as the plan's selectedProfiles decides."""
+		profilePlan = self.plan.profiles[index]
+		if profilePlan.primary:
+			# Your JAWS voice gets the NVDA voice chosen above, which may be none ("don't change").
+			selection = self.choice.GetSelection()
+			return 0 <= selection < len(self.plan.voiceOptions) and not profilePlan.sharedWith
+		return profilePlan.available
 
 	def isRelevant(self) -> bool:
 		plan = self.plan
@@ -434,12 +491,19 @@ class ClassicSpeechPage(Page):
 	title = "ClassicSpeech"
 
 	def build(self, parent):
-		self.text("ClassicSpeech is installed, so JAWS voice profiles, voice aliases and speech and sounds schemes can be copied into it.")
-		self.schemes = self.labeled("JAWS speech and sound &schemes to copy:", wx.CheckListBox(parent, size=(640, 200)), proportion=1)
+		self.text("ClassicSpeech is installed, so JAWS voice profiles, voice aliases and speech and sounds schemes can be copied into it.", spoken=True)
+		self.schemes = self.labeled("JAWS speech and sound &schemes to copy:", checkListClass(), size=(640, 200), proportion=1)
 		self.selectButtons(self.schemes)
-		self.active = self.labeled("Scheme to &turn on in ClassicSpeech:", wx.Choice(parent))
-		self.voicesBox = self.add(wx.CheckBox(parent, label="Copy JAWS voice profiles and voice aliases into ClassicSpeech &Voice Profiles"))
-		self.voicesBox.SetValue(True)
+		self.schemes.Bind(wx.EVT_CHECKLISTBOX, self._onSchemeChecked)
+		self.active = self.labeled("Scheme to &turn on in ClassicSpeech (only if you choose one):", wx.Choice)
+		self.voicesBox = self.add(wx.CheckBox(parent, label="Also use the voices JAWS uses for the JAWS cursor and messages, as ClassicSpeech &Voice Profiles"))
+		self.voicesBox.SetValue(False)
+		self.text(
+			"Only the person carries over, such as Glen. Your NVDA rate, pitch and volume apply everywhere, so speech stays even. "
+			"Unless you choose a scheme, NVDA keeps speaking and sounding as it does now.",
+			spoken=True,
+		)
+		self.activeNames = []
 		self.settingsBox = self.add(wx.CheckBox(parent, label="Copy JAWS verbosity, number and text &processing settings into ClassicSpeech"))
 		self.settingsBox.SetValue(True)
 		self.schemeNames = []
@@ -464,16 +528,34 @@ class ClassicSpeechPage(Page):
 			self._firstShow = False
 			self.voicesBox.SetValue(plan.options.classicVoices)
 			self.settingsBox.SetValue(plan.options.classicSettings)
-		choices = [LEAVE_SCHEME_LABEL] + self.schemeNames
-		self.active.SetItems(choices)
-		wanted = plan.options.activeClassicScheme
-		self.active.SetSelection(choices.index(wanted) if wanted in choices else 0)
+		self._fillActive(plan.options.activeClassicScheme)
+
+	def _activeName(self) -> str:
+		index = self.active.GetSelection()
+		return self.activeNames[index] if 0 <= index < len(self.activeNames) else ""
+
+	def _fillActive(self, wanted: str):
+		"""Offer the schemes being copied: only a copied scheme can be turned on."""
+		jawsScheme = self.plan.jawsSchemeName()
+		copied = [name for index, name in enumerate(self.schemeNames) if self.schemes.IsChecked(index)]
+		self.activeNames = [""] + copied
+		self.active.SetItems([LEAVE_SCHEME_LABEL] + [name + (" (the scheme JAWS uses)" if name == jawsScheme else "") for name in copied])
+		self.active.SetSelection(self.activeNames.index(wanted) if wanted in self.activeNames else 0)
+
+	def _onSchemeChecked(self, event):
+		event.Skip()
+		self.onChecksChanged()
+
+	def onChecksChanged(self):
+		wanted = self._activeName()
+		self._fillActive(wanted)
+		if wanted and wanted not in self.activeNames:
+			speak(f"{wanted} is no longer turned on, as it is not copied.")
 
 	def collect(self, options):
 		options.schemes = [name for i, name in enumerate(self.schemeNames) if self.schemes.IsChecked(i)]
 		options.classicSchemes = bool(options.schemes)
-		selection = self.active.GetStringSelection()
-		options.activeClassicScheme = "" if selection == LEAVE_SCHEME_LABEL else selection
+		options.activeClassicScheme = self._activeName()
 		options.classicVoices = self.voicesBox.GetValue()
 		options.classicSettings = self.settingsBox.GetValue()
 
@@ -482,7 +564,7 @@ class SoundsPage(Page):
 	title = "Sound effects"
 
 	def build(self, parent):
-		self.details = self.labeled("&JAWS sounds for NVDA's sounds:", readOnlyText(parent, size=(640, 180)))
+		self.details = self.labeled("&JAWS sounds for NVDA's sounds:", readOnlyText, size=(640, 180))
 		self.radio = wx.RadioBox(
 			parent,
 			label="&Play JAWS sounds in place of NVDA's sounds?",
@@ -496,6 +578,7 @@ class SoundsPage(Page):
 			"ClassicSpeech plays the JAWS sounds, in every one of its schemes. NVDA's own sound files are never changed, and a copy of "
 			"them is kept. Switch between JAWS sounds and NVDA's own at any time with NVDA+Shift+J then S, or from NVDA menu, Tools, "
 			"JAWS Migration Assistant.",
+			spoken=True,
 		)
 
 	def onShow(self):
@@ -539,19 +622,20 @@ class KeysPage(Page):
 		self.migrate.SetValue(True)
 		self.layouts = self.labeled(
 			"JAWS keyboard &layouts to bring over (each one's keystrokes work when NVDA uses the matching keyboard layout):",
-			wx.CheckListBox(parent, size=(640, 100)),
+			checkListClass(),
+			size=(640, 100),
 		)
 		self.layoutButtons = self.selectButtons(self.layouts)
-		self.nvdaLayout = self.labeled("NVDA keyboard la&yout after the migration:", wx.Choice(parent, choices=[label for _value, label in NVDA_LAYOUTS]))
+		self.nvdaLayout = self.labeled("NVDA keyboard la&yout after the migration:", wx.Choice, choices=[label for _value, label in NVDA_LAYOUTS])
 		self.nvdaLayout.Bind(wx.EVT_CHOICE, self._onNvdaLayout)
-		self.layouts.Bind(wx.EVT_CHECKLISTBOX, lambda event: self.onChecksChanged())
+		self.layouts.Bind(wx.EVT_CHECKLISTBOX, self._onLayoutChecked)
 		self.layoutIds = []
 		self._shownFor = None
 		self._nvdaLayoutChosen = False
 		self.quickNav = self.add(wx.CheckBox(parent, label="Use JAWS &quick navigation letters in browse mode"))
 		self.quickNav.SetValue(True)
 		self.override = self.add(wx.CheckBox(parent, label="When NVDA already uses a keystroke for something else, use the JAWS &command instead"))
-		self.details = self.labeled("&Keystrokes that will be added:", readOnlyText(parent, size=(640, 220)), proportion=1)
+		self.details = self.labeled("&Keystrokes that will be added:", readOnlyText, size=(640, 160), proportion=1)
 		for box in (self.quickNav, self.override):
 			box.Bind(wx.EVT_CHECKBOX, lambda event: self._replan())
 		self.migrate.Bind(wx.EVT_CHECKBOX, lambda event: self._update())
@@ -580,8 +664,12 @@ class KeysPage(Page):
 	def _checkedLayouts(self) -> list:
 		return [layoutId for index, layoutId in enumerate(self.layoutIds) if self.layouts.IsChecked(index)]
 
+	def _layoutApplies(self) -> bool:
+		"""NVDA's keyboard layout is one of the Settings Center options, so it only changes when those are migrated."""
+		return self.wizard.choosePage.checked("settings")
+
 	def _showNvdaLayout(self):
-		value = self.plan.nvdaKeyboardLayout()
+		value = self.plan.nvdaKeyboardLayout() if self._layoutApplies() else ""
 		values = [value for value, _label in NVDA_LAYOUTS]
 		self.nvdaLayout.SetSelection(values.index(value) if value in values else len(values) - 1)
 
@@ -589,6 +677,10 @@ class KeysPage(Page):
 		self._nvdaLayoutChosen = True
 		self.plan.options.nvdaKeyboardLayout = NVDA_LAYOUTS[self.nvdaLayout.GetSelection()][0]
 		self._replan()
+
+	def _onLayoutChecked(self, event):
+		event.Skip()
+		self.onChecksChanged()
 
 	def onChecksChanged(self):
 		self.plan.options.keyboardLayouts = self._checkedLayouts()
@@ -599,8 +691,10 @@ class KeysPage(Page):
 
 	def _update(self):
 		enabled = self.migrate.GetValue()
-		for control in (self.layouts, *self.layoutButtons, self.nvdaLayout, self.quickNav, self.override):
+		enableWithLabel(self.layouts, enabled)
+		for control in (*self.layoutButtons, self.quickNav, self.override):
 			control.Enable(enabled)
+		enableWithLabel(self.nvdaLayout, enabled and self._layoutApplies())
 
 	def _replan(self):
 		plan = self.plan
@@ -614,9 +708,16 @@ class KeysPage(Page):
 		except Exception:
 			_log().debugWarning("jawsMigrator: keystrokes could not be planned again", exc_info=True)
 		lines = []
-		nvdaLayout = plan.nvdaKeyboardLayout()
+		applies = self._layoutApplies()
+		if not applies:
+			lines.append(
+				"NVDA's keyboard layout stays as it is: it is one of the Settings Center options, which are not being migrated. "
+				"To change it here, go back to Choose what to migrate and check Settings Center.",
+			)
+		nvdaLayout = plan.nvdaKeyboardLayout() if applies else ""
 		for layout in plan.chosenKeyboardLayouts():
-			if nvdaLayout and layout.nvdaLayout != nvdaLayout:
+			# When NVDA's layout stays as it is, it may be either one, so every layout gets the note.
+			if not applies or (nvdaLayout and layout.nvdaLayout != nvdaLayout):
 				lines.append(f"Note: the {layout.name} keystrokes only work when NVDA's keyboard layout is {layout.nvdaLayout} (NVDA menu, Preferences, Settings, Keyboard).")
 		if lines:
 			lines.append("")
@@ -636,35 +737,59 @@ class KeysPage(Page):
 		options.overrideConflicts = self.override.GetValue()
 		if self.layoutIds:
 			options.keyboardLayouts = self._checkedLayouts()
-		if self._nvdaLayoutChosen:
+		if self._nvdaLayoutChosen and self._layoutApplies():
+			# Otherwise the choice shows "keep", and the one made earlier is kept for when Settings Center is checked again.
 			options.nvdaKeyboardLayout = NVDA_LAYOUTS[self.nvdaLayout.GetSelection()][0]
 
 
 class AddonsPage(Page):
-	title = "Recommended add-ons"
+	title = "Add-ons"
 
 	def build(self, parent):
 		self.text(
-			"These add-ons from the NVDA Add-on Store do things NVDA does not do on its own, which JAWS users often rely on. "
-			"Choose the ones to install; NVDA downloads them from the Add-on Store, checks them, and installs them after the migration. "
-			"They start after NVDA restarts.",
+			"ClassicSpeech and these add-ons do things NVDA does not do on its own, which JAWS users often rely on. "
+			"The assistant always gets an add-on's newest version: ClassicSpeech from its GitHub releases, the others from "
+			"the NVDA Add-on Store. After the migration, each download is checked against its published checksum and "
+			"installed by NVDA; add-ons you already have are updated only when a newer version exists. They start, or "
+			"switch to their new version, after NVDA restarts. What each add-on does is in the box after the check boxes.",
+			spoken=True,
 		)
+		#: {add-on id: check box}; a checked box installs the add-on, or updates it to its newest version.
 		self.boxes = {}
-		for addon in managers.RECOMMENDED_ADDONS:
-			state = nvdaEnv.addonState(addon.addonId, self.wizard.facts.addons)
-			if state is not None and state.usable:
-				self.text(f"{addon.name} is already installed ({state.version}). {addon.why}")
-				continue
-			box = self.add(wx.CheckBox(parent, label=f"Install &{addon.name}" if len(self.boxes) == 0 else f"Install {addon.name}"))
-			self.boxes[addon.addonId] = box
-			self.text(f"What it does: {addon.why}")
-			self.text(f"If you don't install it: {addon.ifNotInstalled}")
+		#: Ids whose check box updates an add-on that is already installed.
+		self.updates = set()
+		about = []
+		for addon in addonUpdates.neededAddons():
+			status, version = addonUpdates.addonStatus(addon.addonId, self.wizard.facts.addons)
+			if status == addonUpdates.MISSING:
+				box = self.add(wx.CheckBox(parent, label=f"Install {addon.name}"))
+				self.boxes[addon.addonId] = box
+				about.append(f"{addon.name}: not installed.\nWhat it does: {addon.why}\nIf you don't install it: {addon.ifNotInstalled}")
+			elif status == addonUpdates.INSTALLED:
+				box = self.add(wx.CheckBox(parent, label=f"Update {addon.name} to its newest version, if there is one (you have {version})"))
+				box.SetValue(True)
+				self.boxes[addon.addonId] = box
+				self.updates.add(addon.addonId)
+				about.append(f"{addon.name} {version}: installed.\nWhat it does: {addon.why}")
+			elif status == addonUpdates.DISABLED:
+				about.append(f"{addon.name} {version}: installed, but turned off in NVDA's Add-on Store, so the assistant leaves it as it is.\nWhat it does: {addon.why}")
+			else:
+				about.append(f"{addon.name} {version}: being removed when NVDA restarts, so the assistant leaves it as it is.")
+		# A wrapped read-only box: Tab reaches it, and NVDA reads it line by line.
+		self.about = self.labeled(
+			"&About these add-ons:",
+			wx.TextCtrl,
+			value="\n\n".join(about),
+			style=wx.TE_MULTILINE | wx.TE_READONLY,
+			size=(640, 180),
+		)
 
 	def focus(self):
 		if self.boxes:
 			next(iter(self.boxes.values())).SetFocus()
 		else:
-			self.wizard.nextButton.SetFocus()
+			self.about.SetFocus()
+			self.about.SetInsertionPoint(0)
 
 	def collect(self, options):
 		options.addonsToInstall = [addonId for addonId, box in self.boxes.items() if box.GetValue()]
@@ -674,7 +799,7 @@ class SummaryPage(Page):
 	title = "Ready to migrate"
 
 	def build(self, parent):
-		self.summary = self.labeled("&What will happen:", readOnlyText(parent, size=(640, 300)), proportion=1)
+		self.summary = self.labeled("&What will happen:", readOnlyText, size=(640, 300), proportion=1)
 
 	def onShow(self):
 		self.summary.SetValue(self.wizard.summaryText())
@@ -688,7 +813,7 @@ class ProgressPage(Page):
 	title = "Migrating"
 
 	def build(self, parent):
-		self.log = self.labeled("&Progress:", readOnlyText(parent, size=(640, 300)), proportion=1)
+		self.log = self.labeled("&Progress:", readOnlyText, size=(640, 300), proportion=1)
 
 	def append(self, message: str):
 		self.log.AppendText(message + "\n")
@@ -701,8 +826,9 @@ class DonePage(Page):
 	title = "Finished"
 
 	def build(self, parent):
-		self.result = self.labeled("&Result:", readOnlyText(parent, size=(640, 300)), proportion=1)
-		self.openReport = self.add(wx.Button(parent, label="Open the migration &report"))
+		self.result = self.labeled("&Result:", readOnlyText, size=(640, 300), proportion=1)
+		# Access keys: R is the result's, C the Close button's.
+		self.openReport = self.add(wx.Button(parent, label="Open the migration re&port"))
 		self.openReport.Bind(wx.EVT_BUTTON, self._onOpenReport)
 		self.openFolder = self.add(wx.Button(parent, label="Open the folder with the migration's &files"))
 		self.openFolder.Bind(wx.EVT_BUTTON, self._onOpenFolder)
@@ -715,13 +841,21 @@ class DonePage(Page):
 
 	def _onOpenReport(self, event):
 		result = self.wizard.result
-		if result and result.reportPath and not openFile(result.reportPath):
+		if result is None:
+			return
+		if not result.reportPath:
+			# For example when NVDA's settings could not be backed up, and the migration stopped before it began.
+			messageBox("No report was written for this migration. What happened is in the result on this page.", TITLE, wx.OK | wx.ICON_INFORMATION, self.wizard)
+		elif not openFile(result.reportPath):
 			messageBox(f"The report is at {result.reportPath}", TITLE, parent=self.wizard)
 
 	def _onOpenFolder(self, event):
 		result = self.wizard.result
-		if result and result.outputFolder:
-			openFile(result.outputFolder)
+		if result is None:
+			return
+		folder = result.outputFolder
+		if not folder or not os.path.isdir(folder) or not openFile(folder):
+			messageBox(f"The folder with the migration's files could not be opened: {folder or 'there is none'}.", TITLE, wx.OK | wx.ICON_INFORMATION, self.wizard)
 
 	def _onRestart(self, event):
 		self.wizard.EndModal(wx.ID_OK)
@@ -791,8 +925,13 @@ class MigrationWizard(wx.Dialog):
 		sizer.Add(self.book, proportion=1, flag=wx.EXPAND | wx.ALL, border=BORDER)
 		sizer.Add(buttons, flag=wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=BORDER)
 		self.SetSizerAndFit(sizer)
-		self.SetMinSize((720, 520))
-		self.SetSize((760, 600))
+		# Room for the largest step, within the screen (the steps fit 1366 by 768).
+		fitted = self.GetSize()
+		display = wx.Display.GetFromWindow(self)
+		area = wx.Display(display if display != wx.NOT_FOUND else 0).GetClientArea()
+		width, height = min(max(fitted.width, 760), area.width), min(max(fitted.height, 600), area.height)
+		self.SetMinSize((min(720, width), min(520, height)))
+		self.SetSize((width, height))
 		self.CentreOnScreen()
 		self.nextButton.SetDefault()
 		self._show(0)
@@ -825,8 +964,12 @@ class MigrationWizard(wx.Dialog):
 			self.nextButton.SetLabel("&Next >")
 		self.nextButton.Enable(page is not self.progressPage)
 		self.cancelButton.Enable(page not in (self.progressPage, self.donePage))
+		# On the last step Cancel is off, so Escape (and Alt+F4) press Close instead.
+		self.SetEscapeId(self.nextButton.GetId() if page is self.donePage else wx.ID_ANY)
 		self.Layout()
-		speak(stepText)
+		# The step's explanations are static text, which Tab never reaches, so they are said with its name.
+		intro = page.intro()
+		speak(f"{stepText}. {intro}" if intro else stepText)
 		wx.CallAfter(page.focus)
 
 	def _neighbor(self, step: int):
@@ -906,10 +1049,10 @@ class MigrationWizard(wx.Dialog):
 						selection.apply(plan, saved)
 						migrator.planKeyboard(plan, inNvda=True)
 				except Exception:
-					_log().exception("jawsMigrator: the saved choice of items could not be applied")
+					debugLog.error("the saved choice of items could not be applied")
 				outcome = plan
 			except Exception as error:
-				_log().exception("jawsMigrator: indexing failed")
+				debugLog.error("indexing failed")
 				outcome = error
 			wx.CallAfter(self._indexed, outcome)
 
@@ -956,17 +1099,29 @@ class MigrationWizard(wx.Dialog):
 			lines.append(f"{len(plan.finalSettingChanges())} Settings Center options are set.")
 			layout = plan.nvdaKeyboardLayout()
 			lines.append(f"NVDA's keyboard layout becomes {layout}." if layout else "NVDA's keyboard layout is not changed.")
+		elif options.keyboard:
+			lines.append("NVDA's keyboard layout is not changed: it is one of the Settings Center options, which are not migrated.")
 		chosen = plan.chosenVoice
 		if options.voice:
 			lines.append(f"Voice: {chosen.label}." if chosen else "NVDA's synthesizer and voice are not changed.")
 			selected = plan.selectedProfiles()
 			lines.append(f"{len(selected)} JAWS voice profiles are migrated: " + ", ".join(p.name for p in selected) + ".")
 		if plan.classicSpeech and (options.classicSchemes or options.classicVoices):
-			lines.append(f"ClassicSpeech gets {len(plan.selectedSchemes()) if options.classicSchemes else 0} schemes" + (" and the JAWS voice profiles and voice aliases." if options.classicVoices else "."))
-			if options.activeClassicScheme:
-				lines.append(f"The scheme {options.activeClassicScheme} is turned on in ClassicSpeech.")
+			lines.append(f"ClassicSpeech gets {len(plan.selectedSchemes()) if options.classicSchemes else 0} schemes, with the persons of the JAWS voice aliases" + (", and the voices of the JAWS cursor and messages as Voice Profiles." if options.classicVoices else "."))
+			# The migration only turns a scheme on when it copies that scheme.
+			copied = {scheme.name for scheme in plan.selectedSchemes()} if options.classicSchemes else set()
+			active = options.activeClassicScheme if options.activeClassicScheme in copied else ""
+			lines.append(f"The scheme {active} is turned on in ClassicSpeech, as you chose." if active else "No scheme is turned on: ClassicSpeech keeps speaking and sounding as it does now.")
 		if options.appProfiles and plan.appSettings:
-			lines.append(f"{len(plan.appSettings)} application profiles are made.")
+			lines.append(
+				f"Up to {len(plan.appSettings)} application profiles are made; one whose settings are the same as NVDA's normal "
+				"configuration isn't needed and is left out.",
+			)
+		if options.appProfiles and plan.appSkipped:
+			lines.append(
+				f"{len(plan.appSkipped)} JAWS application settings can't become NVDA profiles, such as settings for web sites; "
+				"the report lists them.",
+			)
 		if options.sleepApps:
 			lines.append("NVDA sleeps in: " + ", ".join(options.sleepApps) + ".")
 		if options.dictionaries:
@@ -989,8 +1144,14 @@ class MigrationWizard(wx.Dialog):
 			if options.allSounds and plan.index.wavFiles():
 				lines.append(f"All {len(classicSounds.uniqueSounds(plan.index.wavFiles()))} JAWS sounds are copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}.")
 		if options.addonsToInstall:
-			names = [addon.name for addon in managers.RECOMMENDED_ADDONS if addon.addonId in options.addonsToInstall]
-			lines.append("Then these add-ons are installed from the Add-on Store: " + ", ".join(names) + ".")
+			chosen = [addon for addon in addonUpdates.neededAddons() if addon.addonId in options.addonsToInstall]
+			updates = self.addonsPage.updates
+			installs = [addon.name for addon in chosen if addon.addonId not in updates]
+			refreshed = [addon.name for addon in chosen if addon.addonId in updates]
+			if installs:
+				lines.append("Then the newest versions of these add-ons are installed: " + ", ".join(installs) + ".")
+			if refreshed:
+				lines.append("These add-ons are updated to their newest versions, where a newer version exists: " + ", ".join(refreshed) + ".")
 		if options.archive:
 			lines.append("A copy of your JAWS settings is kept with NVDA's settings.")
 		lines.append("")
@@ -1020,59 +1181,42 @@ class MigrationWizard(wx.Dialog):
 		self._finish()
 
 	def _installAddons(self):
-		from .. import storeAddons
-
 		wanted = list(self.plan.options.addonsToInstall)
-		self._progress("Looking the recommended add-ons up in the NVDA Add-on Store")
+		self._progress("Getting the newest versions of the add-ons")
 		language = nvdaEnv.languageCode()
 		folder = nvdaEnv.addonDataDir("downloads")
+		addons = nvdaEnv.installedAddons()
+		names = {addon.addonId: addon.name for addon in addonUpdates.neededAddons()}
+
+		def progress(message):
+			wx.CallAfter(self._progress, message)
 
 		def work():
-			outcome = []
 			try:
-				entries = storeAddons.fetchEntries(wanted, language)
+				fetched = addonUpdates.fetchNewest(wanted, folder, addons, language, progress=progress, names=names)
 			except Exception as error:
-				wx.CallAfter(self._addonsDownloaded, [], [str(error)])
-				return
-			errors = []
-			for addonId in wanted:
-				entry = entries.get(addonId)
-				if entry is None:
-					errors.append(f"{addonId}: no version for this NVDA in the Add-on Store")
-					continue
-				wx.CallAfter(self._progress, f"Downloading {entry.name} {entry.version}")
-				try:
-					outcome.append((entry, storeAddons.download(entry, folder)))
-				except Exception as error:
-					errors.append(str(error))
-			wx.CallAfter(self._addonsDownloaded, outcome, errors)
+				debugLog.error("the add-ons could not be looked up")
+				fetched = addonUpdates.Fetched(errors=[str(error) or error.__class__.__name__])
+			wx.CallAfter(self._addonsDownloaded, fetched)
 
 		threading.Thread(target=work, name="jawsMigratorAddons", daemon=True).start()
 
-	def _addonsDownloaded(self, downloads, errors):
-		from .. import storeAddons
-
-		for entry, path in downloads:
-			self._progress(f"Installing {entry.name}")
-			try:
-				storeAddons.install(path)
-				self.result.messages.append(f"{entry.name} {entry.version} was installed from the Add-on Store; it starts after NVDA restarts.")
-				self.result.restartRecommended = True
-			except Exception as error:
-				errors.append(f"{entry.name}: {error}")
-			finally:
-				try:
-					os.remove(path)
-				except OSError:
-					pass
-		for error in errors:
+	def _addonsDownloaded(self, fetched):
+		for item in fetched.downloads:
+			self._progress(f"Installing {item.name} {item.version}")
+		messages, errors = addonUpdates.installDownloads(fetched.downloads)
+		self.result.messages.extend(messages)
+		self.result.messages.extend(fetched.notes)
+		for error in fetched.errors + errors:
 			self.result.messages.append(f"Add-on not installed: {error}")
+		if messages:
+			self.result.restartRecommended = True
 		try:
 			from .. import report
 
 			self.result.reportPath = report.writeReport(self.plan, self.result)
 		except Exception:
-			pass
+			debugLog.error("the report could not be written again after installing add-ons")
 		self._finish()
 
 	def _finish(self):
@@ -1087,23 +1231,25 @@ class MigrationWizard(wx.Dialog):
 		else:
 			lines.append(result.error or "The migration did not finish.")
 		if result.rolledBack:
-			lines.append("Your NVDA settings were put back as they were.")
-		if result.applied:
-			lines.append(f"{len(result.applied)} settings were set.")
-		if result.gesturesAdded:
-			lines.append(f"{result.gesturesAdded} JAWS keystrokes are now NVDA input gestures.")
-		if result.dictionaryEntries or result.voiceDictionaryEntries:
-			lines.append(f"{result.dictionaryEntries + result.voiceDictionaryEntries} dictionary rules were added.")
-		if result.schemesWritten:
-			lines.append(f"{len(result.schemesWritten)} schemes were copied into ClassicSpeech.")
-		if result.voiceProfilesWritten:
-			lines.append(f"{len(result.voiceProfilesWritten)} ClassicSpeech voice profile categories were written.")
-		if result.nvdaSounds is not None:
-			lines.append(classicSounds.statusText(result.nvdaSounds.record))
-		if result.allSounds is not None:
-			lines.append(f"{result.allSounds.sounds} JAWS sounds were copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}.")
+			# What was set before the error was put back too, so none of it is listed as done.
+			lines.append("Your NVDA settings were put back as they were, so none of the migration's changes were kept.")
+		else:
+			if result.applied:
+				lines.append(f"{len(result.applied)} settings were set.")
+			if result.gesturesAdded:
+				lines.append(f"{result.gesturesAdded} JAWS keystrokes are now NVDA input gestures.")
+			if result.dictionaryEntries or result.voiceDictionaryEntries:
+				lines.append(f"{result.dictionaryEntries + result.voiceDictionaryEntries} dictionary rules were added.")
+			if result.schemesWritten:
+				lines.append(f"{len(result.schemesWritten)} schemes were copied into ClassicSpeech.")
+			if result.voiceProfilesWritten:
+				lines.append(f"{len(result.voiceProfilesWritten)} ClassicSpeech voice profile categories were written.")
+			if result.nvdaSounds is not None:
+				lines.append(classicSounds.statusText(result.nvdaSounds.record))
+			if result.allSounds is not None:
+				lines.append(f"{result.allSounds.sounds} JAWS sounds were copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME}.")
 		lines.extend(result.messages)
-		if result.backup is not None:
+		if result.backup is not None and not result.rolledBack:
 			lines.append("")
 			lines.append("To undo everything, use NVDA menu, Tools, JAWS Migration Assistant, Restore NVDA settings from a backup.")
 		if result.restartRecommended:

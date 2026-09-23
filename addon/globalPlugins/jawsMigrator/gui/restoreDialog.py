@@ -9,7 +9,10 @@ from __future__ import annotations
 import wx
 
 from .. import backup, migrator, nvdaEnv
-from .common import BORDER, TITLE, labeled, messageBox, openFile, postPopup, prePopup
+from .common import BORDER, TITLE, labeled, messageBox, openFile, postPopup, prePopup, speak
+
+#: The restore dialog while it is open, so asking for it again brings it forward instead of opening a second one.
+_openDialog = None
 
 
 class RestoreDialog(wx.Dialog):
@@ -27,7 +30,7 @@ class RestoreDialog(wx.Dialog):
 		)
 		intro.Wrap(600)
 		sizer.Add(intro)
-		self.list = labeled(self, sizer, "&Backups, newest first:", wx.ListBox(self, choices=[info.label for info in self.backups], size=(600, 200)))
+		self.list = labeled(self, sizer, "&Backups, newest first:", wx.ListBox, choices=[info.label for info in self.backups], size=(600, 200))
 		if self.backups:
 			self.list.SetSelection(0)
 		buttons = wx.BoxSizer(wx.HORIZONTAL)
@@ -127,17 +130,25 @@ class RestoreDialog(wx.Dialog):
 
 
 def showRestoreDialog():
+	global _openDialog
 	import gui
 
+	if _openDialog:
+		# Asked for again while it is open, for example with NVDA+Shift+J then B.
+		_openDialog.Raise()
+		speak("The restore dialog is already open.")
+		return
 	if not backup.listBackups(nvdaEnv.addonDataDir()):
 		messageBox("There are no backups yet. The assistant makes one each time it migrates JAWS settings.", TITLE)
 		return
 	prePopup()
 	try:
 		dialog = RestoreDialog(gui.mainFrame)
+		_openDialog = dialog
 		try:
 			dialog.ShowModal()
 		finally:
+			_openDialog = None
 			dialog.Destroy()
 	finally:
 		postPopup()

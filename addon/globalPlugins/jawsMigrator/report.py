@@ -59,16 +59,22 @@ def build(plan, result) -> tuple[str, str]:
 	index = plan.index
 	facts = plan.facts
 	b = _Builder()
+	#: After an error the backup is put back, which undoes what the result lists as done.
+	undone = result.rolledBack
+	then = " That was undone when your NVDA settings were put back." if undone else ""
 	b.heading(1, "JAWS Migration Assistant report")
 	b.paragraph(f"Created {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} on {facts.windows}, NVDA {facts.nvdaVersion}.")
 	b.paragraph(f"Migrated from {index.jaws.displayName}, language {options.language}, {jawsIndex.SOURCE_LABELS.get(options.scope, options.scope)}.")
 	target = f'the NVDA configuration profile "{options.profileName}"' if options.target == "profile" else "NVDA's normal configuration"
-	b.paragraph(f"Settings were written to {target}.")
+	b.paragraph(f"The settings were to go into {target}." if undone else f"Settings were written to {target}.")
 	if result.error:
 		b.heading(2, "The migration did not finish")
 		b.paragraph(result.error)
-	if result.rolledBack:
-		b.paragraph("Your previous NVDA settings were put back from the backup, so nothing was changed.")
+	if undone:
+		b.paragraph(
+			"Your previous NVDA settings were put back from the backup, so nothing was changed. "
+			"Where this report says something was set, added, written or copied, that was undone too.",
+		)
 	if result.messages:
 		b.heading(2, "Messages")
 		b.items(result.messages)
@@ -79,6 +85,7 @@ def build(plan, result) -> tuple[str, str]:
 	b.heading(2, "Safety copies")
 	if result.backup is not None:
 		b.paragraph(f"Backup of your NVDA settings (restore it from NVDA menu, Tools, JAWS Migration Assistant): {result.backup.path}")
+		b.paragraph(f"Detailed debug log of this migration: {os.path.join(result.outputFolder, 'debug.log')}")
 		info = result.backup
 		if info.version >= 2:
 			from . import backup as backupModule
@@ -99,7 +106,7 @@ def build(plan, result) -> tuple[str, str]:
 	b.heading(2, "Settings Center")
 	nvdaChanges = [c for c in result.applied if c.target == settingsMap.NVDA]
 	classicChanges = [c for c in result.applied if c.target == settingsMap.CLASSIC_SPEECH]
-	b.paragraph(f"{len(nvdaChanges)} NVDA settings and {len(classicChanges)} ClassicSpeech settings were set.")
+	b.paragraph(f"{len(nvdaChanges)} NVDA settings and {len(classicChanges)} ClassicSpeech settings were set." + then)
 	b.heading(3, "NVDA settings")
 	b.items(f"{change.label} (from {change.source})" for change in nvdaChanges)
 	if classicChanges:
@@ -123,11 +130,21 @@ def build(plan, result) -> tuple[str, str]:
 		b.items(lines, limit=300)
 
 	# Applications
-	if plan.appSettings or plan.sleepCandidates:
+	if plan.appSettings or plan.sleepCandidates or plan.appSkipped:
 		b.heading(2, "Settings for single applications")
 		for profileName, executables, count in result.appProfiles:
-			b.paragraph(f'Profile "{profileName}" ({count} settings) turns on in: {", ".join(executables)}.')
-		if options.sleepApps:
+			if executables:
+				b.paragraph(f'Profile "{profileName}" ({count} settings) turns on in: {", ".join(executables)}.' + then)
+			else:
+				b.paragraph(
+					f'Profile "{profileName}" ({count} settings) does not turn on by itself: NVDA already turns on another profile '
+					"in its program, or the trigger could not be saved (the messages say which). Turn it on by hand if you want it." + then,
+				)
+		for configName, why in plan.appSkipped.items():
+			b.paragraph(f"JAWS settings for {configName} were not made into an NVDA profile: {why}.")
+		if options.sleepApps and undone:
+			b.paragraph("Applications where NVDA was to sleep, as JAWS did: " + ", ".join(options.sleepApps) + ".")
+		elif options.sleepApps:
 			b.paragraph("NVDA now sleeps, as JAWS did, in: " + ", ".join(options.sleepApps) + ". Change this in NVDA's settings, JAWS Migration Assistant.")
 
 	# Voices
@@ -138,12 +155,16 @@ def build(plan, result) -> tuple[str, str]:
 		b.paragraph(f"JAWS voice profile: {plan.voiceProfileName}, synthesizer {voices.synthInfo(plan.jawsSynthName).label}.")
 		b.items(f"{voices.CONTEXT_LABELS.get(name, name)}: {context.describe()}" for name, context in plan.voiceContexts.items())
 		chosen = plan.chosenVoice
-		if chosen is not None:
+		if chosen is not None and undone:
+			b.paragraph(f"NVDA was to use {chosen.label} ({chosen.reason}).{then}")
+		elif chosen is not None:
 			b.paragraph(f"NVDA now uses {chosen.label} ({chosen.reason}).")
 		else:
 			b.paragraph("NVDA's synthesizer and voice were not changed.")
 		if result.voiceProfilesWritten:
 			b.heading(3, "ClassicSpeech Voice Profiles")
+			if undone:
+				b.paragraph("These were written, then undone when your NVDA settings were put back.")
 			b.items(f"{category}: JAWS {voices.CONTEXT_LABELS.get(context, context)} ({note})" for category, context, note in result.voiceProfilesWritten)
 		if plan.aliases:
 			b.heading(3, "JAWS voice aliases")
@@ -164,6 +185,8 @@ def build(plan, result) -> tuple[str, str]:
 	# Schemes
 	if result.schemesWritten:
 		b.heading(2, "Speech and sounds schemes in ClassicSpeech")
+		if undone:
+			b.paragraph("These were copied, then undone when your NVDA settings were put back.")
 		for name, count, folder, notes in result.schemesWritten:
 			active = " (turned on)" if name == options.activeClassicScheme else ""
 			b.paragraph(f"{name}{active}: {count} items.")
@@ -172,7 +195,7 @@ def build(plan, result) -> tuple[str, str]:
 	# Dictionaries
 	if plan.dictionaries:
 		b.heading(2, "Dictionary Manager")
-		b.paragraph(f"{result.dictionaryEntries} rules added to NVDA's default dictionary, {result.voiceDictionaryEntries} to the voice dictionary.")
+		b.paragraph(f"{result.dictionaryEntries} rules added to NVDA's default dictionary, {result.voiceDictionaryEntries} to the voice dictionary." + then)
 		for dictionaryPlan in plan.dictionaries:
 			skipped = collections.Counter(item.reason for item in dictionaryPlan.conversion.skipped)
 			b.paragraph(f"{dictionaryPlan.label}: {len(dictionaryPlan.defaultEntries) + len(dictionaryPlan.voiceEntries)} rules converted.")
@@ -181,35 +204,42 @@ def build(plan, result) -> tuple[str, str]:
 	# Symbols
 	if plan.symbols:
 		b.heading(2, "Punctuation and symbols")
-		b.paragraph(f"{result.symbols} symbols written to NVDA's symbol pronunciation, from {', '.join(plan.symbolSources)}.")
+		b.paragraph(f"{result.symbols} symbols written to NVDA's symbol pronunciation, from {', '.join(plan.symbolSources)}." + then)
 
 	# Keyboard
 	b.heading(2, "Keyboard Manager and Navigation Quick Keys")
-	b.paragraph(f"{result.gesturesAdded} JAWS keystrokes became NVDA input gestures. gestures.ini was backed up first.")
+	if not options.keyboard:
+		b.paragraph("JAWS keyboard commands were not migrated, as you chose, so NVDA's input gestures were not changed.")
+	else:
+		gesturesCopy = os.path.join(result.outputFolder, "gestures.ini.before-migration")
+		kept = f" NVDA's gestures.ini from before the migration is kept as {gesturesCopy}." if os.path.isfile(gesturesCopy) else ""
+		b.paragraph(f"{result.gesturesAdded} JAWS keystrokes became NVDA input gestures.{then}{kept}")
 	if plan.keyboardLayouts:
 		chosenLayouts = plan.chosenKeyboardLayouts() if plan.options.keyboard else []
 		found = ", ".join(layout.name + (" (in use)" if layout.id == plan.jawsKeyboardLayout else "") for layout in plan.keyboardLayouts)
 		b.paragraph(f"JAWS keyboard layouts found: {found}. Keystrokes brought over from: {', '.join(layout.name for layout in chosenLayouts) or 'none'}.")
 		layout = plan.nvdaKeyboardLayout() if plan.options.settings else ""
-		b.paragraph(f"NVDA's keyboard layout: {layout}." if layout else "NVDA's keyboard layout was left as it was.")
-	b.items((binding.label + f" [{binding.gesture}]" for binding in plan.keys.bindings), limit=400)
-	skippedKinds = collections.Counter(item.kind for item in plan.keys.skipped)
-	labels = {
-		"same": "already the same in NVDA",
-		"conflict": "NVDA uses the keystroke for something else",
-		"noEquivalent": "JAWS commands NVDA does not have",
-		"unconvertible": "keystrokes NVDA cannot represent (layered, braille, MAGic)",
-		"passthrough": "standard Windows keys NVDA handles itself",
-		"otherLayout": "for JAWS keyboard layouts that were not chosen",
-		"duplicate": "already taken by the keystrokes of another chosen JAWS keyboard layout",
-		"quickNavOff": "quick navigation letters not chosen",
-		"leasey": "Leasey keystrokes, ignored",
-	}
-	b.items(f"{count} {labels.get(kind, kind)}" for kind, count in skippedKinds.most_common())
-	conflicts = [item for item in plan.keys.skipped if item.kind == "conflict"]
-	if conflicts:
-		b.heading(3, "Keystrokes kept for NVDA")
-		b.items((f"{item.jawsKey} ({item.jawsScript}): {item.reason}" for item in conflicts), limit=200)
+		b.paragraph(f"NVDA's keyboard layout: {layout}.{then}" if layout else "NVDA's keyboard layout was left as it was.")
+	if options.keyboard:
+		# The keystrokes that became gestures, and why the others did not.
+		b.items((binding.label + f" [{binding.gesture}]" for binding in plan.keys.bindings), limit=400)
+		skippedKinds = collections.Counter(item.kind for item in plan.keys.skipped)
+		labels = {
+			"same": "already the same in NVDA",
+			"conflict": "NVDA uses the keystroke for something else",
+			"noEquivalent": "JAWS commands NVDA does not have",
+			"unconvertible": "keystrokes NVDA cannot represent (layered, braille, MAGic)",
+			"passthrough": "standard Windows keys NVDA handles itself",
+			"otherLayout": "for keyboard layouts that won't be used",
+			"duplicate": "taken by another keystroke (another chosen JAWS layout, or Caps Lock on the Laptop layout)",
+			"quickNavOff": "quick navigation letters not chosen",
+			"leasey": "Leasey keystrokes, ignored",
+		}
+		b.items(f"{count} {labels.get(kind, kind)}" for kind, count in skippedKinds.most_common())
+		conflicts = [item for item in plan.keys.skipped if item.kind == "conflict"]
+		if conflicts:
+			b.heading(3, "Keystrokes kept for NVDA")
+			b.items((f"{item.jawsKey} ({item.jawsScript}): {item.reason}" for item in conflicts), limit=200)
 	missing = [item for item in plan.keys.skipped if item.kind == "noEquivalent"]
 	if missing:
 		b.heading(3, "JAWS commands without an NVDA equivalent")
@@ -224,7 +254,7 @@ def build(plan, result) -> tuple[str, str]:
 	from . import classicSounds
 
 	if result.nvdaSounds is not None:
-		b.paragraph(classicSounds.statusText(result.nvdaSounds.record) + " NVDA's own sound files were not changed; a copy of them is kept.")
+		b.paragraph(classicSounds.statusText(result.nvdaSounds.record) + then + " NVDA's own sound files were not changed; a copy of them is kept.")
 		b.items(f"{choice.event.label}: {choice.jawsName}" for choice in plan.sounds)
 		if result.nvdaSounds.kept:
 			b.paragraph("Left as they were, because the scheme already had its own sound: " + ", ".join(result.nvdaSounds.kept) + ".")
@@ -235,7 +265,7 @@ def build(plan, result) -> tuple[str, str]:
 	if result.allSounds is not None:
 		b.paragraph(
 			f"{result.allSounds.sounds} JAWS sounds were copied into ClassicSpeech, as the scheme {classicSounds.JAWS_SOUNDS_SCHEME} "
-			f"({result.allSounds.converted} converted so NVDA can play them): {result.allSounds.folder}",
+			f"({result.allSounds.converted} converted so NVDA can play them): {result.allSounds.folder}.{then}",
 		)
 	b.paragraph(f"{len(index.wavFiles())} JAWS sound files were found.")
 
@@ -254,11 +284,17 @@ def build(plan, result) -> tuple[str, str]:
 		b.paragraph(f"In NVDA: {manager.nvdaResult}")
 		b.paragraph(f"Files found: {counts.get(manager.id, 0)}.")
 
-	# Recommended add-ons
-	b.heading(2, "Recommended add-ons")
-	for addon in managers.RECOMMENDED_ADDONS:
+	# Add-ons: ClassicSpeech and the recommended ones, always at their newest versions.
+	from . import addonUpdates
+
+	b.heading(2, "Add-ons")
+	b.paragraph(
+		"The assistant installs the newest version of each add-on you choose, and updates the ones you have: "
+		"ClassicSpeech from its GitHub releases, the others from the NVDA Add-on Store.",
+	)
+	for addon in addonUpdates.neededAddons():
 		chosen = addon.addonId in options.addonsToInstall
-		b.paragraph(f"{addon.name}: {addon.why} " + ("You chose to install it." if chosen else f"If it is not installed: {addon.ifNotInstalled}"))
+		b.paragraph(f"{addon.name}: {addon.why} " + ("You chose to install it, or to update it to its newest version." if chosen else f"If it is not installed: {addon.ifNotInstalled}"))
 
 	# Index summary
 	b.heading(2, "Index of JAWS settings")

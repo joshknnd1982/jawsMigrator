@@ -18,8 +18,8 @@ import weakref
 
 import wx
 
-from .. import jawsIndex, migrator, selection
-from .common import BORDER, TITLE, messageBox, speak
+from .. import debugLog, jawsIndex, migrator, selection
+from .common import BORDER, TITLE, checkListClass, enableWithLabel, messageBox, speak
 
 EVERYTHING = "everything"
 
@@ -68,14 +68,15 @@ class ImportSettingsDialog(wx.Dialog):
 		self.status = wx.StaticText(self, label="Reading your JAWS settings. Please wait.")
 		sizer.Add(self.status, flag=wx.TOP, border=6)
 
-		sizer.Add(wx.StaticText(self, label="&Show:"), flag=wx.TOP, border=8)
+		# Each access key is used once: Alt+S saves, Alt+H goes to Show, Alt+I to the items, Alt+W imports.
+		sizer.Add(wx.StaticText(self, label="S&how:"), flag=wx.TOP, border=8)
 		self.categoryKeys = [EVERYTHING] + [key for key, _label in selection.CATEGORIES]
 		self.category = wx.Choice(self, choices=["Everything"] + [label for _key, label in selection.CATEGORIES])
 		self.category.SetSelection(0)
 		sizer.Add(self.category, flag=wx.EXPAND | wx.TOP, border=2)
 
 		sizer.Add(wx.StaticText(self, label="&Items to import:"), flag=wx.TOP, border=8)
-		self.list = wx.CheckListBox(self, size=(640, 300))
+		self.list = checkListClass()(self, size=(640, 300))
 		sizer.Add(self.list, proportion=1, flag=wx.EXPAND | wx.TOP, border=2)
 
 		selectRow = wx.BoxSizer(wx.HORIZONTAL)
@@ -86,7 +87,7 @@ class ImportSettingsDialog(wx.Dialog):
 		sizer.Add(selectRow, flag=wx.TOP, border=6)
 
 		actionRow = wx.BoxSizer(wx.HORIZONTAL)
-		self.importButton = wx.Button(self, label="&Import the selected items now...")
+		self.importButton = wx.Button(self, label="Import the selected items no&w...")
 		self.updatesButton = wx.Button(self, label="Check for &updates")
 		self.gesturesButton = wx.Button(self, label="Open NVDA's Input &Gestures dialog")
 		for button in (self.importButton, self.updatesButton, self.gesturesButton):
@@ -125,7 +126,9 @@ class ImportSettingsDialog(wx.Dialog):
 	# -- loading ---------------------------------------------------------------------------
 
 	def _enableLists(self, enabled: bool):
-		for control in (self.category, self.list, self.selectAllButton, self.selectNoneButton, self.importButton, self.saveButton):
+		for control in (self.category, self.list):
+			enableWithLabel(control, enabled)
+		for control in (self.selectAllButton, self.selectNoneButton, self.importButton, self.saveButton):
 			control.Enable(enabled)
 
 	def _startLoading(self):
@@ -143,7 +146,7 @@ class ImportSettingsDialog(wx.Dialog):
 				index = jawsIndex.buildIndex(jaws, language, facts.leasey)
 				outcome = migrator.buildPlan(options, index, facts, inNvda=True)
 			except Exception as error:
-				_log().exception("jawsMigrator: could not read the JAWS settings")
+				debugLog.error("could not read the JAWS settings")
 				outcome = error
 			wx.CallAfter(self._loaded, outcome)
 
@@ -202,6 +205,8 @@ class ImportSettingsDialog(wx.Dialog):
 		self.status.SetLabel(text)
 
 	def _onCheck(self, event):
+		# NVDA's check list box tells NVDA about the change in its own handler of this event.
+		event.Skip()
 		index = event.GetInt()
 		if not 0 <= index < len(self.shown):
 			return

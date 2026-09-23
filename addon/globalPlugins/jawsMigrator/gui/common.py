@@ -13,6 +13,8 @@ import wx
 TITLE = "JAWS Migration Assistant"
 BORDER = 10
 TEXT_SIZE = (640, 280)
+#: Width, in pixels, that explanations are wrapped to: the width of the assistant's text boxes.
+WRAP_WIDTH = TEXT_SIZE[0]
 
 
 def mainFrame():
@@ -50,12 +52,44 @@ def messageBox(message: str, caption: str = TITLE, style: int = wx.OK | wx.ICON_
 			postPopup()
 
 
-def labeled(parent, sizer, label: str, control):
-	"""Add a label followed by its control; the label names the control for screen readers."""
-	text = wx.StaticText(parent, label=label)
-	sizer.Add(text, flag=wx.TOP, border=6)
-	sizer.Add(control, flag=wx.EXPAND | wx.TOP, border=2)
+def labeled(parent, sizer, label: str, controlClass, *args, proportion: int = 0, **kwargs):
+	"""Make a label, then its control, and add both to ``sizer``; returns the control.
+
+	The order matters: Windows names a control after the static text just before it, and a
+	label's access key moves focus to the control just after it. So, as in NVDA's own
+	guiHelper.LabeledControlHelper, the label is made first and the control second, by
+	``controlClass(parent, *args, **kwargs)``.
+	"""
+	sizer.Add(wx.StaticText(parent, label=label), flag=wx.TOP, border=6)
+	control = controlClass(parent, *args, **kwargs)
+	sizer.Add(control, proportion=proportion, flag=wx.EXPAND | wx.TOP, border=2)
 	return control
+
+
+def enableWithLabel(control, enabled: bool = True) -> None:
+	"""Enable or disable a control and the label made just before it (see ``labeled``), as NVDA's own
+	dialogs do: the access key of a disabled label does nothing, where an enabled one would move focus
+	past the disabled control to whatever comes next."""
+	control.Enable(enabled)
+	label = control.GetPrevSibling()
+	if isinstance(label, wx.StaticText):
+		label.Enable(enabled)
+
+
+def checkListClass():
+	"""The check list box class to use: NVDA's own inside NVDA, wx's outside it (tests).
+
+	wxWidgets 3.2, which NVDA's wxPython 4.2 is built on, does not tell screen readers whether an
+	item of a wx.CheckListBox is checked, nor when that changes. NVDA's CustomCheckListBox adds both,
+	as in NVDA's own settings. Event handlers bound to it must call event.Skip(), so that its own
+	EVT_CHECKLISTBOX handler can tell NVDA about the change.
+	"""
+	try:
+		from gui.nvdaControls import CustomCheckListBox
+
+		return CustomCheckListBox
+	except Exception:
+		return wx.CheckListBox
 
 
 def readOnlyText(parent, value: str = "", size=TEXT_SIZE):
@@ -86,7 +120,7 @@ class TextViewer(wx.Dialog):
 	def __init__(self, parent, title: str, text: str):
 		super().__init__(parent, title=title, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
 		sizer = wx.BoxSizer(wx.VERTICAL)
-		self.text = labeled(self, sizer, "&Text:", readOnlyText(self, text, size=(700, 420)))
+		self.text = labeled(self, sizer, "&Text:", readOnlyText, text, size=(700, 420))
 		close = wx.Button(self, wx.ID_CLOSE, "&Close")
 		close.Bind(wx.EVT_BUTTON, lambda event: self.EndModal(wx.ID_CLOSE))
 		sizer.Add(close, flag=wx.ALIGN_RIGHT | wx.TOP, border=8)

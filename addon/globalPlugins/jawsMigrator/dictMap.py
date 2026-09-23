@@ -7,9 +7,11 @@
 JAWS matches whole words unless the word ends in ``*``, which makes it a root:
 ``reposition*`` changes "reposition", "repositions" and "repositioning", keeping
 the ending. NVDA gets a whole-word entry for plain words, an "anywhere" entry for
-rules made of symbols (whole-word matching needs letters at both ends), and a
-regular expression anchored at the start of a word for roots, which keeps the
-ending exactly as JAWS does.
+rules made of symbols (whole-word matching needs letters at both ends), a regular
+expression anchored at the start of a word for roots, which keeps the ending
+exactly as JAWS does, and a regular expression with a word boundary at the letter
+or digit end of rules such as ``St.`` or ``.ini``, so ``St.`` doesn't change "first.".
+A word made only of asterisks is the asterisks themselves.
 
 Rules for another language are skipped. Rules for one synthesizer are kept for
 that synthesizer's voice dictionary. Rules that only play a sound cannot be
@@ -65,7 +67,21 @@ class DictConversion:
 
 
 def _isWordCharacter(character: str) -> bool:
-	return bool(re.match(r"\w", character or ""))
+	"""Whether ``character`` is a letter, digit or underscore for whole-word matching.
+
+	Fractions and superscript digits (½ is JAWS's ``\\189``) are left out, so a rule for one is an
+	"anywhere" entry. As a whole word it would miss "1½", where Python's ``re`` sees no word
+	boundary, and the ``regex`` module NVDA compiles whole-word entries with doesn't count them
+	as word characters at all.
+	"""
+	if not character or not re.match(r"\w", character):
+		return False
+	return character.isdecimal() or not character.isnumeric()
+
+
+def _wordBoundary(character: str) -> str:
+	"""``\\b`` when ``character`` is a letter, digit or underscore, so the rule only matches whole words there."""
+	return r"\b" if _isWordCharacter(character) else ""
 
 
 def convertEntry(entry: jawsFiles.JdfEntry, fileLabel: str) -> tuple[DictEntry | None, str]:
@@ -76,15 +92,23 @@ def convertEntry(entry: jawsFiles.JdfEntry, fileLabel: str) -> tuple[DictEntry |
 		return None, "The rule has no word."
 	if entry.sound and not replacement.strip():
 		return None, f"JAWS plays {entry.sound} instead of speaking the word; NVDA dictionaries cannot play sounds."
-	if not replacement.strip():
+	if replacement == "":
 		# JAWS rules with no replacement only change the word's sound or language; in NVDA they would delete the word.
+		# A replacement of spaces is kept: it silences the word, as it does in JAWS.
 		return None, "The rule only changes the sound or language JAWS uses for the word."
 	if replacement.lower().endswith(".wav"):
 		return None, f"JAWS plays {replacement}; NVDA dictionaries cannot play sounds."
+	if any(character in word or character in replacement for character in "\t\r\n"):
+		# Such as \9 or \10 character codes: NVDA's dictionary files are tab-separated lines.
+		return None, "The rule contains a tab or a line break, which NVDA's dictionary files cannot hold."
 	comment = f"From JAWS {fileLabel}"
 	if entry.lineNumber:
 		comment += f", line {entry.lineNumber}"
-	if "*" in word.strip("*") or entry.isRootWord or word.startswith("*"):
+	if not word.strip("*"):
+		# "*" or "***": no word for a wildcard to belong to, so the asterisks are the text to change.
+		# As a wildcard this became an empty regular expression, which matches between every two characters.
+		result = DictEntry(word, replacement, entry.caseSensitive, TYPE_ANYWHERE, comment)
+	elif "*" in word.strip("*") or entry.isRootWord or word.startswith("*"):
 		# A JAWS wildcard: a root word (reposition*) or a wildcard inside the word.
 		startsWithWildcard = word.startswith("*")
 		endsWithWildcard = word.endswith("*")
@@ -102,6 +126,16 @@ def convertEntry(entry: jawsFiles.JdfEntry, fileLabel: str) -> tuple[DictEntry |
 		)
 	elif _isWordCharacter(word[0]) and _isWordCharacter(word[-1]):
 		result = DictEntry(word, replacement, entry.caseSensitive, TYPE_WORD, comment)
+	elif _isWordCharacter(word[0]) or _isWordCharacter(word[-1]):
+		# "St." or ".ini": a whole word at the end that is a letter or digit. As an "anywhere"
+		# entry, a rule for "St." would also turn "first." into "firStreet".
+		result = DictEntry(
+			pattern=_wordBoundary(word[0]) + re.escape(word) + _wordBoundary(word[-1]),
+			replacement=replacement.replace("\\", "\\\\"),
+			caseSensitive=entry.caseSensitive,
+			type=TYPE_REGEXP,
+			comment=comment + f" (whole word {word})",
+		)
 	else:
 		result = DictEntry(word, replacement, entry.caseSensitive, TYPE_ANYWHERE, comment)
 	if entry.synthesizer not in ("", "*"):

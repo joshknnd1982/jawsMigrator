@@ -13,9 +13,15 @@ synthesizer NVDA will use, because voice aliases change pitch and rate relative
 to the current voice.
 
 Behaviors in a JAWS scheme entry ``behavior|data1|data2|data3|data4``:
-0 ignore, 1 speak (data1 is a voice alias, optionally ``alias:text``),
-2 play the sound in data2, 3 speak the text in the voice alias in data3,
-4 speak in the language in data4.
+0 ignore, 1 speak the announcement (such as "link") in the voice alias in data1,
+optionally with other words (``alias:text``), 2 play the sound in data2 instead,
+3 read the text itself in the voice alias in data3, 4 speak in the language in data4.
+
+ClassicSpeech gives an item's voice either to NVDA's announcement alone (states,
+for example) or to the text as well (links, headings, formatting) or to the whole
+object (control types). A voice is only carried over where ClassicSpeech would use
+it exactly as JAWS does, so no text is ever read in a voice JAWS keeps for its
+announcements.
 """
 
 from __future__ import annotations
@@ -157,6 +163,47 @@ HTML_ATTRIBUTE_ITEMS = {
 	"onclick": "state.CLICKABLE",
 }
 
+#: ClassicSpeech items whose voice covers only the words NVDA announces (its "announcement" scope,
+#: from ClassicSpeech 1.16's catalog), besides every state and every ".off" item. Every other item
+#: voices the text too (links, headings, formatting) or the whole object (control types).
+_ANNOUNCEMENT_ITEMS = frozenset(
+	{
+		"role.MATH",
+		"object.unlabeledGraphic",
+		"fmt.fontName",
+		"fmt.fontSize",
+		"fmt.baseline",
+		"fmt.style.default",
+		"fmt.backgroundPattern",
+		"fmt.page",
+		"fmt.section",
+		"fmt.textColumn",
+		"fmt.sectionBreak",
+		"fmt.columnBreak",
+		"fmt.lineNumber",
+		"fmt.lineIndentation",
+		"fmt.paragraphIndent",
+		"fmt.lineSpacing",
+		"fmt.verticalAlign",
+		"fmt.linePrefix",
+		"fmt.tableCellCoords",
+		"fmt.tableHeaders",
+		"fmt.cellBorders",
+	},
+)
+
+#: Items whose sound ClassicSpeech would play for every object in that state, such as every link,
+#: announced or not. JAWS plays these sounds only when it announces the state.
+_SOUNDS_LEFT_OUT = {
+	"state.CLICKABLE": "JAWS plays it only when it announces clickable elements (your web verbosity decides); "
+	"ClassicSpeech would play it on every clickable object, links included",
+}
+
+
+def voicesOnlyAnnouncement(itemId: str) -> bool:
+	"""Whether ClassicSpeech speaks only the announcement in an item's voice, not the text or the whole object."""
+	return itemId.startswith("state.") or itemId.endswith(".off") or itemId in _ANNOUNCEMENT_ITEMS
+
 #: Voice alias names that always mean "the current voice".
 _NEUTRAL_ALIASES = {"*", ""}
 
@@ -260,6 +307,9 @@ def convertScheme(ini: jawsFiles.IniFile, path: str, findSound, aliases: dict) -
 			# hypertext attribute entry that JAWS also consults.
 			return
 		if behavior == 2:
+			if itemId in _SOUNDS_LEFT_OUT:
+				scheme.notConverted.append(f"{source}: the sound was left out: {_SOUNDS_LEFT_OUT[itemId]}.")
+				return
 			soundName = data[1]
 			soundPath = findSound(soundName) if soundName else None
 			if soundPath is None:
@@ -269,7 +319,17 @@ def convertScheme(ini: jawsFiles.IniFile, path: str, findSound, aliases: dict) -
 		elif behavior in (1, 3):
 			alias = _aliasName(data[2] if behavior == 3 else data[0])
 			if aliasChangesVoice(alias):
-				scheme.items[itemId] = SchemeItem(itemId, voiceAlias=alias, source=source)
+				# Behavior 1 voices only JAWS's announcement, behavior 3 the text itself.
+				if (behavior == 1) == voicesOnlyAnnouncement(itemId):
+					scheme.items[itemId] = SchemeItem(itemId, voiceAlias=alias, source=source)
+				elif behavior == 1:
+					scheme.notConverted.append(
+						f"{source}: JAWS speaks only its announcement in {alias}; ClassicSpeech would read the text in that voice too, so the voice was left out.",
+					)
+				else:
+					scheme.notConverted.append(
+						f"{source}: JAWS reads the text in {alias}; ClassicSpeech could give that voice only to NVDA's announcement, so the voice was left out.",
+					)
 			if behavior == 1 and ":" in data[0]:
 				scheme.notConverted.append(f"{source}: JAWS says \"{data[0].split(':', 1)[1]}\"; ClassicSpeech keeps NVDA's wording.")
 		elif behavior == 0:
