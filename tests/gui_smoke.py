@@ -4,8 +4,11 @@
 # Run: python tests/gui_smoke.py
 
 import os
+import shutil
 import sys
+import tempfile
 import time
+import types
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -18,6 +21,12 @@ messages = nvdaStubs.spoken
 
 def stubModules(frame):
 	nvdaStubs.install(frame)
+	# NVDA's settings folder is a temporary one, so nothing of the real NVDA is read or written.
+	globalVars = types.ModuleType("globalVars")
+	globalVars.appDir = ""
+	globalVars.appArgs = types.SimpleNamespace(secure=False, configPath=tempfile.mkdtemp(prefix="jawsMigrator-gui-"))
+	sys.modules["globalVars"] = globalVars
+	return globalVars.appArgs.configPath
 
 
 def pump(seconds=0.2):
@@ -30,7 +39,7 @@ def pump(seconds=0.2):
 def main():
 	app = wx.App()
 	frame = wx.Frame(None)
-	stubModules(frame)
+	configDir = stubModules(frame)
 	from jawsMigrator import nvdaApply, systemCheck
 	from jawsMigrator.gui import wizard
 
@@ -71,6 +80,7 @@ def main():
 	dialog.Destroy()
 	frame.Destroy()
 	app.ExitMainLoop()
+	shutil.rmtree(configDir, ignore_errors=True)
 
 
 if __name__ == "__main__":

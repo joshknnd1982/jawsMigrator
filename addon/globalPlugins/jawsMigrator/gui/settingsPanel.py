@@ -53,6 +53,13 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		if not self.sleepApps:
 			self.sleepList.Enable(False)
 
+		chooseButtons = guiHelper.ButtonHelper(wx.HORIZONTAL)
+		choose = chooseButtons.addButton(self, label="&Choose which JAWS items to import...")
+		choose.Bind(wx.EVT_BUTTON, lambda event: self._run("openImportSettings"))
+		gestures = chooseButtons.addButton(self, label="Open NVDA's Input &Gestures dialog")
+		gestures.Bind(wx.EVT_BUTTON, lambda event: self._run("openInputGestures"))
+		helper.addItem(chooseButtons)
+
 		buttons = guiHelper.ButtonHelper(wx.HORIZONTAL)
 		openWizard = buttons.addButton(self, label="Open the JAWS &Migration Assistant...")
 		openWizard.Bind(wx.EVT_BUTTON, lambda event: self._run("openAssistant"))

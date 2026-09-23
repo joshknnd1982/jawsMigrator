@@ -81,6 +81,12 @@ class MigrationOptions:
 	symbols: bool = True
 	jawsSymbolNames: bool = False
 	keyboard: bool = True
+	#: JAWS keyboard layouts whose own keystrokes become NVDA gestures (``desktop``, ``laptop``,
+	#: ``classic laptop``...); None takes the layout JAWS uses.
+	keyboardLayouts: list | None = None
+	#: NVDA's keyboard layout after the migration: ``desktop``, ``laptop``, "" to keep NVDA's,
+	#: or None to follow JAWS (and the keyboard layouts chosen).
+	nvdaKeyboardLayout: str | None = None
 	quickNavLetters: bool = True
 	overrideConflicts: bool = False
 	sounds: bool = False
@@ -90,6 +96,10 @@ class MigrationOptions:
 	voiceProfiles: list | None = None
 	#: Names of the converted schemes to copy into ClassicSpeech; None copies them all.
 	schemes: list | None = None
+	#: Names of the JAWS voice aliases to carry into ClassicSpeech; None carries them all.
+	voiceAliases: list | None = None
+	#: True once the user's saved choice of items (JAWS Migration Assistant settings) narrowed the plan.
+	selectionApplied: bool = False
 
 
 @dataclass
@@ -156,6 +166,9 @@ class MigrationPlan:
 	jawsSymbolDefaults: dict = field(default_factory=dict)
 	jawsSymbolDefaultsSource: str = ""
 	keys: keyPlan.KeyPlan = field(default_factory=keyPlan.KeyPlan)
+	#: The JAWS keyboard layout in use (``laptop``, ``classic laptop``...) and every layout the key map has.
+	jawsKeyboardLayout: str = "desktop"
+	keyboardLayouts: list = field(default_factory=list)
 	sounds: list = field(default_factory=list)
 	missingSounds: list = field(default_factory=list)
 	scripts: list = field(default_factory=list)
@@ -184,6 +197,49 @@ class MigrationPlan:
 			symbols.update(self.jawsSymbolDefaults)
 		symbols.update(self.symbols)
 		return symbols
+
+	def chosenKeyboardLayouts(self) -> list:
+		wanted = self.options.keyboardLayouts
+		if wanted is None:
+			return [layout for layout in self.keyboardLayouts if layout.id == self.jawsKeyboardLayout]
+		return [layout for layout in self.keyboardLayouts if layout.id in wanted]
+
+	def settingChange(self, key: str, target: str = settingsMap.NVDA):
+		"""The planned change of one setting, such as ``keyboard.keyboardLayout``, or None."""
+		return next((change for change in self.settings.changes if change.target == target and change.key == key), None)
+
+	def nvdaKeyboardLayout(self) -> str:
+		"""NVDA's keyboard layout after the migration: ``desktop``, ``laptop``, or "" when it stays as it is."""
+		options = self.options
+		if options.nvdaKeyboardLayout is not None:
+			return options.nvdaKeyboardLayout
+		change = self.settingChange("keyboard.keyboardLayout")
+		if change is None:
+			return ""
+		chosen = self.chosenKeyboardLayouts() if options.keyboard else []
+		if chosen and self.jawsKeyboardLayout not in [layout.id for layout in chosen]:
+			# Only other layouts' keystrokes were chosen: NVDA uses the layout they work in.
+			return chosen[0].nvdaLayout
+		return str(change.value)
+
+	def finalSettingChanges(self) -> list:
+		"""The setting changes to apply, with NVDA's keyboard layout and NVDA keys fitted to the keyboard choices."""
+		changes = [change for change in self.settings.changes if not (change.target == settingsMap.NVDA and change.key == "keyboard.keyboardLayout")]
+		layout = self.nvdaKeyboardLayout()
+		original = self.settingChange("keyboard.keyboardLayout")
+		if layout:
+			if original is not None and original.value == layout:
+				changes.append(original)
+			else:
+				changes.append(settingsMap.SettingChange(settingsMap.NVDA, ("keyboard", "keyboardLayout"), layout, f"Keyboard layout: {layout}", "chosen in the JAWS Migration Assistant"))
+		modifiers = self.settingChange("keyboard.NVDAModifierKeys")
+		if modifiers is not None and self.options.keyboard and self.keyboardLayouts:
+			# Caps Lock is an NVDA key when the keystrokes of a Caps Lock layout (Laptop) come over.
+			capsLock = any(layout.capsLock for layout in self.chosenKeyboardLayouts())
+			value = (int(modifiers.value) & ~1) | (1 if capsLock else 0) or 6
+			if value != modifiers.value:
+				changes = [change if change is not modifiers else settingsMap.SettingChange(settingsMap.NVDA, modifiers.path, value, settingsMap.nvdaKeyLabel(value), modifiers.source) for change in changes]
+		return changes
 
 	def selectedSchemes(self) -> list:
 		wanted = self.options.schemes
@@ -448,24 +504,10 @@ def buildPlan(options: MigrationOptions, index: jawsIndex.JawsIndex, facts: syst
 			except OSError:
 				pass
 
-	# Keyboard.
-	layout = plan.settings.keyboardLayout or (merged.get("options", "KeyboardType", "Desktop") or "desktop").lower()
-	layout = "laptop" if "laptop" in layout.lower() else "desktop"
-	boundScripts = scriptExists = None
-	if inNvda:
-		from . import nvdaApply
-
-		boundScripts = nvdaApply.gestureBoundScripts
-		scriptExists = nvdaApply.scriptExists
-	plan.keys = keyPlan.planKeys(
-		index.defaultJkm(scope),
-		layout,
-		boundScripts=boundScripts,
-		scriptExists=scriptExists,
-		quickNavLetters=options.quickNavLetters,
-		overrideConflicts=options.overrideConflicts,
-		leaseyActive=index.leasey.found,
-	)
+	# Keyboard: the JAWS keyboard layout in use, every layout the key map has, and the keystrokes.
+	plan.jawsKeyboardLayout = keyPlan.layoutId(plan.settings.jawsKeyboardLayout or merged.get("options", "KeyboardType", "Desktop"))
+	plan.keyboardLayouts = keyPlan.keyboardLayouts(index.defaultJkm(scope))
+	planKeyboard(plan, inNvda)
 	plan.keys.applicationKeys = keyPlan.applicationKeyMaps(index.byExtension("jkm", jawsIndex.USER if scope != jawsIndex.SHARED else jawsIndex.SHARED))
 
 	# Sounds.
@@ -480,6 +522,29 @@ def buildPlan(options: MigrationOptions, index: jawsIndex.JawsIndex, facts: syst
 		names = jawsIndex._SCRIPT_DEFINITION.findall(text)
 		plan.scripts.append((indexed.relative, names))
 	return plan
+
+
+def planKeyboard(plan: MigrationPlan, inNvda: bool = False) -> None:
+	"""Work out ``plan.keys`` for the chosen JAWS keyboard layouts and keyboard options."""
+	options = plan.options
+	boundScripts = scriptExists = None
+	if inNvda:
+		from . import nvdaApply
+
+		boundScripts = nvdaApply.gestureBoundScripts
+		scriptExists = nvdaApply.scriptExists
+	applicationKeys = plan.keys.applicationKeys
+	plan.keys = keyPlan.planKeys(
+		plan.index.defaultJkm(options.scope),
+		plan.jawsKeyboardLayout,
+		boundScripts=boundScripts,
+		scriptExists=scriptExists,
+		quickNavLetters=options.quickNavLetters,
+		overrideConflicts=options.overrideConflicts,
+		leaseyActive=plan.index.leasey.found,
+		layouts=[layout.id for layout in plan.chosenKeyboardLayouts()],
+	)
+	plan.keys.applicationKeys = applicationKeys
 
 
 # -- carrying it out ------------------------------------------------------------------------
@@ -567,16 +632,20 @@ class Migration:
 		try:
 			safety.checkWritable(self.result.outputFolder)
 			os.makedirs(self.result.outputFolder, exist_ok=True)
-			self._later(self._say, "Backing up NVDA's settings")
+			self._later(self._say, "Backing up NVDA's settings, add-ons and add-on settings")
+			dataDir = nvdaEnv.addonDataDir()
 			self.result.backup = backup.createBackup(
 				nvdaEnv.configDir(),
-				nvdaEnv.addonDataDir(),
+				dataDir,
 				nvdaEnv.wavesFolder(),
 				f"Before migrating from {plan.index.jaws.displayName}",
 				nvdaEnv.nvdaVersion(),
 				_addonVersion(),
+				# The very first one is kept for good: NVDA as it was before any JAWS migration.
+				original=not backup.hasOriginal(dataDir),
+				progress=lambda message: self._later(self._say, message),
 			)
-			backup.pruneBackups(nvdaEnv.addonDataDir(), keep=15)
+			backup.pruneBackups(dataDir, keep=15)
 		except Exception as error:
 			_log().exception("jawsMigrator: backup failed")
 			self.result.error = f"NVDA's settings could not be backed up, so nothing was changed. {error}"
@@ -702,7 +771,7 @@ class Migration:
 		self._say("Applying JAWS settings to NVDA")
 		with nvdaApply.writingTo(profileName):
 			if options.settings:
-				applied, failed = nvdaApply.applySettings(plan.settings.changes, None)
+				applied, failed = nvdaApply.applySettings(plan.finalSettingChanges(), None)
 				result.applied.extend(applied)
 				result.failed.extend(failed)
 			synthName = nvdaApply.currentSynthName()
@@ -805,6 +874,7 @@ class Migration:
 			"when": datetime.datetime.now().isoformat(timespec="seconds"),
 			"jaws": plan.index.jaws.displayName,
 			"target": profileName or "normal configuration",
+			"keyboardLayouts": [layout.id for layout in plan.chosenKeyboardLayouts()] if options.keyboard else [],
 		}
 		if result.backup is not None:
 			updates["lastBackup"] = result.backup.path
@@ -842,7 +912,11 @@ class Migration:
 					knownVoices,
 					knownVariants,
 				)
-			resolvers.append((resolver, profilePlan.aliases))
+			aliases = profilePlan.aliases
+			if options.voiceAliases is not None:
+				wanted = {name.lower() for name in options.voiceAliases}
+				aliases = {name: value for name, value in aliases.items() if name.lower() in wanted}
+			resolvers.append((resolver, aliases))
 			if options.classicVoices:
 				records = {}
 				for category, context in voices.CLASSIC_SPEECH_CONTEXTS.items():
@@ -940,24 +1014,52 @@ def restoreLatestBackup() -> str:
 	backups = backup.listBackups(nvdaEnv.addonDataDir())
 	if not backups:
 		return "There is no backup to restore."
-	return restore(backups[0])
+	return restore(backups[0]).message
 
 
-def restore(info: backup.BackupInfo) -> str:
+@dataclass
+class RestoreOutcome:
+	message: str
+	#: Add-ons were changed; NVDA finishes that when it restarts.
+	restartNeeded: bool = False
+	failed: list = field(default_factory=list)
+
+
+def restore(info: backup.BackupInfo) -> RestoreOutcome:
+	"""Put a backup back: NVDA's settings, add-ons and add-on settings. Main thread only.
+
+	The current settings and add-ons are backed up first, so the restore can be undone. The file
+	work runs in the background while NVDA keeps responding; then NVDA reloads its settings.
+	"""
 	from . import nvdaApply, state
 
-	safety = backup.createBackup(
-		nvdaEnv.configDir(),
-		nvdaEnv.addonDataDir(),
-		"",
-		f"Before restoring the backup from {info.label}",
-		nvdaEnv.nvdaVersion(),
-		_addonVersion(),
-	)
-	done = backup.restoreBackup(info, nvdaEnv.configDir(), nvdaEnv.addonDataDir())
+	manager = nvdaApply.addonManager()
+
+	def work():
+		before = backup.createBackup(
+			nvdaEnv.configDir(),
+			nvdaEnv.addonDataDir(),
+			"",
+			f"Before restoring the backup from {info.label}",
+			nvdaEnv.nvdaVersion(),
+			_addonVersion(),
+		)
+		return before, backup.restoreBackup(info, nvdaEnv.configDir(), nvdaEnv.addonDataDir(), addons=manager)
+
+	before, result = nvdaApply.runWithProgress(work, "Restoring NVDA's settings and add-ons. Please wait.")
 	state.forget()
 	nvdaApply.resetToSavedConfiguration()
-	return f"Restored {len(done)} items from the backup of {info.label}. The settings from before the restore were saved as {safety.name}."
+	lines = [f"Put back {len(result.restored)} files and removed {len(result.removed)} from the backup of {info.label}."]
+	if info.version < 2:
+		lines.append("That backup holds NVDA's settings only, so add-ons were not changed.")
+	elif result.addonActions:
+		lines.append("Add-ons, finished when NVDA restarts: " + "; ".join(action.description for action in result.addonActions) + ".")
+	else:
+		lines.append("Your add-ons were already as they were in the backup.")
+	if result.failed:
+		lines.append(f"{len(result.failed)} items could not be put back: " + "; ".join(result.failed[:5]) + ".")
+	lines.append(f"Your settings and add-ons from before the restore were saved as the backup {before.name}, so this can be undone.")
+	return RestoreOutcome(" ".join(lines), result.restartNeeded, result.failed)
 
 
 def recommendedAddonStates(facts: systemCheck.SystemFacts) -> list:

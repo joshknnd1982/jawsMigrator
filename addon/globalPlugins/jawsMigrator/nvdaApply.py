@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextlib
 import os
 
-from . import settingsMap
+from . import backup, nvdaEnv, safety, settingsMap
 
 
 def _log():
@@ -558,3 +558,125 @@ def resetToSavedConfiguration() -> None:
 
 	core.resetConfiguration()
 	reloadDefaultDictionary()
+
+
+# -- add-ons and long work, for restoring backups ------------------------------------------
+
+
+class NvdaAddonManager(backup.AddonManager):
+	"""Installs, removes, enables and disables add-ons through NVDA's own add-on handling.
+
+	It does what NVDA's Add-on Store does: removals and installs are recorded in NVDA's add-on
+	state and finish when NVDA restarts; add-ons still waiting to be installed are removed at once.
+	"""
+
+	def __init__(self):
+		self._cache = None
+
+	def _addons(self, name: str | None = None, refresh: bool = False) -> list:
+		import addonHandler
+
+		if refresh or self._cache is None:
+			self._cache = list(addonHandler.getAvailableAddons(refresh=True))
+		return [addon for addon in self._cache if name is None or addon.name.lower() == name.lower()]
+
+	@staticmethod
+	def _waitingToInstall(addon) -> bool:
+		import addonHandler
+
+		return addon.path.lower().endswith(addonHandler.ADDON_PENDINGINSTALL_SUFFIX.lower())
+
+	def installed(self) -> list:
+		records = []
+		for addon in self._addons(refresh=True):
+			waiting = self._waitingToInstall(addon)
+			disabled = (addon.isDisabled or addon.isPendingDisable) and not addon.isPendingEnable
+			records.append(backup.AddonRecord(addon.name, addon.version, addon.path, waiting, not waiting and addon.isPendingRemove, disabled))
+		return records
+
+	def remove(self, name: str) -> None:
+		import addonHandler
+		from addonStore.models.status import AddonStateCategory
+
+		addons = self._addons(name)
+		for addon in addons:
+			if self._waitingToInstall(addon):
+				if addon.isInstalled:
+					# An update waiting to replace an installed copy: NVDA would still install it at restart.
+					addon.completeRemove()
+					addonHandler.state[AddonStateCategory.PENDING_INSTALL].discard(addon.name)
+				else:
+					addon.requestRemove()
+		for addon in addons:
+			if not self._waitingToInstall(addon) and os.path.isdir(addon.path):
+				addon.requestRemove()
+		self._cache = None
+
+	def cancelRemove(self, name: str) -> None:
+		import addonHandler
+		from addonStore.models.status import AddonStateCategory
+
+		addonHandler.state[AddonStateCategory.PENDING_REMOVE].discard(name)
+
+	def stageInstall(self, name: str, source: str, disabled: bool, overrideCompatibility: bool) -> None:
+		import shutil
+
+		import addonHandler
+		from addonStore.models.status import AddonStateCategory
+
+		target = safety.checkWritable(os.path.join(nvdaEnv.configDir(), "addons", name + addonHandler.ADDON_PENDINGINSTALL_SUFFIX))
+		if os.path.isdir(target):
+			shutil.rmtree(target)
+		shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__"))
+		state = addonHandler.state
+		state[AddonStateCategory.PENDING_INSTALL].add(name)
+		if disabled:
+			state[AddonStateCategory.DISABLED].add(name)
+		if overrideCompatibility:
+			state[AddonStateCategory.PENDING_OVERRIDE_COMPATIBILITY].add(name)
+		self._cache = None
+
+	def setEnabled(self, name: str, enabled: bool) -> None:
+		for addon in self._addons(name):
+			if not self._waitingToInstall(addon):
+				addon.enable(enabled)
+
+	def save(self) -> None:
+		import addonHandler
+
+		addonHandler.state.save()
+		addonHandler.getAvailableAddons(refresh=True)
+
+
+def addonManager() -> backup.AddonManager:
+	"""NVDA's own add-on handling when NVDA runs; the files alone otherwise (outside NVDA, and in tests)."""
+	try:
+		import addonHandler
+		from addonStore.models import status
+
+		if hasattr(status, "AddonStateCategory") and hasattr(addonHandler, "state") and hasattr(addonHandler, "ADDON_PENDINGINSTALL_SUFFIX"):
+			return NvdaAddonManager()
+	except ImportError:
+		pass
+	return backup.FileAddonManager(nvdaEnv.configDir())
+
+
+def runWithProgress(function, message: str):
+	"""Run ``function`` in a background thread while NVDA shows a progress dialog and keeps responding.
+
+	Returns what ``function`` returns, and raises what it raised. Outside NVDA it just runs it.
+	"""
+	try:
+		import gui
+		import systemUtils
+	except ImportError:
+		return function()
+	try:
+		dialog = gui.IndeterminateProgressDialog(gui.mainFrame, "JAWS Migration Assistant", message)
+	except Exception:
+		dialog = None
+	try:
+		return systemUtils.ExecAndPump(function).funcRes
+	finally:
+		if dialog is not None:
+			dialog.done()

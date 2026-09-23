@@ -15,10 +15,13 @@ from __future__ import annotations
 
 import functools
 import os
+import time
 
 import addonHandler
 import globalPluginHandler
-import gui
+# NVDA's gui, under a name of its own: importing this add-on's own gui package (below) binds
+# the name "gui" in this module to that package, which would hide NVDA's.
+import gui as nvdaGui
 import inputCore
 import scriptHandler
 import tones
@@ -39,6 +42,8 @@ CATEGORY = TITLE
 #: Commands available after NVDA+Shift+J.
 LAYER_GESTURES = {
 	"kb:m": "openAssistant",
+	"kb:o": "openImportSettings",
+	"kb:g": "openInputGestures",
 	"kb:p": "toggleJawsProfile",
 	"kb:k": "jawsKeystrokeHelp",
 	"kb:s": "toggleJawsSounds",
@@ -53,6 +58,8 @@ LAYER_GESTURES = {
 LAYER_HELP = (
 	"JAWS Migration Assistant commands, after NVDA+Shift+J: "
 	"M, open the migration assistant. "
+	"O, JAWS Migration Assistant settings: choose which JAWS items to import. "
+	"G, open NVDA's Input Gestures dialog. "
 	"P, turn the JAWS settings profile on or off. "
 	"K, hear what a JAWS keystroke does in NVDA. "
 	"S, turn JAWS sound effects on or off. "
@@ -137,6 +144,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._busy = False
 		self._menu = None
 		self._menuItem = None
+		self._preferencesItem = None
+		self._factsCache = None
 		self._sleepApps: set = set()
 		self._keymapCache = None
 		self.sounds = SoundReplacer()
@@ -149,7 +158,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from .gui import settingsPanel
 
 			settingsPanel.JawsMigratorSettingsPanel.plugin = self
-			gui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
+			nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
 		except Exception:
 			_log().exception("jawsMigrator: could not add the settings panel")
 		self.updater.scheduleAutomaticCheck()
@@ -164,13 +173,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			from .gui import settingsPanel
 
-			gui.settingsDialogs.NVDASettingsDialog.categoryClasses.remove(settingsPanel.JawsMigratorSettingsPanel)
+			nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.remove(settingsPanel.JawsMigratorSettingsPanel)
 			settingsPanel.JawsMigratorSettingsPanel.plugin = None
 		except Exception:
 			pass
 		try:
 			if self._menuItem is not None:
-				gui.mainFrame.sysTrayIcon.toolsMenu.Remove(self._menuItem)
+				nvdaGui.mainFrame.sysTrayIcon.toolsMenu.Remove(self._menuItem)
+		except Exception:
+			pass
+		try:
+			if self._preferencesItem is not None:
+				nvdaGui.mainFrame.sysTrayIcon.preferencesMenu.Remove(self._preferencesItem)
 		except Exception:
 			pass
 		super().terminate()
@@ -202,10 +216,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _createMenu(self):
 		try:
-			toolsMenu = gui.mainFrame.sysTrayIcon.toolsMenu
+			toolsMenu = nvdaGui.mainFrame.sysTrayIcon.toolsMenu
 			self._menu = wx.Menu()
 			items = (
 				("&Migrate JAWS settings to NVDA...", self.onMenuOpen),
+				("&Choose what to import...", lambda event: self.openImportSettings()),
 				("&Restore NVDA settings from a backup...", lambda event: self.openRestore()),
 				("Open the last migration &report", lambda event: self.openLastReport()),
 				("What does a &JAWS keystroke do in NVDA?", lambda event: wx.CallLater(300, self._startKeystrokeHelp)),
@@ -214,10 +229,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 			for label, handler in items:
 				item = self._menu.Append(wx.ID_ANY, label)
-				gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, handler, item)
+				nvdaGui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, handler, item)
 			self._menuItem = toolsMenu.AppendSubMenu(self._menu, "&JAWS Migration Assistant")
 		except Exception:
 			_log().exception("jawsMigrator: could not add the Tools menu")
+		try:
+			preferencesMenu = nvdaGui.mainFrame.sysTrayIcon.preferencesMenu
+			self._preferencesItem = preferencesMenu.Append(
+				wx.ID_ANY,
+				"&JAWS Migration Assistant settings...",
+				"Choose which JAWS settings, schemes, voice profiles and voice aliases to import",
+			)
+			nvdaGui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, lambda event: self.openImportSettings(), self._preferencesItem)
+		except Exception:
+			_log().exception("jawsMigrator: could not add the Preferences menu item")
 
 	# -- actions -------------------------------------------------------------------------
 
@@ -225,15 +250,29 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self.openAssistant()
 
 	def openAssistant(self, firstRun: bool = False):
-		if self._secure or self._busy:
+		if self._secure:
+			return
+		if self._busy:
+			ui.message("The JAWS Migration Assistant is already open.")
 			return
 		self._busy = True
 		ui.message("JAWS Migration Assistant. Checking this computer.")
 		wx.CallLater(150, self._openAssistantNow, firstRun)
 
+	#: How long a System Check stays fresh for the settings dialog and the wizard, in seconds.
+	FACTS_LIFETIME = 300
+
+	def _facts(self, fresh: bool = False):
+		cached = self._factsCache
+		if not fresh and cached is not None and time.monotonic() - cached[0] < self.FACTS_LIFETIME:
+			return cached[1]
+		facts = systemCheck.gatherFacts()
+		self._factsCache = (time.monotonic(), facts)
+		return facts
+
 	def _openAssistantNow(self, firstRun: bool):
 		try:
-			facts = systemCheck.gatherFacts()
+			facts = self._facts()
 			description = f"Windows: {facts.windows}.\nNVDA: {facts.nvdaVersion}."
 			if not facts.jaws:
 				messageBox(
@@ -267,6 +306,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from .gui import wizard
 
 			wizard.runWizard(facts)
+			# A migration changes NVDA's synthesizers, profiles and add-ons; check again next time.
+			self._factsCache = None
 			self.applyRuntimeSettings()
 		except Exception:
 			_log().exception("jawsMigrator: the assistant failed")
@@ -274,10 +315,56 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		finally:
 			self._busy = False
 
+	def openImportSettings(self):
+		"""JAWS Migration Assistant settings: choose which JAWS items to import."""
+		if self._secure:
+			return
+		if self._busy:
+			ui.message("The JAWS Migration Assistant is already open. Finish or close it first.")
+			return
+		from .gui import importDialog
+
+		existing = importDialog.ImportSettingsDialog.current()
+		if existing is not None:
+			existing.Raise()
+			existing.SetFocus()
+			return
+		self._busy = True
+		ui.message("JAWS Migration Assistant settings. Reading your JAWS settings.")
+		wx.CallLater(150, self._openImportSettingsNow)
+
+	def _openImportSettingsNow(self):
+		try:
+			facts = self._facts()
+			if not facts.jaws:
+				messageBox(
+					"JAWS is not installed on this computer, and no JAWS settings were found, so there is nothing to choose from.\n\n"
+					f"Windows: {facts.windows}.\nNVDA: {facts.nvdaVersion}.",
+					TITLE,
+					wx.OK | wx.ICON_INFORMATION,
+				)
+				return
+			from .gui import importDialog
+
+			importDialog.showImportSettings(facts, self)
+		except Exception:
+			_log().exception("jawsMigrator: the settings dialog failed")
+			messageBox("The JAWS Migration Assistant settings could not be opened. Details are in the NVDA log.", TITLE, wx.OK | wx.ICON_ERROR)
+		finally:
+			self._busy = False
+
+	def openInputGestures(self):
+		"""Open NVDA's own Input Gestures dialog."""
+		try:
+			wx.CallAfter(nvdaGui.mainFrame.onInputGesturesCommand, None)
+		except Exception:
+			_log().exception("jawsMigrator: could not open the Input Gestures dialog")
+
 	def openRestore(self):
 		from .gui import restoreDialog
 
 		restoreDialog.showRestoreDialog()
+		self._factsCache = None
 		self.applyRuntimeSettings()
 
 	def openLastReport(self):
@@ -355,6 +442,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	@script(description="Opens the JAWS Migration Assistant")
 	def script_openAssistant(self, gesture):
 		wx.CallAfter(self.openAssistant)
+
+	@script(description="Opens JAWS Migration Assistant settings, to choose which JAWS settings, schemes, voice profiles and voice aliases to import")
+	def script_openImportSettings(self, gesture):
+		wx.CallAfter(self.openImportSettings)
+
+	@script(description="Opens NVDA's Input Gestures dialog, from the JAWS Migration Assistant")
+	def script_openInputGestures(self, gesture):
+		self.openInputGestures()
 
 	@script(description="Turns the NVDA configuration profile holding your JAWS settings on or off")
 	def script_toggleJawsProfile(self, gesture):
@@ -436,9 +531,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			except OSError:
 				value = None
 			if value:
-				layout = "laptop" if "laptop" in value.lower() else "desktop"
+				layout = keyPlan.layoutId(value)
+		# The JAWS keyboard layouts the last migration brought over, besides the one in use.
+		migrated = state.get("lastMigration") or {}
+		layouts = migrated.get("keyboardLayouts") if isinstance(migrated, dict) else None
 		docs = jawsDocs.readJsd([os.path.join(jaws.sharedScriptsLanguageDir(language), "default.jsd")])
-		self._keymapCache = (jaws, keyPlan.buildReverseMap(jkm, layout), docs, layout)
+		self._keymapCache = (jaws, keyPlan.buildReverseMap(jkm, layout, layouts or None), docs, layout)
 		return self._keymapCache
 
 	def _startKeystrokeHelp(self):

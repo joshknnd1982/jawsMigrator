@@ -203,11 +203,11 @@ DEFAULT_JKM_SECTIONS = {
 	"virtual keys": "browse",
 	# JAWS Tandem remote support; NVDA has Remote Access equivalents.
 	"tandem keys": "common",
-	# Keyboard sections that are deliberately not converted.
-	# Legacy Alt+letter laptop layout, not the current laptop layout.
+	# The Classic Laptop (older Alt+letter) and Kinesis keyboard layouts: converted only when the
+	# user chooses those layouts. keyPlan.keyboardLayouts finds every layout a key map has.
 	"classic laptop keys": None,
-	# Kinesis ergonomic keyboard layout.
 	"kinesis keys": None,
+	# Keyboard sections that are deliberately not converted.
 	# Only active during Say All (PageUp/PageDown change the rate); NVDA has no Say All key context.
 	"sayall keys": None,
 	# Only active in the JAWS touch cursor / object navigation modes; they rebind arrows and letters.

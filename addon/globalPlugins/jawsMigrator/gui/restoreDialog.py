@@ -21,8 +21,8 @@ class RestoreDialog(wx.Dialog):
 			self,
 			label=(
 				"Choose a backup to put back. NVDA's settings, input gestures, speech dictionaries, symbols, "
-				"configuration profiles and ClassicSpeech settings return to how they were when it was made. "
-				"Your settings from right now are backed up first, so a restore can be undone too."
+				"configuration profiles, ClassicSpeech settings, add-ons and the add-ons' settings return to how they "
+				"were when it was made. Your settings and add-ons from right now are backed up first, so a restore can be undone too."
 			),
 		)
 		intro.Wrap(600)
@@ -67,19 +67,43 @@ class RestoreDialog(wx.Dialog):
 		if problems:
 			messageBox("This backup is damaged and cannot be restored:\n" + "\n".join(problems[:10]), TITLE, wx.OK | wx.ICON_ERROR, self)
 			return
+		if info.version < 2:
+			details = "\n\nThis backup was made by version 1.0 of the assistant and holds NVDA's settings only; add-ons are not changed."
+		else:
+			try:
+				from .. import nvdaApply
+
+				actions = backup.planAddonRestore(info, nvdaApply.addonManager().installed())
+			except Exception:
+				actions = []
+			shown = [action.description for action in actions[:12]]
+			if len(actions) > 12:
+				shown.append(f"and {len(actions) - 12} more")
+			details = ("\n\nAdd-ons, finished when NVDA restarts:\n" + "\n".join(shown)) if shown else "\n\nYour add-ons are already as they were in this backup."
 		if messageBox(
-			f"Restore NVDA's settings from {info.label}? Your current settings are backed up first.",
+			f"Restore NVDA's settings, add-ons and add-on settings from {info.label}? Your current settings and add-ons are backed up first.{details}",
 			TITLE,
 			wx.YES | wx.NO | wx.ICON_QUESTION,
 			self,
 		) != wx.YES:
 			return
 		try:
-			message = migrator.restore(info)
+			outcome = migrator.restore(info)
 		except Exception as error:
 			messageBox(f"The backup could not be restored: {error}", TITLE, wx.OK | wx.ICON_ERROR, self)
 			return
-		messageBox(message + " Restart NVDA if anything still sounds different.", TITLE, wx.OK | wx.ICON_INFORMATION, self)
+		if outcome.restartNeeded:
+			if messageBox(outcome.message + "\n\nRestart NVDA now to finish putting back the add-ons?", TITLE, wx.YES | wx.NO | wx.ICON_QUESTION, self) == wx.YES:
+				self.EndModal(wx.ID_OK)
+				try:
+					import core
+
+					wx.CallLater(500, core.restart)
+				except Exception:
+					pass
+				return
+		else:
+			messageBox(outcome.message + " Restart NVDA if anything still sounds different.", TITLE, wx.OK | wx.ICON_INFORMATION, self)
 		self.EndModal(wx.ID_OK)
 
 	def onOpen(self, event):

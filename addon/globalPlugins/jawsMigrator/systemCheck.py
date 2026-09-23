@@ -64,6 +64,10 @@ class SystemFacts:
 	configDir: str = ""
 	configWritable: bool = False
 	freeBytes: int = -1
+	#: The next backup: its files and bytes, and the bytes it has to copy (files not in the previous backup); -1 when unknown.
+	backupFiles: int = -1
+	backupTotal: int = -1
+	backupBytes: int = -1
 	profiles: list = field(default_factory=list)
 	gesturesFileExists: bool = False
 	jaws: list = field(default_factory=list)
@@ -107,6 +111,12 @@ def gatherFacts(includeVoices: bool = True) -> SystemFacts:
 	facts.configDir = nvdaEnv.configDir()
 	facts.configWritable = nvdaEnv.shouldWriteToDisk() and nvdaEnv.isWritable(nvdaEnv.addonDataDir())
 	facts.freeBytes = nvdaEnv.freeSpace(facts.configDir)
+	try:
+		from . import backup
+
+		facts.backupFiles, facts.backupTotal, facts.backupBytes = backup.estimateBackup(facts.configDir, nvdaEnv.addonDataDir())
+	except Exception:
+		facts.backupFiles = facts.backupTotal = facts.backupBytes = -1
 	facts.profiles = nvdaEnv.profileNames()
 	facts.gesturesFileExists = os.path.isfile(os.path.join(facts.configDir, "gestures.ini"))
 	facts.jaws = jawsDetect.findJawsInstallations()
@@ -187,12 +197,14 @@ def runChecks(facts: SystemFacts, profileName: str = "JAWS settings") -> list[Ch
 				f"{facts.configDir} is read-only or NVDA was started with settings saving disabled. Nothing can be migrated.",
 			),
 		)
-	if 0 <= facts.freeBytes < MINIMUM_FREE_BYTES:
+	needed = MINIMUM_FREE_BYTES + max(0, facts.backupBytes)
+	if 0 <= facts.freeBytes < needed:
 		add(
 			Check(
 				WARNING,
 				"Low disk space",
-				f"Only {facts.freeBytes // (1024 * 1024)} MB free where NVDA keeps its settings. The backup may not fit.",
+				f"Only {facts.freeBytes // (1024 * 1024):,} MB free where NVDA keeps its settings, and the backup of NVDA's settings "
+				f"and add-ons needs about {needed // (1024 * 1024):,} MB. If it does not fit, nothing is migrated.",
 			),
 		)
 	if profileName.lower() in (name.lower() for name in facts.profiles):

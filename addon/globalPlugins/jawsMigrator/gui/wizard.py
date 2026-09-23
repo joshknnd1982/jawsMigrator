@@ -17,7 +17,7 @@ import threading
 
 import wx
 
-from .. import jawsIndex, managers, migrator, nvdaEnv, safety, systemCheck, voices
+from .. import backup, jawsIndex, managers, migrator, nvdaEnv, safety, selection, systemCheck, voices
 from .common import BORDER, TITLE, messageBox, openFile, readOnlyText, showText, speak
 
 KEEP_VOICE_LABEL = "Don't change NVDA's synthesizer or voice"
@@ -74,6 +74,32 @@ class Page(wx.Panel):
 		return control
 
 	def build(self, parent):
+		pass
+
+	def selectButtons(self, checkList, isAvailable=None):
+		"""Add Select all and Select none buttons that work on ``checkList``."""
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		selectAll = wx.Button(self.parentForControls(), label="Select &all")
+		selectNone = wx.Button(self.parentForControls(), label="Select n&one")
+		row.Add(selectAll, flag=wx.RIGHT, border=6)
+		row.Add(selectNone)
+		self.box.Add(row, flag=wx.TOP, border=4)
+
+		def setAll(checked: bool):
+			count = 0
+			for index in range(checkList.GetCount()):
+				if isAvailable is not None and not isAvailable(index):
+					continue
+				checkList.Check(index, checked)
+				count += 1
+			speak(f"{count} items {'selected' if checked else 'cleared'}")
+			self.onChecksChanged()
+
+		selectAll.Bind(wx.EVT_BUTTON, lambda event: setAll(True))
+		selectNone.Bind(wx.EVT_BUTTON, lambda event: setAll(False))
+		return selectAll, selectNone
+
+	def onChecksChanged(self):
 		pass
 
 	def isRelevant(self) -> bool:
@@ -220,6 +246,9 @@ class FoundPage(Page):
 		lines.append(f"Speech and sounds schemes: {len(plan.schemes)}.")
 		lines.append(f"Settings Center options with an NVDA equivalent: {len(plan.settings.changes)}.")
 		lines.append(f"Keystrokes that can become NVDA gestures: {len(plan.keys.bindings)}.")
+		if plan.keyboardLayouts:
+			names = ", ".join(layout.name + (" (the one your JAWS uses)" if layout.id == plan.jawsKeyboardLayout else "") for layout in plan.keyboardLayouts)
+			lines.append(f"JAWS keyboard layouts: {names}.")
 		self.found.SetValue("\n".join(lines))
 
 	def focus(self):
@@ -235,32 +264,44 @@ class ChoosePage(Page):
 	title = "Choose what to migrate"
 
 	def build(self, parent):
+		self.note = self.text("")
 		self.list = self.labeled("&Migrate these:", wx.CheckListBox(parent, size=(640, 280)), proportion=1)
+		self.selectButtons(self.list)
 		self.keys = []
+		self.sleepChoice = None
 
 	def onShow(self):
 		plan = self.plan
 		if plan is None:
 			return
+		options = plan.options
+		if self.sleepChoice is None:
+			self.sleepChoice = list(options.sleepApps) if options.selectionApplied else [name for name, _exes in plan.sleepCandidates]
+		self.note.SetLabel(
+			"Narrowed by your saved choice in NVDA menu, Preferences, JAWS Migration Assistant settings."
+			if options.selectionApplied
+			else "Tip: to pick single settings, schemes, voice profiles and voice aliases, use NVDA menu, Preferences, JAWS Migration Assistant settings.",
+		)
 		entries = []
-		entries.append(("settings", f"Settings Center: {len(plan.settings.changes)} options with an NVDA equivalent", True))
+		entries.append(("settings", f"Settings Center: {len(plan.settings.changes)} options with an NVDA equivalent", options.settings and bool(plan.settings.changes)))
 		if plan.profiles:
-			entries.append(("voice", f"Voices: synthesizer, voice, rate, pitch, volume and punctuation from {sum(1 for p in plan.profiles if p.available)} voice profiles", True))
+			chosenProfiles = options.voiceProfiles is None or bool(options.voiceProfiles)
+			entries.append(("voice", f"Voices: synthesizer, voice, rate, pitch, volume and punctuation from {sum(1 for p in plan.profiles if p.available)} voice profiles", options.voice and chosenProfiles))
 		if plan.appSettings:
-			entries.append(("appProfiles", f"Settings for single applications: {len(plan.appSettings)} NVDA profiles that turn on in those applications", True))
-		if plan.sleepCandidates:
-			names = ", ".join(name for name, _exes in plan.sleepCandidates)
-			entries.append(("sleepApps", f"Make NVDA sleep where JAWS slept: {names}", True))
+			entries.append(("appProfiles", f"Settings for single applications: {len(plan.appSettings)} NVDA profiles that turn on in those applications", options.appProfiles))
+		if plan.sleepCandidates and (self.sleepChoice or not options.selectionApplied):
+			names = ", ".join(self.sleepChoice or [name for name, _exes in plan.sleepCandidates])
+			entries.append(("sleepApps", f"Make NVDA sleep where JAWS slept: {names}", bool(self.sleepChoice)))
 		userRules = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.dictionaries if d.source.scope == jawsIndex.USER)
 		sharedRules = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.dictionaries if d.source.scope == jawsIndex.SHARED)
-		entries.append(("dictionaries", f"Dictionary Manager: {userRules} of your pronunciation rules", True))
+		entries.append(("dictionaries", f"Dictionary Manager: {userRules} of your pronunciation rules", options.dictionaries))
 		if sharedRules:
 			entries.append(("sharedDictionaries", f"Also add {sharedRules} of Freedom Scientific's own pronunciation rules (more rules slow speech slightly)", plan.options.sharedDictionaries))
-		entries.append(("symbols", f"Punctuation and symbols you changed: {len(plan.symbols)}", True))
+		entries.append(("symbols", f"Punctuation and symbols you changed: {len(plan.symbols)}", options.symbols))
 		if plan.jawsSymbolDefaults:
 			entries.append(("jawsSymbolNames", f"Use JAWS's names for all {len(plan.jawsSymbolDefaults)} punctuation symbols (exclaim, semi colon...)", plan.options.jawsSymbolNames))
-		entries.append(("keyboard", f"Keyboard commands: {len(plan.keys.bindings)} JAWS keystrokes as NVDA input gestures", True))
-		entries.append(("archive", "Keep a copy of your JAWS settings with NVDA's settings (recommended)", True))
+		entries.append(("keyboard", f"Keyboard commands: {len(plan.keys.bindings)} JAWS keystrokes as NVDA input gestures", options.keyboard))
+		entries.append(("archive", "Keep a copy of your JAWS settings with NVDA's settings (recommended)", options.archive))
 		previous = {key: self.list.IsChecked(i) for i, key in enumerate(self.keys)} if self.keys else {}
 		self.keys = [key for key, _label, _checked in entries]
 		self.list.SetItems([label for _key, label, _checked in entries])
@@ -280,7 +321,7 @@ class ChoosePage(Page):
 		options.settings = self.checked("settings")
 		options.voice = self.checked("voice")
 		options.appProfiles = self.checked("appProfiles")
-		options.sleepApps = [name for name, _exes in self.plan.sleepCandidates] if self.checked("sleepApps") else []
+		options.sleepApps = list(self.sleepChoice or []) if self.checked("sleepApps") else []
 		options.dictionaries = self.checked("dictionaries")
 		options.sharedDictionaries = self.checked("sharedDictionaries")
 		options.symbols = self.checked("symbols")
@@ -337,13 +378,14 @@ class VoicePage(Page):
 	title = "Voices"
 
 	def build(self, parent):
-		self.summary = self.labeled("JAWS &voice profile in use:", readOnlyText(parent, size=(640, 120)))
+		self.summary = self.labeled("JAWS voice profile in &use:", readOnlyText(parent, size=(640, 120)))
 		self.choice = self.labeled("NVDA &voice for your JAWS voice:", wx.Choice(parent))
 		self.profiles = self.labeled(
 			"JAWS voice &profiles to migrate (each becomes the settings of its NVDA synthesizer):",
 			wx.CheckListBox(parent, size=(640, 180)),
 			proportion=1,
 		)
+		self.selectButtons(self.profiles, lambda index: self.plan.profiles[index].option is not None)
 		self.profileNames = []
 
 	def isRelevant(self) -> bool:
@@ -364,7 +406,8 @@ class VoicePage(Page):
 		self.summary.SetValue("\n".join(lines))
 		labels = [option.label + f" ({option.reason})" for option in plan.voiceOptions] + [KEEP_VOICE_LABEL]
 		self.choice.SetItems(labels)
-		self.choice.SetSelection(0 if plan.voiceOptions else len(labels) - 1)
+		keepVoice = plan.options.voiceChoice < 0 or not plan.voiceOptions
+		self.choice.SetSelection(len(labels) - 1 if keepVoice else min(plan.options.voiceChoice, len(labels) - 2))
 		self._fillProfiles()
 
 	def _fillProfiles(self):
@@ -372,8 +415,10 @@ class VoicePage(Page):
 		previous = {name: self.profiles.IsChecked(i) for i, name in enumerate(self.profileNames)} if self.profileNames else {}
 		self.profileNames = [p.name for p in plan.profiles]
 		self.profiles.SetItems([("Your JAWS voice: " if p.primary else "") + p.describe() for p in plan.profiles])
+		wanted = plan.options.voiceProfiles
 		for i, profilePlan in enumerate(plan.profiles):
-			self.profiles.Check(i, previous.get(profilePlan.name, profilePlan.available or profilePlan.primary))
+			default = (profilePlan.available or profilePlan.primary) if wanted is None else profilePlan.name in wanted
+			self.profiles.Check(i, previous.get(profilePlan.name, default))
 
 	def collect(self, options):
 		selection = self.choice.GetSelection()
@@ -391,12 +436,14 @@ class ClassicSpeechPage(Page):
 	def build(self, parent):
 		self.text("ClassicSpeech is installed, so JAWS voice profiles, voice aliases and speech and sounds schemes can be copied into it.")
 		self.schemes = self.labeled("JAWS speech and sound &schemes to copy:", wx.CheckListBox(parent, size=(640, 200)), proportion=1)
-		self.active = self.labeled("Scheme to turn &on in ClassicSpeech:", wx.Choice(parent))
+		self.selectButtons(self.schemes)
+		self.active = self.labeled("Scheme to &turn on in ClassicSpeech:", wx.Choice(parent))
 		self.voicesBox = self.add(wx.CheckBox(parent, label="Copy JAWS voice profiles and voice aliases into ClassicSpeech &Voice Profiles"))
 		self.voicesBox.SetValue(True)
 		self.settingsBox = self.add(wx.CheckBox(parent, label="Copy JAWS verbosity, number and text &processing settings into ClassicSpeech"))
 		self.settingsBox.SetValue(True)
 		self.schemeNames = []
+		self._firstShow = True
 
 	def isRelevant(self) -> bool:
 		return self.plan is not None and self.plan.classicSpeech
@@ -410,8 +457,13 @@ class ClassicSpeechPage(Page):
 			voiceItems = sum(1 for item in scheme.items.values() if item.voiceAlias)
 			labels.append(f"{scheme.name}: {scheme.soundCount} sounds, {voiceItems} voices")
 		self.schemes.SetItems(labels)
+		wanted = plan.options.schemes
 		for i, name in enumerate(self.schemeNames):
-			self.schemes.Check(i, previous.get(name, True))
+			self.schemes.Check(i, previous.get(name, True if wanted is None else name in wanted))
+		if self._firstShow:
+			self._firstShow = False
+			self.voicesBox.SetValue(plan.options.classicVoices)
+			self.settingsBox.SetValue(plan.options.classicSettings)
 		choices = [LEAVE_SCHEME_LABEL] + self.schemeNames
 		self.active.SetItems(choices)
 		wanted = plan.options.activeClassicScheme
@@ -462,12 +514,27 @@ class SoundsPage(Page):
 		options.sounds = self.radio.GetSelection() == 1
 
 
+#: NVDA's keyboard layouts, and keeping the one NVDA uses.
+NVDA_LAYOUTS = (("desktop", "Desktop"), ("laptop", "Laptop"), ("", "Keep NVDA's current keyboard layout"))
+
+
 class KeysPage(Page):
 	title = "Keyboard commands"
 
 	def build(self, parent):
 		self.migrate = self.add(wx.CheckBox(parent, label="&Migrate JAWS keyboard commands to NVDA input gestures (gestures.ini is backed up first)"))
 		self.migrate.SetValue(True)
+		self.layouts = self.labeled(
+			"JAWS keyboard &layouts to bring over (each one's keystrokes work when NVDA uses the matching keyboard layout):",
+			wx.CheckListBox(parent, size=(640, 100)),
+		)
+		self.layoutButtons = self.selectButtons(self.layouts)
+		self.nvdaLayout = self.labeled("NVDA keyboard la&yout after the migration:", wx.Choice(parent, choices=[label for _value, label in NVDA_LAYOUTS]))
+		self.nvdaLayout.Bind(wx.EVT_CHOICE, self._onNvdaLayout)
+		self.layouts.Bind(wx.EVT_CHECKLISTBOX, lambda event: self.onChecksChanged())
+		self.layoutIds = []
+		self._shownFor = None
+		self._nvdaLayoutChosen = False
 		self.quickNav = self.add(wx.CheckBox(parent, label="Use JAWS &quick navigation letters in browse mode"))
 		self.quickNav.SetValue(True)
 		self.override = self.add(wx.CheckBox(parent, label="When NVDA already uses a keystroke for something else, use the JAWS &command instead"))
@@ -480,33 +547,67 @@ class KeysPage(Page):
 		return self.plan is not None and self.wizard.choosePage.checked("keyboard")
 
 	def onShow(self):
+		plan = self.plan
+		if self._shownFor is not plan:
+			# First visit with this plan: start from the saved choice or JAWS's own layout.
+			self._shownFor = plan
+			self._nvdaLayoutChosen = plan.options.nvdaKeyboardLayout is not None
+			self.migrate.SetValue(plan.options.keyboard)
+			self.quickNav.SetValue(plan.options.quickNavLetters)
+			chosen = {layout.id for layout in plan.chosenKeyboardLayouts()}
+			self.layoutIds = [layout.id for layout in plan.keyboardLayouts]
+			self.layouts.SetItems([layout.describe(layout.id == plan.jawsKeyboardLayout) for layout in plan.keyboardLayouts])
+			for index, layout in enumerate(plan.keyboardLayouts):
+				self.layouts.Check(index, layout.id in chosen)
+			if self.layoutIds:
+				self.layouts.SetSelection(0)
+		self._showNvdaLayout()
+		self._replan()
+
+	def _checkedLayouts(self) -> list:
+		return [layoutId for index, layoutId in enumerate(self.layoutIds) if self.layouts.IsChecked(index)]
+
+	def _showNvdaLayout(self):
+		value = self.plan.nvdaKeyboardLayout()
+		values = [value for value, _label in NVDA_LAYOUTS]
+		self.nvdaLayout.SetSelection(values.index(value) if value in values else len(values) - 1)
+
+	def _onNvdaLayout(self, event):
+		self._nvdaLayoutChosen = True
+		self.plan.options.nvdaKeyboardLayout = NVDA_LAYOUTS[self.nvdaLayout.GetSelection()][0]
+		self._replan()
+
+	def onChecksChanged(self):
+		self.plan.options.keyboardLayouts = self._checkedLayouts()
+		if not self._nvdaLayoutChosen:
+			# NVDA's layout follows the JAWS layouts chosen until the user picks one.
+			self._showNvdaLayout()
 		self._replan()
 
 	def _update(self):
 		enabled = self.migrate.GetValue()
-		self.quickNav.Enable(enabled)
-		self.override.Enable(enabled)
+		for control in (self.layouts, *self.layoutButtons, self.nvdaLayout, self.quickNav, self.override):
+			control.Enable(enabled)
 
 	def _replan(self):
 		plan = self.plan
 		options = plan.options
 		options.quickNavLetters = self.quickNav.GetValue()
 		options.overrideConflicts = self.override.GetValue()
+		if self.layoutIds:
+			options.keyboardLayouts = self._checkedLayouts()
 		try:
-			from .. import keyPlan, nvdaApply
-
-			plan.keys = keyPlan.planKeys(
-				plan.index.defaultJkm(options.scope),
-				plan.settings.keyboardLayout or "desktop",
-				boundScripts=nvdaApply.gestureBoundScripts,
-				scriptExists=nvdaApply.scriptExists,
-				quickNavLetters=options.quickNavLetters,
-				overrideConflicts=options.overrideConflicts,
-				leaseyActive=plan.index.leasey.found,
-			)
+			migrator.planKeyboard(plan, inNvda=True)
 		except Exception:
 			_log().debugWarning("jawsMigrator: keystrokes could not be planned again", exc_info=True)
-		lines = [f"{len(plan.keys.bindings)} keystrokes will be added:"]
+		lines = []
+		nvdaLayout = plan.nvdaKeyboardLayout()
+		for layout in plan.chosenKeyboardLayouts():
+			if nvdaLayout and layout.nvdaLayout != nvdaLayout:
+				lines.append(f"Note: the {layout.name} keystrokes only work when NVDA's keyboard layout is {layout.nvdaLayout} (NVDA menu, Preferences, Settings, Keyboard).")
+		if lines:
+			lines.append("")
+		lines.append(f"{len(plan.keys.bindings)} keystrokes will be added:")
 		lines.extend(f"  {binding.label} [{binding.gesture}]" for binding in plan.keys.bindings)
 		same = plan.keys.countSkipped("same")
 		conflicts = plan.keys.countSkipped("conflict")
@@ -520,6 +621,10 @@ class KeysPage(Page):
 		options.keyboard = self.migrate.GetValue()
 		options.quickNavLetters = self.quickNav.GetValue()
 		options.overrideConflicts = self.override.GetValue()
+		if self.layoutIds:
+			options.keyboardLayouts = self._checkedLayouts()
+		if self._nvdaLayoutChosen:
+			options.nvdaKeyboardLayout = NVDA_LAYOUTS[self.nvdaLayout.GetSelection()][0]
 
 
 class AddonsPage(Page):
@@ -782,6 +887,13 @@ class MigrationWizard(wx.Dialog):
 			try:
 				index = jawsIndex.buildIndex(jaws, language, facts.leasey)
 				plan = migrator.buildPlan(options, index, facts, inNvda=True)
+				try:
+					saved = selection.load()
+					if saved.customized:
+						selection.apply(plan, saved)
+						migrator.planKeyboard(plan, inNvda=True)
+				except Exception:
+					_log().exception("jawsMigrator: the saved choice of items could not be applied")
 				outcome = plan
 			except Exception as error:
 				_log().exception("jawsMigrator: indexing failed")
@@ -801,17 +913,36 @@ class MigrationWizard(wx.Dialog):
 
 	# -- summary ------------------------------------------------------------------------
 
+	def _backupSizeText(self) -> str:
+		facts = self.facts
+		files, total, new = getattr(facts, "backupFiles", -1), getattr(facts, "backupTotal", -1), getattr(facts, "backupBytes", -1)
+		if min(files, total, new) < 0:
+			try:
+				files, total, new = backup.estimateBackup(nvdaEnv.configDir(), nvdaEnv.addonDataDir())
+			except Exception:
+				return ""
+		if files <= 0:
+			return ""
+		if new < total:
+			return f" The backup holds {files:,} files ({backup.sizeText(total)}); {backup.sizeText(new)} of them changed since the last backup and are copied, the rest are shared with it."
+		return f" The backup copies {files:,} files ({backup.sizeText(total)})."
+
 	def summaryText(self) -> str:
 		plan = self.plan
 		options = plan.options
 		lines = [f"Migrate {jawsIndex.SOURCE_LABELS[options.scope]} from {plan.index.jaws.displayName}.", ""]
-		lines.append("First, NVDA's settings are backed up, including input gestures, dictionaries, profiles, ClassicSpeech settings and NVDA's sounds.")
+		lines.append(
+			"First, NVDA's settings, every add-on and the add-ons' own settings are backed up, including input gestures, dictionaries, "
+			"profiles, ClassicSpeech settings and NVDA's sounds, so you can go back to them at any time." + self._backupSizeText(),
+		)
 		if options.target == migrator.TARGET_PROFILE:
 			lines.append(f'The JAWS settings go into the NVDA profile "{options.profileName}".' + (" It turns on every time NVDA starts." if options.activateAtStartup else ""))
 		else:
 			lines.append("The JAWS settings go into NVDA's normal configuration.")
 		if options.settings:
-			lines.append(f"{len(plan.settings.changes)} Settings Center options are set.")
+			lines.append(f"{len(plan.finalSettingChanges())} Settings Center options are set.")
+			layout = plan.nvdaKeyboardLayout()
+			lines.append(f"NVDA's keyboard layout becomes {layout}." if layout else "NVDA's keyboard layout is not changed.")
 		chosen = plan.chosenVoice
 		if options.voice:
 			lines.append(f"Voice: {chosen.label}." if chosen else "NVDA's synthesizer and voice are not changed.")
@@ -832,7 +963,12 @@ class MigrationWizard(wx.Dialog):
 		if symbols:
 			lines.append(f"{len(symbols)} punctuation symbols are set.")
 		if options.keyboard:
-			lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures.")
+			names = [layout.name for layout in plan.chosenKeyboardLayouts()]
+			if names:
+				layouts = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+				lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures, including those of the {layouts} keyboard layout{'s' if len(names) > 1 else ''}.")
+			else:
+				lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures, from the keys every JAWS keyboard layout shares.")
 		lines.append("NVDA uses JAWS sound effects." if options.sounds else "NVDA keeps its own sounds.")
 		if options.addonsToInstall:
 			names = [addon.name for addon in managers.RECOMMENDED_ADDONS if addon.addonId in options.addonsToInstall]

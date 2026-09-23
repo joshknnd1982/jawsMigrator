@@ -21,8 +21,10 @@ from jawsMigrator import (  # noqa: E402
 	jawsDocs,
 	jawsFiles,
 	keyPlan,
+	migrator,
 	safety,
 	schemeMap,
+	selection,
 	settingsMap,
 	storeAddons,
 	symbolMap,
@@ -239,6 +241,88 @@ class KeyPlanTests(unittest.TestCase):
 		reverse = keyPlan.buildReverseMap(self.jkm, "laptop")
 		self.assertEqual(reverse["kb:nvda+t"][0][1], "SayWindowTitle")
 
+	#: A key map with every kind of JAWS keyboard layout, as in JAWS 2026's Default.jkm.
+	layoutsJkm = jawsFiles.parseIni(
+		"[Keyboard Layouts]\nDesktop=Common\nLaptop=Common\nKinesis=Common\nPAC Mate=Laptop\n"
+		"[Common Keys]\nJAWSKey+T=SayWindowTitle\n"
+		"[Classic Laptop Keys]\nAlt+Shift+N=SayBottomLineOfWindow\n"
+		"[Laptop Keys]\nCapsLock+PageDown=SayBottomLineOfWindow\n"
+		"[DESKTOP Keys]\nJAWSKey+PageDown=SayBottomLineOfWindow\n"
+		"[Kinesis keys]\nJAWSKey+PageDown=SayBottomLineOfWindow\n"
+		"[PAC Mate Keys]\nJAWSKey+Q=SayBottomLineOfWindow\n"
+		"[Laptop Modifiers]\nCapsLock=14|3|0|0|0|0|0x4000\n[Classic Laptop Modifiers]\nInsert=17|3|0|2|0|0|0x4020800\n",
+	)
+
+	def test_layouts_found(self):
+		layouts = {layout.id: layout for layout in keyPlan.keyboardLayouts(self.layoutsJkm)}
+		self.assertEqual(sorted(layouts), ["classic laptop", "desktop", "kinesis", "laptop"])
+		self.assertEqual((layouts["laptop"].nvdaLayout, layouts["laptop"].capsLock), ("laptop", True))
+		self.assertEqual((layouts["classic laptop"].nvdaLayout, layouts["classic laptop"].capsLock), ("laptop", False))
+		self.assertEqual((layouts["kinesis"].nvdaLayout, layouts["desktop"].nvdaLayout), ("desktop", "desktop"))
+		self.assertEqual(keyPlan.layoutId(" Classic  Laptop "), "classic laptop")
+
+	def test_layouts_chosen(self):
+		plan = keyPlan.planKeys(self.layoutsJkm, "Laptop")
+		sections = {binding.gesture: binding.section for binding in plan.bindings}
+		self.assertEqual(sections.get("kb(laptop):NVDA+pageDown"), "Laptop Keys")
+		self.assertNotIn("kb(desktop):NVDA+pageDown", sections)
+		self.assertEqual({item.section for item in plan.skipped if item.kind == keyPlan.SKIP_LAYOUT}, {"Classic Laptop Keys", "DESKTOP Keys", "Kinesis keys"})
+		plan = keyPlan.planKeys(self.layoutsJkm, "Laptop", layouts=["desktop", "laptop", "classic laptop", "kinesis"])
+		sections = {binding.gesture: binding.section for binding in plan.bindings}
+		self.assertEqual(sections.get("kb(desktop):NVDA+pageDown"), "DESKTOP Keys")
+		self.assertEqual(sections.get("kb(laptop):NVDA+pageDown"), "Laptop Keys")
+		self.assertEqual(sections.get("kb(laptop):alt+shift+n"), "Classic Laptop Keys")
+		duplicates = [item for item in plan.skipped if item.kind == keyPlan.SKIP_DUPLICATE]
+		self.assertEqual([item.section for item in duplicates], ["Kinesis keys"])
+		# The layout in use wins when two JAWS layouts share an NVDA layout.
+		plan = keyPlan.planKeys(self.layoutsJkm, "Kinesis", layouts=["desktop", "kinesis"])
+		sections = {binding.gesture: binding.section for binding in plan.bindings}
+		self.assertEqual(sections.get("kb(desktop):NVDA+pageDown"), "Kinesis keys")
+		reverse = keyPlan.buildReverseMap(self.layoutsJkm, "laptop", ["desktop"])
+		self.assertIn("kb(desktop):nvda+pagedown", reverse)
+		self.assertIn("kb(laptop):nvda+pagedown", reverse)
+
+
+class KeyboardChoiceTests(unittest.TestCase):
+	def plan(self, keyboardType):
+		from jawsMigrator import jawsDetect
+
+		options = migrator.MigrationOptions(jaws=jawsDetect.JawsInstallation("2026"), language="enu")
+		plan = migrator.MigrationPlan(options=options, index=None, facts=None)
+		plan.settings = settingsMap.mapSettings(jawsFiles.parseIni(f"[options]\nKeyboardType={keyboardType}\nJAWSInsertKey=3\n"))
+		plan.jawsKeyboardLayout = keyPlan.layoutId(keyboardType)
+		plan.keyboardLayouts = keyPlan.keyboardLayouts(KeyPlanTests.layoutsJkm)
+		return plan
+
+	def values(self, plan):
+		return {change.key: change.value for change in plan.finalSettingChanges()}
+
+	def test_follows_jaws(self):
+		values = self.values(self.plan("Laptop"))
+		self.assertEqual((values["keyboard.keyboardLayout"], values["keyboard.NVDAModifierKeys"]), ("laptop", 7))
+		values = self.values(self.plan("Classic Laptop"))
+		self.assertEqual((values["keyboard.keyboardLayout"], values["keyboard.NVDAModifierKeys"]), ("laptop", 6))
+
+	def test_other_layout_chosen(self):
+		plan = self.plan("Laptop")
+		plan.options.keyboardLayouts = ["desktop"]
+		values = self.values(plan)
+		# NVDA uses the layout the chosen keystrokes work in; Caps Lock only comes with the Laptop layout.
+		self.assertEqual((values["keyboard.keyboardLayout"], values["keyboard.NVDAModifierKeys"]), ("desktop", 6))
+		self.assertEqual(plan.settingChange("keyboard.keyboardLayout").value, "laptop")
+
+	def test_explicit_choice_and_keep(self):
+		plan = self.plan("Desktop")
+		plan.options.keyboardLayouts = ["desktop", "laptop"]
+		values = self.values(plan)
+		self.assertEqual((values["keyboard.keyboardLayout"], values["keyboard.NVDAModifierKeys"]), ("desktop", 7))
+		plan.options.nvdaKeyboardLayout = ""
+		self.assertNotIn("keyboard.keyboardLayout", self.values(plan))
+		plan.options.nvdaKeyboardLayout = "laptop"
+		self.assertEqual(self.values(plan)["keyboard.keyboardLayout"], "laptop")
+		plan.options.keyboard = False
+		self.assertEqual(self.values(plan)["keyboard.NVDAModifierKeys"], 6)
+
 
 class BackupTests(Temp):
 	def test_round_trip(self):
@@ -261,6 +345,84 @@ class BackupTests(Temp):
 		self.assertFalse(os.path.exists(os.path.join(config, "profiles", "JAWS settings.ini")))
 		self.assertTrue(os.path.exists(os.path.join(config, "profiles", "Work.ini")))
 		self.assertEqual(info.nvdaSounds, 1)
+
+
+class FullBackupTests(Temp):
+	def addon(self, config, folder, name, version, files=None):
+		self.write(
+			os.path.join("nvda", "addons", folder, "manifest.ini"),
+			f'name = {name}\nsummary = "{name}"\ndescription = """A test add-on.\nversion = 99\n"""\nversion = {version}\n',
+		)
+		for relative, text in (files or {}).items():
+			self.write(os.path.join("nvda", "addons", folder, relative), text)
+
+	def read(self, *parts):
+		with open(os.path.join(self.folder, *parts), encoding="utf-8") as stream:
+			return stream.read()
+
+	def test_everything_backed_up_and_put_back(self):
+		import json
+
+		config = os.path.join(self.folder, "nvda")
+		data = os.path.join(config, "jawsMigrator")
+		self.write("nvda/nvda.ini", "a=1")
+		self.write("nvda/macintalk/voice.dat", "voice data")
+		self.write("nvda/updates/nvda_update.exe", "x")
+		self.write("nvda/addonStore/_dl/waiting.nvda-addon", "x")
+		self.write("nvda/addonStore/_cachedLatestAddons.json", "{}")
+		self.addon(config, "keep", "keep", "1.0", {"settings.json": '{"a": 1}', "__pycache__/x.pyc": "c"})
+		self.addon(config, "old", "old", "2.0")
+		self.addon(config, "gone", "gone", "1.0")
+		self.addon(config, "jawsMigrator", "jawsMigrator", "1.1")
+		self.write("nvda/addonsState.json", json.dumps({"disabledAddons": ["old"], "overrideCompatibility": ["gone"]}))
+		self.assertEqual(backup.estimateBackup(config, data)[0], 7)
+		first = backup.createBackup(config, data, "", "first", original=True)
+		relatives = {entry["relative"] for entry in first.files}
+		self.assertTrue({"macintalk/voice.dat", "addons/keep/settings.json", "addonsState.json", "addons/gone/manifest.ini"} <= relatives)
+		self.assertFalse([r for r in relatives if r.startswith(("updates/", "addonStore/_dl/", "addonStore/_cached", "addons/jawsMigrator", "jawsMigrator/")) or "__pycache__" in r])
+		self.assertEqual({a["name"]: a["version"] for a in first.addons}, {"gone": "1.0", "keep": "1.0", "old": "2.0"})
+		self.assertEqual(backup.verifyBackup(first, thorough=True), [])
+		# A second backup links the unchanged files to the first instead of copying them.
+		second = backup.createBackup(config, data, "", "second")
+		self.assertEqual((second.copiedSize, len(second.files)), (0, len(first.files)))
+		self.assertTrue(os.path.samefile(os.path.join(first.path, "config", "macintalk", "voice.dat"), os.path.join(second.path, "config", "macintalk", "voice.dat")))
+		self.assertEqual(backup.pruneBackups(data, keep=0), 1)
+		self.assertEqual([info.reason for info in backup.listBackups(data)], ["first"])
+		self.assertIn("before the first JAWS migration", backup.listBackups(data)[0].label)
+		# Afterwards: settings changed, an add-on updated, one removed, one new, one waiting to install.
+		self.write("nvda/addons/keep/settings.json", '{"a": 2}')
+		self.write("nvda/macintalk/voice.dat", "changed!!!")
+		self.write("nvda/profiles/JAWS settings.ini", "j")
+		shutil.rmtree(os.path.join(config, "addons", "gone"))
+		shutil.rmtree(os.path.join(config, "addons", "old"))
+		self.addon(config, "old", "old", "3.0")
+		self.addon(config, "newer", "newer", "1.0")
+		self.addon(config, "customLabels.pendingInstall", "customLabels", "1.0")
+		self.write("nvda/addonsState.json", json.dumps({"pendingInstallsSet": ["customLabels"]}))
+		manager = backup.FileAddonManager(config)
+		planned = {(action.name, action.kind) for action in backup.planAddonRestore(first, manager.installed())}
+		self.assertEqual(planned, {("customLabels", backup.REMOVE), ("newer", backup.REMOVE), ("gone", backup.REINSTALL), ("old", backup.REINSTALL)})
+		result = backup.restoreBackup(first, config, data, addons=manager)
+		self.assertEqual(result.failed, [])
+		self.assertTrue(result.restartNeeded)
+		self.assertEqual(self.read("nvda", "macintalk", "voice.dat"), "voice data")
+		self.assertEqual(self.read("nvda", "addons", "keep", "settings.json"), '{"a": 1}')
+		self.assertFalse(os.path.exists(os.path.join(config, "profiles", "JAWS settings.ini")))
+		self.assertFalse(os.path.exists(os.path.join(config, "addons", "customLabels.pendingInstall")))
+		self.assertIn("version = 1.0", self.read("nvda", "addons", "gone.pendingInstall", "manifest.ini"))
+		self.assertIn("version = 2.0", self.read("nvda", "addons", "old.pendingInstall", "manifest.ini"))
+		self.assertTrue(os.path.isdir(os.path.join(config, "addons", "jawsMigrator")))
+		state = backup.readAddonState(config)
+		self.assertEqual(sorted(state["pendingRemovesSet"]), ["newer", "old"])
+		self.assertEqual(sorted(state["pendingInstallsSet"]), ["gone", "old"])
+		self.assertEqual((state["PENDING_OVERRIDE_COMPATIBILITY"], state["disabledAddons"]), (["gone"], ["old"]))
+		# A damaged copy in the backup is never put back.
+		with open(os.path.join(first.path, "config", "macintalk", "voice.dat"), "w", encoding="utf-8") as stream:
+			stream.write("xxxxx data")
+		self.write("nvda/macintalk/voice.dat", "different!")
+		result = backup.restoreBackup(first, config, data)
+		self.assertTrue(any("damaged" in problem for problem in result.failed))
+		self.assertEqual(self.read("nvda", "macintalk", "voice.dat"), "different!")
 
 
 class SafetyTests(unittest.TestCase):
@@ -327,6 +489,87 @@ class JsdTests(unittest.TestCase):
 		docs = jawsDocs.parseJsd(":Script SayWindowTitle\n:Synopsis Speaks the title of the window\n:Function Helper\n:Synopsis internal\n")
 		self.assertEqual(jawsDocs.describe(docs, "SayWindowTitle"), "Speaks the title of the window")
 		self.assertEqual(jawsDocs.describe(docs, "MoveToNextRegion"), "Move To Next Region")
+
+
+class SelectionTests(unittest.TestCase):
+	def plan(self):
+		from jawsMigrator import jawsDetect
+
+		options = migrator.MigrationOptions(jaws=jawsDetect.JawsInstallation("2026"), language="enu")
+		plan = migrator.MigrationPlan(options=options, index=None, facts=None)
+		plan.settings = settingsMap.mapSettings(jawsFiles.parseIni("[options]\nTypingEcho=1\nKeyboardType=Laptop\n"))
+		plan.schemes = [schemeMap.ConvertedScheme("Web RentACrowd (from JAWS)", "Web RentACrowd", ""), schemeMap.ConvertedScheme("Classic (from JAWS)", "Classic", "")]
+		eloquence = voices.VoiceProfile(name="Eloquence", primarySynthesizer="eloq")
+		mobile = voices.VoiceProfile(name="Microsoft Mobile", primarySynthesizer="MSMobile")
+		apollo = voices.VoiceProfile(name="Apollo 2", primarySynthesizer="apollo2")
+		plan.profiles = [
+			migrator.ProfilePlan("Eloquence", eloquence, {}, {"LinkVoice": "Shelly", "NormalVoice": "*|0|0"}, voices.NvdaVoiceOption("ibmeci", "IBMTTS"), primary=True),
+			migrator.ProfilePlan("Microsoft Mobile", mobile, {}, {"LinkVoice": "*|15%|0", "HeadingLevel1Voice": "*|5%|0"}, voices.NvdaVoiceOption("oneCore", "OneCore")),
+			migrator.ProfilePlan("Apollo 2", apollo, {}, {}, None),
+		]
+		plan.sleepCandidates = [("baseball", ["baseball"])]
+		plan.sounds = ["start.wav"]
+		plan.jawsKeyboardLayout = "laptop"
+		plan.keyboardLayouts = keyPlan.keyboardLayouts(KeyPlanTests.layoutsJkm)
+		plan.facts =type("Facts", (), {"classicSpeech": type("Classic", (), {"installed": True, "usable": True})()})()
+		return plan
+
+	def test_items(self):
+		items = {item.key: item for item in selection.buildItems(self.plan())}
+		self.assertIn("setting:nvda:keyboard.speakTypedCharacters", items)
+		self.assertIn("scheme:Web RentACrowd (from JAWS)", items)
+		self.assertFalse(items["profile:Apollo 2"].available)
+		self.assertIn("alias:LinkVoice", items)
+		self.assertIn("alias:HeadingLevel1Voice", items)
+		self.assertNotIn("alias:NormalVoice", items)
+		self.assertFalse(items["other:sounds"].default)
+		self.assertIn("sleep:baseball", items)
+		self.assertEqual(items["setting:nvda:keyboard.keyboardLayout"].category, selection.KEYBOARD)
+		self.assertEqual(items["setting:nvda:keyboard.speakTypedCharacters"].category, selection.KEYBOARD)
+		self.assertTrue(items["keyboard:layout:laptop"].default)
+		self.assertFalse(items["keyboard:layout:desktop"].default)
+		self.assertIn("keyboard:layout:classic laptop", items)
+
+	def test_keyboard_layouts_chosen(self):
+		plan = self.plan()
+		items = {item.key: item for item in selection.buildItems(plan)}
+		chosen = selection.Selection()
+		chosen.set(items["keyboard:layout:desktop"], True)
+		chosen.set(items["keyboard:quickNav"], False)
+		selection.apply(plan, chosen)
+		self.assertEqual(plan.options.keyboardLayouts, ["desktop", "laptop"])
+		self.assertFalse(plan.options.quickNavLetters)
+		self.assertTrue(plan.options.keyboard)
+		self.assertEqual([layout.name for layout in plan.chosenKeyboardLayouts()], ["Desktop", "Laptop"])
+
+	def test_choice_round_trip_and_apply(self):
+		plan = self.plan()
+		items = {item.key: item for item in selection.buildItems(plan)}
+		chosen = selection.Selection()
+		chosen.set(items["setting:nvda:keyboard.keyboardLayout"], False)
+		chosen.set(items["scheme:Classic (from JAWS)"], False)
+		chosen.set(items["alias:HeadingLevel1Voice"], False)
+		chosen.set(items["profile:Eloquence"], False)
+		chosen.set(items["other:sounds"], True)
+		chosen.set(items["sleep:baseball"], False)
+		restored = selection.Selection.fromDict(chosen.toDict())
+		selection.apply(plan, restored)
+		keys = [change.key for change in plan.settings.changes]
+		self.assertNotIn("keyboard.keyboardLayout", keys)
+		self.assertIn("keyboard.speakTypedCharacters", keys)
+		self.assertEqual(plan.options.schemes, ["Web RentACrowd (from JAWS)"])
+		self.assertEqual(plan.options.voiceAliases, ["LinkVoice"])
+		self.assertEqual(plan.options.voiceProfiles, ["Microsoft Mobile"])
+		self.assertEqual(plan.options.voiceChoice, -1)
+		self.assertTrue(plan.options.sounds)
+		self.assertEqual(plan.options.sleepApps, [])
+		self.assertTrue(plan.options.selectionApplied)
+
+	def test_untouched_choice_changes_nothing(self):
+		plan = self.plan()
+		selection.apply(plan, selection.Selection())
+		self.assertIsNone(plan.options.schemes)
+		self.assertFalse(plan.options.selectionApplied)
 
 
 if __name__ == "__main__":

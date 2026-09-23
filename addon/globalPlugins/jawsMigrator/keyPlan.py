@@ -6,6 +6,12 @@
 
 Only keystrokes of the JAWS default key map (for every application) become NVDA
 gestures, and only for JAWS commands NVDA really has (see ``jawsKeyMap``).
+
+JAWS has a keyboard layout for each kind of computer keyboard: Desktop, Laptop,
+Classic Laptop and Kinesis, and others in some JAWS versions. Each layout adds its
+own keystrokes to the common ones. The user chooses the layouts to bring over; each
+one's keystrokes become gestures of the matching NVDA keyboard layout (desktop or
+laptop), so they work whenever NVDA uses that layout.
 Keystrokes NVDA already uses for the same command are left alone. A keystroke
 NVDA uses for something else is only taken over when asked, and quick
 navigation letters only when the JAWS letters are wanted in browse mode.
@@ -27,6 +33,7 @@ SKIP_CONFLICT = "conflict"
 SKIP_LEASEY = "leasey"
 SKIP_QUICKNAV = "quickNavOff"
 SKIP_LAYOUT = "otherLayout"
+SKIP_DUPLICATE = "duplicate"
 
 _UNCONVERTIBLE_REASONS = {
 	"layered": "a layered keystroke (keys pressed one after another), which NVDA does not have",
@@ -82,6 +89,103 @@ def _sectionKind(sectionName: str) -> str | None:
 	return jawsKeyMap.getSectionLayout(sectionName)
 
 
+@dataclass
+class JawsLayout:
+	"""A JAWS keyboard layout with keystrokes of its own in the default key map."""
+
+	#: Lower case, such as ``laptop`` or ``classic laptop``.
+	id: str
+	#: The name JAWS shows, such as ``Laptop``.
+	name: str
+	#: The NVDA keyboard layout its keystrokes belong to: ``desktop`` or ``laptop``.
+	nvdaLayout: str
+	#: The key map section with its keystrokes, such as ``Laptop Keys``.
+	section: str
+	keyCount: int = 0
+	#: True when Caps Lock is the JAWS key in this layout (the Laptop layout).
+	capsLock: bool = False
+
+	def describe(self, inUse: bool = False) -> str:
+		text = f"{self.name}: {self.keyCount} keystrokes of its own, for NVDA's {self.nvdaLayout} keyboard layout"
+		if self.capsLock:
+			text += "; Caps Lock is the JAWS key"
+		if self.id in LAYOUT_NOTES:
+			text += "; " + LAYOUT_NOTES[self.id]
+		if inUse:
+			text += " (the layout your JAWS uses)"
+		return text
+
+
+#: JAWS keyboard layouts the assistant knows: id -> (name JAWS shows, NVDA keyboard layout).
+#: Desktop and Kinesis keyboards have a number pad and use Insert as the JAWS key; Laptop uses
+#: Caps Lock; Classic Laptop is the older Alt+letter layout for keyboards without a number pad.
+KNOWN_LAYOUTS = {
+	"desktop": ("Desktop", "desktop"),
+	"laptop": ("Laptop", "laptop"),
+	"classic laptop": ("Classic Laptop", "laptop"),
+	"kinesis": ("Kinesis", "desktop"),
+}
+#: What a user should know before choosing a layout.
+LAYOUT_NOTES = {"classic laptop": "its Alt+letter keys take those keystrokes away from programs"}
+#: Layouts for Freedom Scientific notetakers, not computer keyboards.
+DEVICE_LAYOUTS = frozenset({"pac mate"})
+
+
+def layoutId(keyboardType: str | None) -> str:
+	"""The layout id for JAWS's KeyboardType setting (``Laptop``, ``Classic Laptop``...)."""
+	value = " ".join((keyboardType or "").split()).lower()
+	return value or "desktop"
+
+
+def keyboardLayouts(jkm: jawsFiles.IniFile) -> list[JawsLayout]:
+	"""The JAWS keyboard layouts this key map has keystrokes for.
+
+	JAWS lists its layouts in ``[Keyboard Layouts]`` (``Laptop=Common``: the Laptop layout
+	adds ``[Laptop Keys]`` to the common keys); Classic Laptop only has sections of its own.
+	Layouts of other JAWS versions and languages are found the same way.
+	"""
+	names: dict = {}
+	listing = jkm.section("keyboard layouts")
+	for name, base in listing.items() if listing is not None else ():
+		layout = layoutId(name)
+		if layout in DEVICE_LAYOUTS or not name.strip():
+			continue
+		known = KNOWN_LAYOUTS.get(layout)
+		names[layout] = known or (name.strip(), "laptop" if "laptop" in f"{layout} {base}".lower() else "desktop")
+	for layout, known in KNOWN_LAYOUTS.items():
+		names.setdefault(layout, known)
+	result = []
+	for layout, (name, nvdaLayout) in names.items():
+		section = jkm.section(f"{name} Keys")
+		if section is None or not len(section):
+			continue
+		modifiers = jkm.section(f"{name} Modifiers")
+		if modifiers is not None:
+			capsLock = "capslock" in (key.lower() for key in modifiers.keys())
+		else:
+			capsLock = layout == "laptop"
+		result.append(JawsLayout(layout, name, nvdaLayout, section.name, len(section), capsLock))
+	return result
+
+
+def _sectionsInOrder(jkm: jawsFiles.IniFile, current: str) -> list:
+	"""``(section, JawsLayout or None)``: other sections in file order, then the layouts, the one in use first.
+
+	Keystrokes of the layout in use then win over another layout's for the same NVDA layout.
+	"""
+	layouts = {layout.section.lower(): layout for layout in keyboardLayouts(jkm)}
+	others = []
+	layoutSections = []
+	for section in jkm.sections.values():
+		layout = layouts.get(section.name.lower())
+		if layout is None:
+			others.append((section, None))
+		else:
+			layoutSections.append((section, layout))
+	layoutSections.sort(key=lambda pair: pair[1].id != current)
+	return others + layoutSections
+
+
 def planKeys(
 	jkm: jawsFiles.IniFile,
 	keyboardLayout: str,
@@ -90,25 +194,32 @@ def planKeys(
 	quickNavLetters: bool = True,
 	overrideConflicts: bool = False,
 	leaseyActive: bool = False,
+	layouts=None,
 ) -> KeyPlan:
 	"""Work out which JAWS keystrokes become NVDA gestures.
 
-	``boundScripts(gesture)`` returns ``(module, class, script)`` tuples NVDA already binds to
-	a gesture; ``scriptExists(module, class, script)`` confirms a target is present in this
-	NVDA. Both may be None outside NVDA.
+	``keyboardLayout`` is the JAWS keyboard layout in use (``desktop``, ``laptop``,
+	``classic laptop``...). ``layouts`` lists the JAWS layouts whose own keystrokes are wanted;
+	None takes just the one in use. ``boundScripts(gesture)`` returns ``(module, class, script)``
+	tuples NVDA already binds to a gesture; ``scriptExists(module, class, script)`` confirms a
+	target is present in this NVDA. Both may be None outside NVDA.
 	"""
 	plan = KeyPlan()
 	seenGestures: dict = {}
-	layout = (keyboardLayout or "desktop").lower()
-	for section in jkm.sections.values():
-		kind = _sectionKind(section.name)
-		if kind is None:
-			continue
-		if kind in ("desktop", "laptop") and kind != layout:
-			# Kept for the other keyboard layout, which this user does not use in JAWS.
-			for key, script in section.items():
-				plan.skipped.append(SkippedKey(key, script, section.name, f"only for the JAWS {kind} layout", SKIP_LAYOUT))
-			continue
+	current = layoutId(keyboardLayout)
+	wanted = {current} if layouts is None else {layoutId(name) for name in layouts}
+	for section, layout in _sectionsInOrder(jkm, current):
+		if layout is not None:
+			if layout.id not in wanted:
+				for key, script in section.items():
+					plan.skipped.append(SkippedKey(key, script, section.name, f"only for the JAWS {layout.name} keyboard layout, which was not chosen", SKIP_LAYOUT))
+				continue
+			kind = layout.nvdaLayout
+		else:
+			kind = _sectionKind(section.name)
+			if kind is None or kind in ("desktop", "laptop"):
+				# Not keystrokes, or a layout section without any.
+				continue
 		for key, script in section.items():
 			if leaseyActive and any(marker in (key + " " + script).lower() for marker in ("leasey", "hartgen")):
 				plan.skipped.append(SkippedKey(key, script, section.name, "belongs to Leasey", SKIP_LEASEY))
@@ -143,6 +254,9 @@ def planKeys(
 					break
 				bindingKey = (normalized, module, className)
 				if bindingKey in seenGestures:
+					first = seenGestures[bindingKey]
+					if layout is not None and first.section.lower() != section.name.lower():
+						plan.skipped.append(SkippedKey(key, script, section.name, f"{first.section} already uses this keystroke for {first.jawsScript}", SKIP_DUPLICATE))
 					break
 				binding = GestureBinding(
 					gesture=gesture,
@@ -190,14 +304,23 @@ def describeJawsKeystroke(gesture, jawsBindings: dict) -> list:
 	return found
 
 
-def buildReverseMap(jkm: jawsFiles.IniFile, keyboardLayout: str) -> dict:
-	"""``{normalized NVDA gesture: [(jawsKey, script, section)]}`` for every convertible JAWS keystroke."""
+def buildReverseMap(jkm: jawsFiles.IniFile, keyboardLayout: str, layouts=None) -> dict:
+	"""``{normalized NVDA gesture: [(jawsKey, script, section)]}`` for every convertible JAWS keystroke.
+
+	``layouts`` are the JAWS keyboard layouts to include besides the common keys; None takes the one in use.
+	"""
 	result: dict = {}
-	layout = (keyboardLayout or "desktop").lower()
-	for section in jkm.sections.values():
-		kind = _sectionKind(section.name)
-		if kind is None or (kind in ("desktop", "laptop") and kind != layout):
-			continue
+	current = layoutId(keyboardLayout)
+	wanted = {current} if layouts is None else {layoutId(name) for name in layouts} | {current}
+	for section, layout in _sectionsInOrder(jkm, current):
+		if layout is not None:
+			if layout.id not in wanted:
+				continue
+			kind = layout.nvdaLayout
+		else:
+			kind = _sectionKind(section.name)
+			if kind is None or kind in ("desktop", "laptop"):
+				continue
 		for key, script in section.items():
 			gesture, _reason = jawsKeyMap._convertKey(key, kind if kind in ("desktop", "laptop") else "common")
 			if gesture is None:

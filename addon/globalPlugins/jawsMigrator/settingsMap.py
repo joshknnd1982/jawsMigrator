@@ -63,11 +63,19 @@ class MappingResult:
 	schemeName: str = ""
 	sayAllSchemeName: str = ""
 	keyboardLayout: str = ""
+	#: JAWS's own keyboard layout name, lower case: ``desktop``, ``laptop``, ``classic laptop``...
+	jawsKeyboardLayout: str = ""
 
 	def add(self, target, path, value, label, source, perSynth=False):
 		# A later rule for the same setting replaces an earlier one.
 		self.changes = [change for change in self.changes if not (change.target == target and change.path == tuple(path))]
 		self.changes.append(SettingChange(target, tuple(path), value, label, source, perSynth))
+
+
+def nvdaKeyLabel(modifiers: int) -> str:
+	"""``NVDA key: Caps Lock, numpad Insert`` for NVDA's NVDAModifierKeys bits."""
+	names = [name for bit, name in ((1, "Caps Lock"), (2, "numpad Insert"), (4, "extended Insert")) if modifiers & bit]
+	return "NVDA key: " + ", ".join(names)
 
 
 class _Reader:
@@ -171,17 +179,19 @@ def mapSettings(
 	if keyboardType:
 		layout = "laptop" if "laptop" in keyboardType.lower() else "desktop"
 		result.keyboardLayout = layout
+		result.jawsKeyboardLayout = " ".join(keyboardType.split()).lower()
 		add(NVDA, ("keyboard", "keyboardLayout"), layout, f"Keyboard layout: {layout}", r.src("options", "KeyboardType"))
 	insertKeys = r.int("options", "JAWSInsertKey")
 	if insertKeys is not None or keyboardType:
 		if insertKeys is None:
 			insertKeys = r.contextInt("options", "JAWSInsertKey", 3)
 		layoutName = (keyboardType or r.contextRaw("options", "KeyboardType", "Desktop") or "").lower()
-		modifiers = (2 if insertKeys in (1, 3) else 0) | (4 if insertKeys in (2, 3) else 0) | (1 if "laptop" in layoutName else 0)
+		# Caps Lock is the JAWS key only in the Laptop layout (Classic Laptop uses Insert).
+		capsLock = " ".join(layoutName.split()) == "laptop"
+		modifiers = (2 if insertKeys in (1, 3) else 0) | (4 if insertKeys in (2, 3) else 0) | (1 if capsLock else 0)
 		if not modifiers:
 			modifiers = 6
-		names = [name for bit, name in ((1, "Caps Lock"), (2, "numpad Insert"), (4, "extended Insert")) if modifiers & bit]
-		add(NVDA, ("keyboard", "NVDAModifierKeys"), modifiers, "NVDA key: " + ", ".join(names), "JAWS key: " + (r.src("options", "JAWSInsertKey") if r.has("options", "JAWSInsertKey") else "keyboard layout " + layoutName))
+		add(NVDA, ("keyboard", "NVDAModifierKeys"), modifiers, nvdaKeyLabel(modifiers), "JAWS key: " + (r.src("options", "JAWSInsertKey") if r.has("options", "JAWSInsertKey") else "keyboard layout " + layoutName))
 
 	value = r.int("options", "IndicateMistypedWord")
 	if value is not None:

@@ -79,6 +79,18 @@ def build(plan, result) -> tuple[str, str]:
 	b.heading(2, "Safety copies")
 	if result.backup is not None:
 		b.paragraph(f"Backup of your NVDA settings (restore it from NVDA menu, Tools, JAWS Migration Assistant): {result.backup.path}")
+		info = result.backup
+		if info.version >= 2:
+			from . import backup as backupModule
+
+			b.paragraph(
+				f"It holds NVDA's whole settings folder: {len(info.files):,} files ({backupModule.sizeText(info.totalSize)}), including "
+				f"{len(info.addons)} add-ons and their settings. {backupModule.sizeText(info.copiedSize)} were copied; the rest are "
+				"shared with the previous backup." + (" It is kept for good, as your NVDA before the first JAWS migration." if info.original else ""),
+			)
+			if info.skipped:
+				b.paragraph("These files were in use by another program and could not be backed up:")
+				b.items((f"{item['relative']}: {item['reason']}" for item in info.skipped), limit=50)
 	if result.archiveFolder:
 		b.paragraph(f"Copy of your JAWS settings: {result.archiveFolder}")
 	b.paragraph(f"Files made by this migration: {result.outputFolder}")
@@ -174,6 +186,12 @@ def build(plan, result) -> tuple[str, str]:
 	# Keyboard
 	b.heading(2, "Keyboard Manager and Navigation Quick Keys")
 	b.paragraph(f"{result.gesturesAdded} JAWS keystrokes became NVDA input gestures. gestures.ini was backed up first.")
+	if plan.keyboardLayouts:
+		chosenLayouts = plan.chosenKeyboardLayouts() if plan.options.keyboard else []
+		found = ", ".join(layout.name + (" (in use)" if layout.id == plan.jawsKeyboardLayout else "") for layout in plan.keyboardLayouts)
+		b.paragraph(f"JAWS keyboard layouts found: {found}. Keystrokes brought over from: {', '.join(layout.name for layout in chosenLayouts) or 'none'}.")
+		layout = plan.nvdaKeyboardLayout() if plan.options.settings else ""
+		b.paragraph(f"NVDA's keyboard layout: {layout}." if layout else "NVDA's keyboard layout was left as it was.")
 	b.items((binding.label + f" [{binding.gesture}]" for binding in plan.keys.bindings), limit=400)
 	skippedKinds = collections.Counter(item.kind for item in plan.keys.skipped)
 	labels = {
@@ -182,7 +200,8 @@ def build(plan, result) -> tuple[str, str]:
 		"noEquivalent": "JAWS commands NVDA does not have",
 		"unconvertible": "keystrokes NVDA cannot represent (layered, braille, MAGic)",
 		"passthrough": "standard Windows keys NVDA handles itself",
-		"otherLayout": "for the other JAWS keyboard layout",
+		"otherLayout": "for JAWS keyboard layouts that were not chosen",
+		"duplicate": "already taken by the keystrokes of another chosen JAWS keyboard layout",
 		"quickNavOff": "quick navigation letters not chosen",
 		"leasey": "Leasey keystrokes, ignored",
 	}

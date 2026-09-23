@@ -38,6 +38,8 @@ DEFAULTS = {
 	"lastReport": "",
 	"lastBackup": "",
 	"lastMigration": {},
+	#: Which JAWS items to import, chosen in JAWS Migration Assistant settings (see selection.py).
+	"importSelection": {},
 }
 
 _lock = threading.RLock()

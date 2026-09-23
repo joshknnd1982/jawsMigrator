@@ -26,6 +26,17 @@ def main():
 	conf, current = fakeNvda.install(configDir, appDir, frame)
 	from jawsMigrator import backup, jawsIndex, migrator, nvdaApply, state, systemCheck
 
+	# An add-on with settings in its own folder and in NVDA's settings folder, as many add-ons have.
+	someAddon = os.path.join(configDir, "addons", "someAddon")
+	os.makedirs(someAddon)
+	with open(os.path.join(someAddon, "manifest.ini"), "w", encoding="utf-8") as stream:
+		stream.write('name = someAddon\nsummary = "Some add-on"\nversion = 1.0\n')
+	with open(os.path.join(someAddon, "settings.json"), "w", encoding="utf-8") as stream:
+		stream.write('{"volume": 1}')
+	os.makedirs(os.path.join(configDir, "someAddonData"))
+	with open(os.path.join(configDir, "someAddonData", "data.txt"), "w", encoding="utf-8") as stream:
+		stream.write("original data")
+
 	nvdaApply.scriptExists = lambda module, className, script: True
 	facts = systemCheck.gatherFacts()
 	facts.classicSpeech.installed = True
@@ -98,10 +109,31 @@ def main():
 	voicesFiles = [name for name in os.listdir(result.outputFolder) if name.endswith(".classicspeech-voices")]
 	packages = [name for name in os.listdir(result.outputFolder) if name.endswith(".classicspeech-scheme")]
 	check(voicesFiles and packages, f"{len(voicesFiles)} voice files and {len(packages)} scheme packages exported")
+	backedUp = {entry["relative"] for entry in result.backup.files}
+	check(
+		{"addons/someAddon/settings.json", "someAddonData/data.txt", "nvda.ini"} <= backedUp and result.backup.original,
+		f"the backup holds add-ons and their settings, and is the original: {len(backedUp)} files, add-ons {[a['name'] for a in result.backup.addons]}",
+	)
+
+	# Afterwards an add-on is installed (as the recommended ones are), and add-on settings change.
+	pending = os.path.join(configDir, "addons", "customLabels.pendingInstall")
+	os.makedirs(pending)
+	with open(os.path.join(pending, "manifest.ini"), "w", encoding="utf-8") as stream:
+		stream.write("name = customLabels\nversion = 2.0\n")
+	with open(os.path.join(configDir, "addonsState.json"), "w", encoding="utf-8") as stream:
+		json.dump({"pendingInstallsSet": ["customLabels"]}, stream)
+	with open(os.path.join(someAddon, "settings.json"), "w", encoding="utf-8") as stream:
+		stream.write('{"volume": 9}')
+	with open(os.path.join(configDir, "someAddonData", "data.txt"), "w", encoding="utf-8") as stream:
+		stream.write("changed data")
 
 	# Undo everything from the backup.
-	message = migrator.restore(result.backup)
-	print("Restore:", message)
+	outcome = migrator.restore(result.backup)
+	print("Restore:", outcome.message)
+	check(not os.path.isdir(pending) and outcome.restartNeeded, "restore removed the add-on installed after the backup")
+	check(open(os.path.join(someAddon, "settings.json"), encoding="utf-8").read() == '{"volume": 1}', "restore put the add-on's own settings back")
+	check(open(os.path.join(configDir, "someAddonData", "data.txt"), encoding="utf-8").read() == "original data", "restore put the add-on's data back")
+	check(outcome.failed == [], f"nothing failed: {outcome.failed}")
 	check(not os.path.isfile(os.path.join(configDir, "profiles", "JAWS settings.ini")), "restore removed the JAWS settings profile")
 	check(not os.path.isdir(os.path.join(schemes, "Web RentACrowd (from JAWS)")), "restore removed the schemes")
 	check("toggleScreenCurtain" in open(os.path.join(configDir, "gestures.ini"), encoding="utf-8").read() and "elementsList" not in open(os.path.join(configDir, "gestures.ini"), encoding="utf-8").read(), "restore put gestures.ini back")
