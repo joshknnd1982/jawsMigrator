@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import nvdaEnv, state
+from .. import labelRepeats, nvdaEnv, state
 from .common import checkListClass, openFile
 
 
@@ -37,6 +37,9 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self.atStartup = helper.addItem(wx.CheckBox(self, label=label))
 		self.atStartup.SetValue(bool(state.get("activateJawsProfileAtStartup")) and profileExists)
 		self.atStartup.Enable(profileExists)
+		# Some web pages put "radio button checked 1 of 2" in a control's label, which NVDA would say twice.
+		self.sayOnce = helper.addItem(wx.CheckBox(self, label="Say a control's type and state &once, even when its label repeats them"))
+		self.sayOnce.SetValue(labelRepeats.wanted(state.load()))
 
 		from .. import classicSounds
 
@@ -108,6 +111,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		"""The values the panel showed, so that onSave writes only what the user changed in it."""
 		self._shownAutoUpdate = self.autoUpdate.GetValue()
 		self._shownAtStartup = self.atStartup.GetValue()
+		self._shownSayOnce = self.sayOnce.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
 		plugin = type(self).plugin
@@ -152,6 +156,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates["checkForUpdatesAutomatically"] = self.autoUpdate.GetValue()
 		if self.atStartup.IsEnabled() and self.atStartup.GetValue() != self._shownAtStartup:
 			updates["activateJawsProfileAtStartup"] = self.atStartup.GetValue()
+		if self.sayOnce.GetValue() != self._shownSayOnce:
+			updates[labelRepeats.STATE_KEY] = self.sayOnce.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}
 		if cleared:
 			updates["sleepApps"] = [name for name in state.get("sleepApps") or [] if name not in cleared]

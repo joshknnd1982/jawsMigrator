@@ -417,7 +417,7 @@ class SettingsPanelTests(unittest.TestCase):
 		from jawsMigrator import state
 		from jawsMigrator.gui import settingsPanel
 
-		state.update({"sleepApps": ["baseball"], "jawsProfileName": "", "activateJawsProfileAtStartup": False, "checkForUpdatesAutomatically": True})
+		state.update({"sleepApps": ["baseball"], "jawsProfileName": "", "activateJawsProfileAtStartup": False, "checkForUpdatesAutomatically": True, "sayTypeAndStateOnce": True})
 		self.calls = []
 		settingsPanel.JawsMigratorSettingsPanel.plugin = types.SimpleNamespace(
 			openAssistant=lambda: self.calls.append("openAssistant"),
@@ -439,13 +439,32 @@ class SettingsPanelTests(unittest.TestCase):
 	def test_okAfterAMigrationKeepsWhatTheMigrationSaved(self):
 		from jawsMigrator import state
 
-		# While the panel is open, a migration adds applications and turns the profile on at startup.
-		state.update({"sleepApps": ["baseball", "winword"], "jawsProfileName": "JAWS settings", "activateJawsProfileAtStartup": True})
+		# While the panel is open, a migration adds applications and turns the profile on at startup
+		# (and a restore of the assistant's state could turn saying a control's type and state once off).
+		state.update({"sleepApps": ["baseball", "winword"], "jawsProfileName": "JAWS settings", "activateJawsProfileAtStartup": True, "sayTypeAndStateOnce": False})
 		self.dialog.panel.onSave()
 		state.forget()
 		self.assertEqual(state.get("sleepApps"), ["baseball", "winword"])
 		self.assertTrue(state.get("activateJawsProfileAtStartup"))
 		self.assertTrue(state.get("checkForUpdatesAutomatically"))
+		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
+
+	def test_sayingTypeAndStateOnceIsSavedAndApplied(self):
+		from jawsMigrator import labelRepeats, state
+
+		panel = self.dialog.panel
+		self.assertEqual(panel.sayOnce.GetLabel(), "Say a control's type and state &once, even when its label repeats them")
+		self.assertTrue(panel.sayOnce.GetValue(), "on unless turned off")
+		panel.sayOnce.SetValue(False)
+		self.calls.clear()
+		panel.onSave()
+		state.forget()
+		self.assertFalse(state.get(labelRepeats.STATE_KEY))
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], "the assistant stops checking labels at once")
+		panel.sayOnce.SetValue(True)
+		panel.onSave()
+		state.forget()
+		self.assertTrue(state.get(labelRepeats.STATE_KEY))
 
 	def test_clearingAnApplicationRemovesOnlyThatOne(self):
 		from jawsMigrator import state

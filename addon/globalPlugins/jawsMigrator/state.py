@@ -59,6 +59,8 @@ DEFAULTS = {
 	"profileNoticeShown": False,
 	#: The user asked not to be offered ClassicSpeech each time the assistant opens.
 	"classicSpeechOfferDeclined": False,
+	#: NVDA says a control's type and state once, when a web page repeats them in the label (see labelRepeats).
+	"sayTypeAndStateOnce": True,
 }
 
 _lock = threading.RLock()

@@ -9,6 +9,9 @@ offers its commands as a layer after NVDA+Shift+J (each command can also get
 its own gesture in Input Gestures), and keeps the migrated behavior working
 while NVDA runs: JAWS sound effects in place of NVDA's sounds, sleep mode in
 the applications where JAWS slept, and the JAWS settings profile at startup.
+It also has NVDA say a control's type and state once when a web page repeats
+them in the control's label (see labelRepeats), and NVDA+Shift+J plays JAWS's
+layered keystroke sound (see layerSound).
 """
 
 from __future__ import annotations
@@ -175,6 +178,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			numberSymbols.unregister()
 		except Exception:
 			pass
+		try:
+			from . import labelRepeats
+
+			labelRepeats.unregister()
+		except Exception:
+			pass
 		super().terminate()
 
 	def _onConfigReset(self, factoryDefaults=False):
@@ -184,9 +193,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	# -- start up ----------------------------------------------------------------------
 
 	def applyRuntimeSettings(self):
-		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes
-		and JAWS's rule for a colon between digits."""
-		from . import numberSymbols
+		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
+		JAWS's rule for a colon between digits, a control's type and state said once, and the layer's sound."""
+		from . import labelRepeats, layerSound, numberSymbols
+
+		# A migration or a restore can change which JAWS the layer's sound comes from; look again next time.
+		layerSound.forget()
 
 		data = state.load()
 		if data.get("jawsSoundsEnabled") or data.get("soundReplacements"):
@@ -200,6 +212,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			numberSymbols.register()
 		else:
 			numberSymbols.unregister()
+		# Not a JAWS setting: it keeps NVDA from saying what a web page already put in a control's label.
+		if labelRepeats.wanted(data):
+			labelRepeats.register()
+		else:
+			labelRepeats.unregister()
 
 	def _silenceExit(self):
 		"""While NVDA exits after a migration, leave out the Screen Curtain sound it plays then (see exitSounds)."""
@@ -701,7 +718,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		self._layerActive = True
 		self.bindGestures(LAYER_GESTURES)
-		tones.beep(660, 40)
+		# The sound JAWS plays when a layered keystroke starts (Insert+Space), or a beep where JAWS has none.
+		from . import layerSound
+
+		if not layerSound.play():
+			tones.beep(660, 40)
 
 	def script_layerUnknown(self, gesture):
 		tones.beep(220, 60)

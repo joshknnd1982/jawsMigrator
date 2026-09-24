@@ -1,9 +1,13 @@
 # Loads the global plugin the way NVDA does, with stand-ins for NVDA's modules and real wx menus,
 # and checks what it adds: the Tools submenu, NVDA menu, Preferences, JAWS Migration Assistant
-# settings, the Settings panel, the NVDA+Shift+J commands; and that unloading takes it all away.
-# Needs wxPython. NVDA's settings folder is a temporary one; nothing else is read or written.
+# settings, the Settings panel, the NVDA+Shift+J commands and their sound, the check that has NVDA
+# say a control's type and state once; and that unloading takes it all away.
+# Needs wxPython. NVDA's settings folder is a temporary one. JAWS's layered keystroke sound is read
+# from this computer's JAWS, if there is one; nothing else is read or written.
 # Run: python tests/plugin_smoke.py
 
+import collections
+import enum
 import os
 import shutil
 import sys
@@ -31,6 +35,60 @@ class TrayIcon(wx.EvtHandler):
 		self.toolsMenu = wx.Menu()
 		self.preferencesMenu = wx.Menu()
 		self.preferencesMenu.Append(wx.ID_ANY, "&Settings...")
+
+
+class SpeechFilter:
+	"""NVDA's speech.extensions.filter_speechSequence: handlers run in their order."""
+
+	def __init__(self):
+		self._handlers = collections.OrderedDict()
+
+	def register(self, handler):
+		self._handlers[id(handler)] = handler
+
+	def unregister(self, handler):
+		return self._handlers.pop(id(handler), None) is not None
+
+	def moveToEnd(self, handler, last=False):
+		self._handlers.move_to_end(id(handler), last=last)
+		return True
+
+	@property
+	def handlers(self):
+		yield from self._handlers.values()
+
+
+class Labelled(enum.Enum):
+	@property
+	def displayString(self):
+		return self.value
+
+	@property
+	def negativeDisplayString(self):
+		return "not " + self.value
+
+
+def installSpeech():
+	"""NVDA's speech extension points and control words, as far as the assistant uses them."""
+	speech = types.ModuleType("speech")
+	speech.extensions = types.ModuleType("speech.extensions")
+	speech.extensions.filter_speechSequence = SpeechFilter()
+	speech.speech = types.ModuleType("speech.speech")
+	speech.speech.getPropertiesSpeech = lambda reason=None, **values: ["1 of 2"]
+	controlTypes = types.ModuleType("controlTypes")
+	controlTypes.Role = Labelled("Role", {"RADIOBUTTON": "radio button", "BUTTON": "button"})
+	controlTypes.State = Labelled("State", {"CHECKED": "checked"})
+	for module in (speech, speech.extensions, speech.speech, controlTypes):
+		sys.modules[module.__name__] = module
+	return speech.extensions.filter_speechSequence
+
+
+def installSounds():
+	"""NVDA's nvwave and tones, recording what plays."""
+	played = []
+	sys.modules["nvwave"] = types.SimpleNamespace(playWaveFile=lambda fileName, asynchronous=True: played.append(fileName))
+	sys.modules["tones"].beep = lambda hz, length, *args, **kwargs: played.append(("beep", hz, length))
+	return played
 
 
 def installNvda(frame, configDir):
@@ -62,12 +120,46 @@ def main():
 	configDir = tempfile.mkdtemp(prefix="jawsMigrator-plugin-")
 	try:
 		settingsDialogs = installNvda(frame, configDir)
+		speechFilter = installSpeech()
+		played = installSounds()
 		import jawsMigrator
 
 		# Only the menus are wanted here, not the first-run offer or the update check.
 		jawsMigrator.state.set("welcomeShown", True)
 		jawsMigrator.state.set("checkForUpdatesAutomatically", False)
+		from jawsMigrator import labelRepeats
+
+		# Another add-on's speech filter, such as ClassicSpeech's, already in place.
+		def otherAddon(sequence):
+			return sequence
+
+		speechFilter.register(otherAddon)
 		plugin = jawsMigrator.GlobalPlugin()
+		handlers = list(speechFilter.handlers)
+		check(labelRepeats.isRegistered() and handlers == [labelRepeats._speechFilter, otherAddon], "a control's type and state are said once, checked before other add-ons' speech filters")
+		spoken = speechFilter._handlers[id(labelRepeats._speechFilter)](["As low as $49.97/mo, radio button checked 1 of 2", "radio button", "checked"])
+		check(spoken == ["As low as $49.97/mo", "radio button", "checked"], f"the tester's radio button: {spoken}")
+		jawsMigrator.state.set(labelRepeats.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "turned off in the Settings panel, NVDA's speech is left alone")
+		jawsMigrator.state.set(labelRepeats.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(labelRepeats.isRegistered(), "and on again")
+		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
+		from jawsMigrator import jawsDetect, layerSound
+
+		jawsSound = layerSound.jawsLayerSound(jawsDetect.findJawsInstallations())
+		plugin.script_commandLayer(None)
+		if jawsSound:
+			copy = layerSound.copyPath()
+			check(played == [copy] and copy.startswith(configDir) and os.path.isfile(copy), f"NVDA+Shift+J plays a copy of {jawsSound}: {played}")
+		else:
+			check(played == [("beep", 660, 40)], f"without a JAWS layered keystroke sound, NVDA+Shift+J beeps: {played}")
+		check(plugin._layerActive, "NVDA+Shift+J starts the layer")
+		# NVDA's script decorator gathers the plugin's own gestures there; leaving the layer binds them again.
+		plugin._GlobalPlugin__gestures = {"kb:NVDA+shift+j": "commandLayer"}
+		plugin.script_commandLayer(None)
+		check(not plugin._layerActive and len(played) == 1, "pressed again, it leaves the layer quietly")
 		tray = frame.sysTrayIcon
 		preferences = [item.GetItemLabelText() for item in tray.preferencesMenu.GetMenuItems()]
 		check("JAWS Migration Assistant settings..." in preferences, f"NVDA menu, Preferences: {preferences}")
@@ -101,6 +193,7 @@ def main():
 		check([item.GetItemLabelText() for item in tray.preferencesMenu.GetMenuItems()] == ["Settings..."], "unloading removes the Preferences item")
 		check(not tray.toolsMenu.GetMenuItems(), "unloading removes the Tools submenu")
 		check(not settingsDialogs.NVDASettingsDialog.categoryClasses, "unloading removes the Settings panel")
+		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
 	finally:
 		frame.Destroy()
 		shutil.rmtree(configDir, ignore_errors=True)

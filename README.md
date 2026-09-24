@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.4
+- Version: 1.5
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.5](#whats-new-in-15)
 - [What's new in 1.4](#whats-new-in-14)
 - [Using the assistant](#using-the-assistant)
 - [Choosing what to import](#choosing-what-to-import)
@@ -56,9 +57,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.4.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.5.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
+4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.5
+
+- **NVDA says a control's type and state once.** Some web pages write what a screen reader says into a control's label. On visible.com, a payment option is labelled "As low as $49.97/mo for 36 months 0% APR + taxes, radio button checked 1 of 2", so NVDA said "radio button checked 1 of 2, radio button, checked". When NVDA says a control's type and state itself, the assistant now leaves the page's copy out of the label, and you hear "As low as $49.97/mo for 36 months 0% APR + taxes, radio button, checked". NVDA's own words are the ones kept, because they are right even when a page forgets to update its copy. This works for radio buttons, check boxes, buttons, combo boxes, edit fields, links, tabs and other controls, in browse mode, in focus mode and while reading line by line. A label that only ends in the control's type, such as a button labelled "Close button", is left as it is. To turn this off, uncheck "Say a control's type and state once, even when its label repeats them" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA+Shift+J sounds like JAWS's layered keystrokes.** When NVDA+Shift+J starts the assistant's commands, NVDA now plays the sound JAWS plays when a layered keystroke such as Insert+Space starts: KeyLayerSound.wav, or the sound you chose for it in JAWS. The assistant keeps a copy, so the sound stays after JAWS is uninstalled. If JAWS plays no sound there, or none is found, NVDA+Shift+J beeps as before.
+
+Saying a control's type and state once works while the assistant is installed; NVDA itself has no such setting.
 
 ## What's new in 1.4
 
@@ -71,7 +80,6 @@ Fixes from a tester's report on version 1.3:
 - **Restoring says what you'll notice.** Restoring the backup from before your first migration brings NVDA's own behaviour back, such as saying "clickable" before clickable items on web pages. That is NVDA's Document Formatting setting "Clickable", not ClassicSpeech or the assistant. Before restoring, the assistant now lists the changes you will notice, such as "clickable", the punctuation level and the speech rate, and where to change each one.
 
 The Insert keystrokes, the time rule and the silent exit work while the assistant is installed; NVDA itself has no way to keep them.
-4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
 
 ## Using the assistant
 
@@ -330,10 +338,13 @@ Press NVDA+Shift+J, then:
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
 
+NVDA+Shift+J plays the sound JAWS plays when a layered keystroke such as Insert+Space starts. That is the sound JAWS's Default.jcf names (KeyLayerSound.wav, unless you chose another), found in your JAWS sounds and then in the shared ones, as JAWS finds it. It comes from the JAWS you migrated from, or else the newest JAWS on the computer. The assistant keeps a copy in its own folder, so the sound stays after JAWS is uninstalled. If JAWS plays no sound there, or none is found, NVDA+Shift+J beeps.
+
 The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open the debug log, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
 
 - automatic update checks;
 - turning on the JAWS settings profile when NVDA starts;
+- saying a control's type and state once, even when its label repeats them (on unless you turn it off; see [What's new in 1.5](#whats-new-in-15));
 - the list of applications where NVDA sleeps.
 
 ## Add-ons: always the newest versions
@@ -456,6 +467,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 | `jawsMigrator\migrations\<date>` | The report (`report.html`, `report.txt`), the migration's `debug.log`, the JAWS index (`jaws-index.json`, `jaws-index.txt`), gestures.ini as it was, and ClassicSpeech voice and scheme files |
 | `jawsMigrator\debug.log` | The assistant's general debug log |
 | `jawsMigrator\nvdaSounds\<NVDA version>` | A copy of NVDA's own sounds, kept before JAWS sounds are used in their place |
+| `jawsMigrator\sounds\keyLayer.wav` | A copy of JAWS's layered keystroke sound, which NVDA+Shift+J plays |
 | `jawsMigrator\state.json` | The assistant's own settings, including your choice of JAWS items to import |
 | `profiles\JAWS - program.ini` (and `profiles\JAWS settings.ini` if you chose a separate profile) | Migrated NVDA configuration profiles |
 | `ClassicSpeech\Schemes\<scheme> (from JAWS)` | Migrated ClassicSpeech schemes |
@@ -466,7 +478,8 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
 - Rates and pitches are converted from the percentage JAWS shows, except Eloquence's rate, which keeps JAWS's speed. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
-- The Insert keystrokes of the Laptop layout, JAWS's rule for times and the silent exit need the assistant: they stop when it is uninstalled or disabled.
+- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit and saying a control's type and state once need the assistant: they stop when it is uninstalled or disabled.
+- A control's type and state are only left out of a label when they are at its end, in NVDA's words (or "checkbox", "dropdown" and similar English spellings), right next to where NVDA says them. A page that puts them first, or in another language than NVDA's, is read as it is.
 - JAWS voices from synthesizers with no NVDA equivalent on the computer (for example old hardware synthesizers) cannot be used. The report says which ones.
 - NVDA speech dictionaries are not per application. Rules from JAWS application dictionaries go into the default dictionary; you can leave them out.
 - Braille tables are chosen automatically for English only. For other languages, choose the table in NVDA's Braille settings.
@@ -487,7 +500,7 @@ Tests:
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel and the NVDA+Shift+J commands.
+`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS), and the check that has NVDA say a control's type and state once.
 
 Three further scripts need wxPython and a computer with JAWS or JAWS settings. They change nothing outside a temporary folder:
 
