@@ -18,7 +18,7 @@ read. Where JAWS plays no layer sound, or none is found, the layer beeps as befo
 
 from __future__ import annotations
 
-import filecmp
+# Only modules NVDA's own Python has (its library.zip): it has no filecmp, for one (see tests/test_nvda_runtime).
 import os
 import shutil
 import tempfile
@@ -108,6 +108,22 @@ def copyPath() -> str:
 	return nvdaEnv.addonDataDir(COPY_FOLDER, COPY_NAME)
 
 
+def sameContent(first: str, second: str) -> bool:
+	"""Whether two files hold the same bytes; False when either can't be read."""
+	try:
+		if os.path.getsize(first) != os.path.getsize(second):
+			return False
+		with open(first, "rb") as one, open(second, "rb") as other:
+			while True:
+				block = one.read(65536)
+				if block != other.read(65536):
+					return False
+				if not block:
+					return True
+	except OSError:
+		return False
+
+
 def keepCopy(source: str) -> str | None:
 	"""Copy ``source`` into the assistant's folder, unless the copy there is the same. Returns the copy, or None."""
 	if not nvdaEnv.shouldWriteToDisk():
@@ -116,7 +132,7 @@ def keepCopy(source: str) -> str | None:
 	temporary = None
 	try:
 		safety.checkWritable(target)
-		if os.path.isfile(target) and filecmp.cmp(source, target, shallow=False):
+		if os.path.isfile(target) and sameContent(source, target):
 			return target
 		folder = os.path.dirname(target)
 		os.makedirs(folder, exist_ok=True)

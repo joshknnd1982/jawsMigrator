@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.5
+- Version: 1.6
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.6](#whats-new-in-16)
 - [What's new in 1.5](#whats-new-in-15)
 - [What's new in 1.4](#whats-new-in-14)
 - [Using the assistant](#using-the-assistant)
@@ -57,10 +58,15 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.5.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.6.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.6
+
+- **The assistant starts again.** Version 1.5 didn't start in NVDA at all: the assistant was missing from the NVDA menu and from NVDA's Input Gestures dialog, and NVDA+Shift+J did nothing. Its new layered keystroke sound used a part of Python that NVDA's own copy of Python doesn't include. That is fixed, so everything 1.5 added now works. If one of the assistant's own features ever can't start, it is left out on its own, and the rest of the assistant keeps working.
+- **If you installed 1.5, install 1.6 yourself** from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases). Version 1.5 never started, so it can't check for updates.
 
 ## What's new in 1.5
 
@@ -500,7 +506,9 @@ Tests:
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS), and the check that has NVDA say a control's type and state once.
+`tests/test_nvda_runtime.py` checks that every module the add-on imports exists in the NVDA installed on the computer. NVDA's own copy of Python has only part of Python's standard library, so code that works in the other tests can still fail to load in NVDA. It is skipped where NVDA isn't installed.
+
+`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS), and the check that has NVDA say a control's type and state once. It also checks that the assistant still loads, and NVDA+Shift+J still works, when one of its modules can't be loaded.
 
 Three further scripts need wxPython and a computer with JAWS or JAWS settings. They change nothing outside a temporary folder:
 

@@ -514,6 +514,17 @@ class LayerSoundTests(unittest.TestCase):
 			self.assertFalse(layerSound.play(types.SimpleNamespace(playWaveFile=broken)), "and it isn't tried again")
 		self.assertEqual(logged.call_count, 1)
 
+	def test_same_content(self):
+		# In place of filecmp, which NVDA's own Python doesn't have (see test_nvda_runtime).
+		first = self._write(os.path.join(self.root, "a.wav"), b"RIFF" + bytes(range(256)) * 300)
+		same = self._write(os.path.join(self.root, "b.wav"), b"RIFF" + bytes(range(256)) * 300)
+		other = self._write(os.path.join(self.root, "c.wav"), b"RIFF" + bytes(range(256)) * 299 + bytes(256))
+		shorter = self._write(os.path.join(self.root, "d.wav"), b"RIFF")
+		self.assertTrue(layerSound.sameContent(first, same))
+		self.assertFalse(layerSound.sameContent(first, other), "same size, one byte different")
+		self.assertFalse(layerSound.sameContent(first, shorter))
+		self.assertFalse(layerSound.sameContent(first, os.path.join(self.root, "missing.wav")))
+
 	def test_sound_names(self):
 		self.assertEqual(layerSound.soundName(None), "KeyLayerSound.wav")
 		self.assertEqual(layerSound.soundName(_ini("[options]\nKeyLayerSound=\"Ding.wav\"\n")), "Ding.wav")

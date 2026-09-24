@@ -114,7 +114,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self.updater = updater.UpdateChecker()
 		if self._secure:
 			return
-		self.applyRuntimeSettings()
+		try:
+			self.applyRuntimeSettings()
+		except Exception:
+			# The assistant's menus, settings and commands must work even when one of its own settings can't apply.
+			debugLog.error("could not apply the assistant's own settings")
 		try:
 			import config
 
@@ -194,12 +198,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
-		JAWS's rule for a colon between digits, a control's type and state said once, and the layer's sound."""
-		from . import labelRepeats, layerSound, numberSymbols
+		JAWS's rule for a colon between digits, a control's type and state said once, and the layer's sound.
 
-		# A migration or a restore can change which JAWS the layer's sound comes from; look again next time.
-		layerSound.forget()
-
+		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
+		"""
 		data = state.load()
 		if data.get("jawsSoundsEnabled") or data.get("soundReplacements"):
 			# Version 1.1 played JAWS sounds itself. They play through ClassicSpeech now (classicSounds).
@@ -207,16 +209,33 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			_log().info("jawsMigrator: JAWS sounds now play through ClassicSpeech; version 1.1's own sound replacement is off")
 		self._sleepApps = {str(name).lower() for name in data.get("sleepApps") or []}
 		self._insertKeys = insertKeys.load(data)
-		# A restore can bring back settings from before any migration; the rule follows.
-		if numberSymbols.wanted(data):
-			numberSymbols.register()
-		else:
-			numberSymbols.unregister()
-		# Not a JAWS setting: it keeps NVDA from saying what a web page already put in a control's label.
-		if labelRepeats.wanted(data):
-			labelRepeats.register()
-		else:
-			labelRepeats.unregister()
+		try:
+			from . import numberSymbols
+
+			# A restore can bring back settings from before any migration; the rule follows.
+			if numberSymbols.wanted(data):
+				numberSymbols.register()
+			else:
+				numberSymbols.unregister()
+		except Exception:
+			debugLog.error("could not apply JAWS's rule for a colon between digits")
+		try:
+			from . import labelRepeats
+
+			# Not a JAWS setting: it keeps NVDA from saying what a web page already put in a control's label.
+			if labelRepeats.wanted(data):
+				labelRepeats.register()
+			else:
+				labelRepeats.unregister()
+		except Exception:
+			debugLog.error("could not apply saying a control's type and state once")
+		try:
+			from . import layerSound
+
+			# A migration or a restore can change which JAWS the layer's sound comes from; look again next time.
+			layerSound.forget()
+		except Exception:
+			debugLog.error("could not reset the layer's sound")
 
 	def _silenceExit(self):
 		"""While NVDA exits after a migration, leave out the Screen Curtain sound it plays then (see exitSounds)."""
@@ -719,10 +738,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._layerActive = True
 		self.bindGestures(LAYER_GESTURES)
 		# The sound JAWS plays when a layered keystroke starts (Insert+Space), or a beep where JAWS has none.
-		from . import layerSound
-
-		if not layerSound.play():
+		if not self._playLayerSound():
 			tones.beep(660, 40)
+
+	def _playLayerSound(self) -> bool:
+		"""JAWS's layered keystroke sound (see layerSound). False when there is none or it can't play."""
+		try:
+			from . import layerSound
+
+			return layerSound.play()
+		except Exception:
+			debugLog.error("could not play JAWS's layered keystroke sound")
+			return False
 
 	def script_layerUnknown(self, gesture):
 		tones.beep(220, 60)

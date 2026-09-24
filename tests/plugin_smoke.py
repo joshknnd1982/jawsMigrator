@@ -194,6 +194,21 @@ def main():
 		check(not tray.toolsMenu.GetMenuItems(), "unloading removes the Tools submenu")
 		check(not settingsDialogs.NVDASettingsDialog.categoryClasses, "unloading removes the Settings panel")
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
+		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
+		# no menus, no NVDA+Shift+J, nothing in Input Gestures. A module that can't load now costs only its feature.
+		for name in ("layerSound", "labelRepeats"):
+			delattr(jawsMigrator, name)
+			sys.modules[f"jawsMigrator.{name}"] = None
+		try:
+			played.clear()
+			plugin = jawsMigrator.GlobalPlugin()
+			check(tray.toolsMenu.GetMenuItems() and settingsDialogs.NVDASettingsDialog.categoryClasses, "with a module NVDA can't load, the assistant still loads")
+			plugin.script_commandLayer(None)
+			check(plugin._layerActive and played == [("beep", 660, 40)], f"and NVDA+Shift+J starts the layer, with a beep: {played}")
+			plugin.terminate()
+		finally:
+			for name in ("layerSound", "labelRepeats"):
+				del sys.modules[f"jawsMigrator.{name}"]
 	finally:
 		frame.Destroy()
 		shutil.rmtree(configDir, ignore_errors=True)
