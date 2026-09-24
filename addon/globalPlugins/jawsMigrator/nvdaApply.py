@@ -431,6 +431,37 @@ def voiceRecord(synth, voiceId: str | None, variantId: str | None) -> dict:
 	return {"baseline": baseline, "overrides": {"variant": variantId} if variantId else {}}
 
 
+def eciRateRange(driver: str) -> tuple:
+	"""``((minRate, maxRate), rate boost)`` of an NVDA Eloquence driver; ``(None, 1.0)`` for other drivers.
+
+	The range is the driver's own ``minRate`` and ``maxRate`` where its module has them, else the known
+	one (see voices.ECI_RATE_RANGES). The boost is the driver's rate boost multiplier while rate boost
+	is on in NVDA's settings for it, else 1.
+	"""
+	import sys
+
+	from . import voices
+
+	if not voices.isEciDriver(driver):
+		return None, 1.0
+	eciRange = voices.ECI_RATE_RANGES.get(driver.lower(), voices.DEFAULT_ECI_RATE_RANGE)
+	boost = 1.0
+	try:
+		import synthDriverHandler
+
+		cls = synthDriverHandler._getSynthDriver(driver)
+		module = sys.modules.get(cls.__module__)
+		low, high = getattr(module, "minRate", None), getattr(module, "maxRate", None)
+		if isinstance(low, int) and isinstance(high, int) and not isinstance(low, bool) and high > low:
+			eciRange = (low, high)
+		multiplier = getattr(cls, "RATE_BOOST_MULTIPLIER", None)
+		if multiplier and getValue(("speech", driver, "rateBoost")) is True:
+			boost = float(multiplier)
+	except Exception:
+		_log().debugWarning(f"jawsMigrator: the rate range of the {driver} synthesizer is not known; using {eciRange}", exc_info=True)
+	return eciRange, boost
+
+
 def currentSynthName() -> str:
 	import synthDriverHandler
 
@@ -611,9 +642,10 @@ def gestureBoundScripts(gesture: str) -> list:
 
 	Returns ``(module, class, script, identifier, source)`` tuples. ``identifier`` is the gesture
 	identifier of that binding (a ``kb(laptop):`` one only works in NVDA's laptop keyboard layout);
-	``source`` is ``"user"`` (gestures.ini), ``"locale"`` or ``"class"`` (the class binds it itself,
-	named after the class that does). ``script`` is None where a gesture map unbinds the keystroke
-	for that class; keyPlan leaves out what is unbound.
+	``source`` is ``"user"`` (gestures.ini), ``"locale"``, ``"class"`` (the class binds it itself,
+	named after the class that does) or ``"addon"`` (another add-on's global plugin binds it).
+	``script`` is None where a gesture map unbinds the keystroke for that class; keyPlan leaves out
+	what is unbound.
 	"""
 	import inputCore
 
@@ -641,6 +673,43 @@ def gestureBoundScripts(gesture: str) -> list:
 							results.append(entry)
 				except Exception:
 					continue
+	for entry in _addonPluginGestures(gesture):
+		if entry not in seen:
+			seen.add(entry)
+			results.append(entry)
+	return results
+
+
+def _addonPluginGestures(gesture: str) -> list:
+	"""``(module, class, script, identifier, "addon")`` for the keys of ``gesture`` in other add-ons' global plugins.
+
+	NVDA asks every running global plugin before the focused control, browse mode and globalCommands,
+	so another add-on's keystroke would win over a new binding for those. This add-on is left out.
+	"""
+	results = []
+	try:
+		import globalPluginHandler
+
+		plugins = list(globalPluginHandler.runningPlugins)
+	except Exception:
+		return results
+	for plugin in plugins:
+		cls = type(plugin)
+		if cls.__module__ == __package__:
+			continue
+		try:
+			gestureMap = dict(getattr(plugin, "_gestureMap", {}) or {})
+		except Exception:
+			continue
+		for identifier, function in gestureMap.items():
+			try:
+				if function is None or not _sameKeys(identifier, gesture):
+					continue
+				name = getattr(function, "__name__", "") or ""
+				script = name[len("script_"):] if name.startswith("script_") else name
+				results.append((cls.__module__, cls.__name__, script or "?", identifier, "addon"))
+			except Exception:
+				continue
 	return results
 
 

@@ -17,7 +17,7 @@ import threading
 
 import wx
 
-from .. import addonUpdates, backup, classicSounds, debugLog, jawsIndex, migrator, nvdaEnv, safety, selection, systemCheck, voices
+from .. import addonUpdates, backup, classicSounds, debugLog, jawsIndex, keyPlan, migrator, nvdaEnv, safety, selection, systemCheck, voices
 from .common import BORDER, TITLE, WRAP_WIDTH, checkListClass, enableWithLabel, labeled, messageBox, openFile, readOnlyText, showText, speak
 
 KEEP_VOICE_LABEL = "Don't change NVDA's synthesizer or voice"
@@ -722,7 +722,14 @@ class KeysPage(Page):
 		if lines:
 			lines.append("")
 		lines.append(f"{len(plan.keys.bindings)} keystrokes will be added:")
-		lines.extend(f"  {binding.label} [{binding.gesture}]" for binding in plan.keys.bindings)
+		lines.extend(f"  {binding.label} [{keyPlan.describeGesture(binding.gesture)}]" for binding in plan.keys.bindings)
+		if plan.keys.insertKeys:
+			lines.append("")
+			lines.append(
+				f"{len(plan.keys.insertKeys)} JAWS keystrokes do one thing with Insert and another with Caps Lock. NVDA can't tell the "
+				"two apart, so the Caps Lock keystroke gets the gesture, and the JAWS Migration Assistant runs the Insert command when you hold Insert:",
+			)
+			lines.extend(f"  {key.label} [{keyPlan.describeGesture(key.gesture)}]" for key in plan.keys.insertKeys)
 		same = plan.keys.countSkipped("same")
 		conflicts = plan.keys.countSkipped("conflict")
 		missing = plan.keys.countSkipped("noEquivalent")
@@ -1137,6 +1144,8 @@ class MigrationWizard(wx.Dialog):
 				lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures, including those of the {layouts} keyboard layout{'s' if len(names) > 1 else ''}.")
 			else:
 				lines.append(f"{len(plan.keys.bindings)} JAWS keystrokes become NVDA input gestures, from the keys every JAWS keyboard layout shares.")
+			if plan.keys.insertKeys:
+				lines.append(f"{len(plan.keys.insertKeys)} more work with Insert as in JAWS, such as {plan.keys.insertKeys[0].jawsKey}, while Caps Lock keeps its own command.")
 		if not plan.classicSpeech:
 			lines.append("NVDA keeps its own sounds: JAWS sounds play through ClassicSpeech, which is not installed.")
 		else:

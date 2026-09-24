@@ -29,7 +29,7 @@ import ui
 import wx
 from scriptHandler import script
 
-from . import debugLog, jawsDetect, jawsDocs, jawsFiles, jawsKeyMap, keyPlan, nvdaEnv, state, systemCheck, updater
+from . import debugLog, insertKeys, jawsDetect, jawsDocs, jawsFiles, jawsKeyMap, keyPlan, nvdaEnv, state, systemCheck, updater
 from .gui.common import TITLE, messageBox, openFile
 
 try:
@@ -105,11 +105,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._preferencesItem = None
 		self._factsCache = None
 		self._sleepApps: set = set()
+		#: JAWS keystrokes that differ with Insert and with Caps Lock as the JAWS key (see insertKeys).
+		self._insertKeys: dict = {}
 		self._keymapCache = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
 			return
 		self.applyRuntimeSettings()
+		try:
+			import config
+
+			# Reloading NVDA's configuration rebuilds its symbol dictionaries, without JAWS's rule for times.
+			config.post_configReset.register(self._onConfigReset)
+		except Exception:
+			debugLog.error("could not follow NVDA's configuration reloads")
 		self._createMenu()
 		try:
 			from .gui import settingsPanel
@@ -127,6 +136,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._firstRunTimer = wx.CallLater(10000, self._firstRun)
 
 	def terminate(self):
+		self._silenceExit()
 		self.updater.stop()
 		# Nothing this instance scheduled may run once NVDA has unloaded it (for example after reloading plugins).
 		for name in ("_startupProfileTimer", "_firstRunTimer", "_repairTimer"):
@@ -153,35 +163,82 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				nvdaGui.mainFrame.sysTrayIcon.preferencesMenu.Remove(self._preferencesItem)
 		except Exception:
 			pass
+		try:
+			import config
+
+			config.post_configReset.unregister(self._onConfigReset)
+		except Exception:
+			pass
+		try:
+			from . import numberSymbols
+
+			numberSymbols.unregister()
+		except Exception:
+			pass
 		super().terminate()
+
+	def _onConfigReset(self, factoryDefaults=False):
+		# NVDA sets up its symbol dictionaries again after this notification, in the same call.
+		wx.CallAfter(self.applyRuntimeSettings)
 
 	# -- start up ----------------------------------------------------------------------
 
 	def applyRuntimeSettings(self):
-		"""Apply the assistant's own settings: the applications where NVDA sleeps."""
+		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes
+		and JAWS's rule for a colon between digits."""
+		from . import numberSymbols
+
 		data = state.load()
 		if data.get("jawsSoundsEnabled") or data.get("soundReplacements"):
 			# Version 1.1 played JAWS sounds itself. They play through ClassicSpeech now (classicSounds).
 			state.update({"jawsSoundsEnabled": False, "soundReplacements": {}})
 			_log().info("jawsMigrator: JAWS sounds now play through ClassicSpeech; version 1.1's own sound replacement is off")
 		self._sleepApps = {str(name).lower() for name in data.get("sleepApps") or []}
+		self._insertKeys = insertKeys.load(data)
+		# A restore can bring back settings from before any migration; the rule follows.
+		if numberSymbols.wanted(data):
+			numberSymbols.register()
+		else:
+			numberSymbols.unregister()
+
+	def _silenceExit(self):
+		"""While NVDA exits after a migration, leave out the Screen Curtain sound it plays then (see exitSounds)."""
+		if self._secure:
+			return
+		try:
+			from . import exitSounds
+
+			if exitSounds.nvdaIsExiting() and exitSounds.wanted(state.load(), exitSounds.startAndExitSoundsOff()):
+				exitSounds.silenceWhileExiting(nvdaEnv.wavesFolder())
+		except Exception:
+			debugLog.error("could not keep NVDA silent as it exits")
 
 	def _repairVoices(self):
-		"""Once, after an update: repair what versions 1.0 to 1.2 wrote, then explain their JAWS profile.
+		"""Once, after an update: repair what versions 1.0 to 1.3 wrote, then explain their JAWS profile.
 
-		The repairs run one after another, each after its own backup. Meanwhile the assistant counts as
-		busy, so no migration, restore or sounds change runs at the same time.
+		The repairs run one after another, each after its own backup where it changes NVDA's settings.
+		Meanwhile the assistant counts as busy, so no migration, restore or sounds change runs at the same time.
 		"""
 		self._repairTimer = None
 		if self._busy:
 			self._repairTimer = wx.CallLater(60000, self._repairVoices)
 			return
-		from . import dictRepair, gestureRepair, migrator
+		from . import dictRepair, gestureRepair, migrator, rateRepair
+
+		def insertKeysRepair(announce, done=None):
+			def reload():
+				self._insertKeys = insertKeys.load(state.load())
+				if done is not None:
+					done()
+
+			insertKeys.repairOnce(self._jawsKeymapFiles, announce, reload)
 
 		steps = [
 			("the repair of ClassicSpeech voices", migrator.repairClassicSpeechVoices),
 			("the repair of dictionary rules", dictRepair.repairOnce),
 			("the repair of keystrokes", gestureRepair.repairOnce),
+			("the Insert keystrokes of the JAWS Laptop layout", insertKeysRepair),
+			("the repair of the Eloquence rate", lambda announce, done=None: rateRepair.repairOnce(announce, migrator._backupFirst, done)),
 		]
 		self._busy = True
 		self._runRepairs(steps)
@@ -615,6 +672,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def getScript(self, gesture):
 		if not self._layerActive:
+			if self._insertKeys:
+				# Insert+J and Caps Lock+J are both NVDA+J: with Insert, the JAWS Insert keystroke's command
+				# runs; with Caps Lock, NVDA goes on to find the command as usual (see insertKeys).
+				found = insertKeys.scriptFor(gesture, self._insertKeys)
+				if found is not None:
+					return found
 			return super().getScript(gesture)
 		found = super().getScript(gesture)
 		if found is None:
@@ -710,10 +773,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def script_jawsKeystrokeHelp(self, gesture):
 		self._startKeystrokeHelp()
 
-	def _jawsKeymap(self):
-		"""JAWS's merged default key map, its keyboard layout and script descriptions, cached."""
-		if self._keymapCache is not None:
-			return self._keymapCache
+	def _jawsKeymapSource(self):
+		"""``(JAWS installation, merged default key map, keyboard layout in use)``, or None without JAWS."""
 		installations = [j for j in jawsDetect.findJawsInstallations() if j.programInstalled] or jawsDetect.findJawsInstallations()
 		if not installations:
 			return None
@@ -737,6 +798,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				value = None
 			if value:
 				layout = keyPlan.layoutId(value)
+		return jaws, jkm, layout
+
+	def _jawsKeymapFiles(self):
+		"""``(merged default key map, JAWS keyboard layout in use)``, or None (see insertKeys.repairOnce)."""
+		source = self._jawsKeymapSource()
+		return None if source is None else (source[1], source[2])
+
+	def _jawsKeymap(self):
+		"""JAWS's merged default key map, its keyboard layout and script descriptions, cached."""
+		if self._keymapCache is not None:
+			return self._keymapCache
+		source = self._jawsKeymapSource()
+		if source is None:
+			return None
+		jaws, jkm, layout = source
+		language = jaws.primaryLanguage or "enu"
 		# The JAWS keyboard layouts the last migration brought over, besides the one in use.
 		migrated = state.get("lastMigration") or {}
 		layouts = migrated.get("keyboardLayouts") if isinstance(migrated, dict) else None

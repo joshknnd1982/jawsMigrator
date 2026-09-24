@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.3
+- Version: 1.4
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.4](#whats-new-in-14)
 - [Using the assistant](#using-the-assistant)
 - [Choosing what to import](#choosing-what-to-import)
 - [What each JAWS manager becomes in NVDA](#what-each-jaws-manager-becomes-in-nvda)
@@ -55,9 +56,21 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.3.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.4.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
+
+## What's new in 1.4
+
+Fixes from a tester's report on version 1.3:
+
+- **No sound when NVDA exits.** With Screen Curtain on, NVDA turns it off as it exits, which played the Screen Curtain off sound (through ClassicSpeech, JAWS's Screen Shade sound). JAWS plays no sound when it exits, so after a migration the assistant leaves that sound out while NVDA exits. Turning Screen Curtain off yourself still plays it.
+- **Insert+J opens the NVDA menu on the Laptop layout.** In JAWS's Laptop layout, Caps Lock is the JAWS key, but some Insert keystrokes do something else than the Caps Lock ones: Insert+J opens the JAWS window while Caps Lock+J says the previous word. NVDA calls both NVDA+J, so the assistant now runs the Insert command itself when you hold Insert. With JAWS 2026 that is Insert+J (the NVDA menu), and Insert+H and Insert+8 (NVDA's Input Gestures dialog, which lists and changes keystrokes). Migrations made with 1.3 get these once, a little after NVDA starts. Keystrokes other add-ons use are now taken into account too, so the report no longer promises a keystroke another add-on answers first.
+- **Times are read as times.** JAWS has a rule of its own for a colon between digits, as in 6:02 PM: it is only spoken at the All punctuation level. NVDA said "6 colon 02" at its Most level. The assistant now gives NVDA the same rule, so the synthesizer reads the time as it does in JAWS.
+- **Eloquence speaks at your JAWS speed.** JAWS keeps Eloquence's own speed as its rate, and NVDA's Eloquence drivers start their range higher, so the same percentage was faster in NVDA: a JAWS rate of 75% became NVDA's 75, about 10% faster than JAWS. The rate now keeps JAWS's speed (75% in JAWS is 65 with the Eloquence add-on, 61 with IBMTTS). A rate set by versions 1.0 to 1.3 is corrected once, after a backup, unless you changed it since.
+- **Restoring says what you'll notice.** Restoring the backup from before your first migration brings NVDA's own behaviour back, such as saying "clickable" before clickable items on web pages. That is NVDA's Document Formatting setting "Clickable", not ClassicSpeech or the assistant. Before restoring, the assistant now lists the changes you will notice, such as "clickable", the punctuation level and the speech rate, and where to change each one.
+
+The Insert keystrokes, the time rule and the silent exit work while the assistant is installed; NVDA itself has no way to keep them.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
 
 ## Using the assistant
@@ -163,7 +176,8 @@ The assistant reads every JAWS voice profile, yours and the shared ones. Your ch
 
 - **Your JAWS voice** becomes NVDA's voice. The assistant looks for the NVDA synthesizer that speaks the same voices. It prefers a native NVDA add-on driver, such as IBMTTS for Eloquence, then matching SAPI 5 or OneCore voices, in your JAWS language. Eloquence and IBM ViaVoice are looked for both as NVDA add-ons and as SAPI 5 voices. JAWS person names (Reed, Shelley, Glen, Rocko, Grandma and the others) select the matching voice or variant.
 - **Rate, pitch and volume** come from your JAWS voice profile's Global voice, as the percentage JAWS shows for them, so a JAWS rate of 64% becomes an NVDA rate of 64. JAWS keeps them in each synthesizer's own units (Eloquence rate 95 is 64%, SAPI 5 uses 0 to 20, DECtalk words per minute...). They are set once, in NVDA's voice settings, and from then on only you change them: nothing the assistant writes speeds speech up or slows it down in some places.
-- **Punctuation level** and **capital pitch change** are migrated too.
+- **Eloquence's rate keeps JAWS's speed**, not its percentage: JAWS's Eloquence rate is Eloquence's own speed, and NVDA's Eloquence drivers (IBMTTS, and the Eloquence add-on) give their 0% a speed of 40, so the same percentage is faster in NVDA. JAWS's 75% (speed 111) becomes 65 with the Eloquence add-on and 61 with IBMTTS. Versions 1.0 to 1.3 used the percentage; such a rate is corrected once after updating, after a backup, unless you changed it since.
+- **Punctuation level** and **capital pitch change** are migrated too. JAWS's rule for a colon between digits comes along: in a time such as 6:02 PM the colon is only spoken at the All level, so the synthesizer reads the time as a time. NVDA lists the rule in its Punctuation/symbol pronunciation dialog as "colon between digits, as in 6:02", where you can change it.
 - **Every other voice profile** with an NVDA synthesizer on this computer is saved as that synthesizer's NVDA settings. When you switch NVDA to it later, your JAWS settings for it are already there.
 - **Voice aliases** (for example HeadingLevel1Voice, LinkVoice, QuotationVoice, and the Rent-A-Crowd aliases) are migrated into ClassicSpeech, as described next. An alias that only changes pitch or rate is not a different voice there, so it keeps your NVDA voice.
 
@@ -228,6 +242,8 @@ NVDA plays its own sounds when you switch between focus and browse mode, and for
 
 JAWS plays no sound when it starts or exits, so NVDA's start and exit sounds are turned off (Play sounds when starting or exiting NVDA, in NVDA's General settings). Restoring NVDA's own sounds turns them on again if they were on before. JAWS has no sounds for the Remote Access clipboard, so NVDA keeps its own for those.
 
+With Screen Curtain on, NVDA also turns the curtain off as it exits, which plays the Screen Curtain off sound. While the start and exit sounds are off after a migration, the assistant leaves that one out as NVDA exits; turning the curtain off yourself still plays it. NVDA turns the curtain on as it starts, before add-ons load, so its own Screen Curtain on sound still plays then; turn off "Play sound when toggling Screen Curtain" in NVDA's Vision settings if you don't want it.
+
 To switch quickly, press NVDA+Shift+J then S. The first press plays JAWS sounds; the next restores NVDA's own. The same actions are in NVDA menu, Tools, JAWS Migration Assistant (Use JAWS sounds in place of NVDA's sounds, and Restore NVDA's own sounds), and in NVDA's Settings, JAWS Migration Assistant. The migration's Sound effects step does it too.
 
 How it works, and how to go back:
@@ -274,7 +290,10 @@ Layouts of other JAWS versions and languages are found the same way. Freedom Sci
 
 - Before any gesture is added, gestures.ini is backed up.
 - Each keystroke is decided separately for NVDA's desktop and laptop keyboard layouts, so a keystroke only gets a command in the layouts where it is free or the same.
-- On the Laptop layout, where Caps Lock is the JAWS key, Caps Lock keystrokes decide what NVDA+key does, because NVDA can't tell Caps Lock from Insert. For example, Caps Lock+H and Caps Lock+J don't open NVDA's Input Gestures dialog or menu.
+- On the Laptop layout, where Caps Lock is the JAWS key, Caps Lock keystrokes decide what NVDA+key does in gestures.ini, because NVDA calls both keys NVDA+key there. For example, Caps Lock+H and Caps Lock+J don't open NVDA's Input Gestures dialog or menu.
+- Where JAWS's Laptop layout gives the Insert keystroke another command, the assistant runs it itself when you hold Insert, as NVDA can tell which key you hold. With JAWS 2026: Insert+J opens the NVDA menu, and Insert+H and Insert+8 open NVDA's Input Gestures dialog. The report lists them. Assign the keystroke to something else in NVDA's Input Gestures dialog and Insert runs your choice.
+- Keystrokes that other add-ons use count as taken: NVDA asks add-ons first, so a gesture on the same keystroke would never run. Choosing to use the JAWS command anyway also takes the keystroke from the add-on.
+- The report and the wizard say when a keystroke only works in one of NVDA's keyboard layouts, such as "NVDA+j, only in NVDA's desktop keyboard layout".
 - Keystrokes NVDA already uses for the same command are left alone.
 - Keystrokes NVDA uses for something else stay NVDA's, unless you choose otherwise. That includes JAWS's browse mode keystrokes such as Control+Insert+R: NVDA+Control+R still reloads NVDA's settings.
 - JAWS quick navigation letters can be used in browse mode, so R moves to regions and A to radio buttons, as in JAWS.
@@ -367,7 +386,7 @@ The first backup copies everything, which can take a minute and a few gigabytes 
 
 If the migration fails, the backup is put back and NVDA reloads its saved settings, so NVDA is left as it was.
 
-To undo a migration later, open the NVDA menu, Tools, JAWS Migration Assistant, Restore NVDA settings from a backup, or press NVDA+Shift+J then B. Choose a backup and press Restore. Before restoring, the assistant tells you what will happen to each add-on. Then:
+To undo a migration later, open the NVDA menu, Tools, JAWS Migration Assistant, Restore NVDA settings from a backup, or press NVDA+Shift+J then B. Choose a backup and press Restore. Before restoring, the assistant tells you what will happen to each add-on, and what you will notice: with a backup from before your first migration, NVDA behaves as it did then, for example saying "clickable" before clickable items on web pages, with its own punctuation level and speech rate. Each one says where it is set, so you can change it after the restore. Uninstalling the assistant doesn't change NVDA's settings back or forth. Then:
 
 1. Your current settings and add-ons are backed up first, so a restore can be undone too.
 2. Settings files that changed are put back, each checked against the backup's SHA-256 first. Files the migration created, such as the JAWS settings profile and the ClassicSpeech schemes, are removed.
@@ -446,7 +465,8 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
-- Rates and pitches are converted from the percentage JAWS shows. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
+- Rates and pitches are converted from the percentage JAWS shows, except Eloquence's rate, which keeps JAWS's speed. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
+- The Insert keystrokes of the Laptop layout, JAWS's rule for times and the silent exit need the assistant: they stop when it is uninstalled or disabled.
 - JAWS voices from synthesizers with no NVDA equivalent on the computer (for example old hardware synthesizers) cannot be used. The report says which ones.
 - NVDA speech dictionaries are not per application. Rules from JAWS application dictionaries go into the default dictionary; you can leave them out.
 - Braille tables are chosen automatically for English only. For other languages, choose the table in NVDA's Braille settings.

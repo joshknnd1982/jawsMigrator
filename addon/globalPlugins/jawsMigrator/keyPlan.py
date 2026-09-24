@@ -17,8 +17,9 @@ Every key is decided separately for each NVDA keyboard layout NVDA will use:
 
 - A layout's own keystroke replaces the common one, as in JAWS, even when NVDA has no
   equivalent for it. Where Caps Lock is the JAWS key (the Laptop layout), keystrokes written
-  with JAWSKey or CapsLock decide what NVDA+key does, because NVDA can't tell Insert from
-  Caps Lock.
+  with JAWSKey or CapsLock decide what the gesture NVDA+key does, because NVDA calls Insert
+  and Caps Lock both NVDA there. An Insert keystroke with a command of its own on the same key
+  becomes an ``InsertKey``, which the assistant runs itself while Insert is held.
 - Keystrokes NVDA already uses for the same command are left alone. A keystroke NVDA uses
   for something else is only taken over when asked; in browse mode, quick navigation
   letters take over NVDA's letters when the JAWS letters are wanted.
@@ -88,10 +89,46 @@ class SkippedKey:
 
 
 @dataclass
+class InsertKey:
+	"""A JAWS keystroke that runs one command with Insert and another with Caps Lock as the JAWS key.
+
+	In the JAWS Laptop layout, Caps Lock is the JAWS key, yet Insert+J still opens the JAWS window
+	while Caps Lock+J says the previous word. NVDA calls both NVDA+J, so gestures.ini can't hold
+	both: the Caps Lock keystroke gets the gesture, and the assistant runs this command itself when
+	the NVDA key held down is Insert (see ``insertKeys``).
+	"""
+
+	#: The NVDA gesture both keystrokes make, such as ``kb(laptop):NVDA+j``.
+	gesture: str
+	module: str
+	className: str
+	script: str
+	description: str
+	#: The Insert keystroke and its JAWS command, such as ``Insert+J`` and ``JAWSWindow``.
+	jawsKey: str
+	jawsScript: str
+	section: str
+	#: The Caps Lock keystroke on the same key and its JAWS command, such as ``JAWSKey+J`` and ``SayPriorWord``.
+	capsLockKey: str
+	capsLockScript: str
+	#: NVDA's own commands that Insert with this key no longer runs.
+	replaces: list = field(default_factory=list)
+
+	@property
+	def label(self) -> str:
+		text = f"{self.jawsKey}: {self.description}, with Insert; {self.capsLockKey} ({self.capsLockScript}) stays with Caps Lock"
+		if self.replaces:
+			text += " (with Insert, replaces NVDA's " + ", ".join(self.replaces) + ")"
+		return text
+
+
+@dataclass
 class KeyPlan:
 	bindings: list = field(default_factory=list)
 	skipped: list = field(default_factory=list)
 	applicationKeys: dict = field(default_factory=dict)
+	#: Insert keystrokes that differ from the Caps Lock keystroke on the same key (see InsertKey).
+	insertKeys: list = field(default_factory=list)
 
 	def countSkipped(self, kind: str) -> int:
 		return sum(1 for item in self.skipped if item.kind == kind)
@@ -261,7 +298,8 @@ class _Bound:
 	script: str | None
 	#: The NVDA keyboard layout of the binding's gesture, None for both.
 	layout: str | None
-	#: ``class`` (the class binds it itself), ``user`` (gestures.ini) or ``locale``.
+	#: ``class`` (the class binds it itself), ``user`` (gestures.ini), ``locale``, or ``addon`` (another
+	#: add-on's global plugin binds it; NVDA asks those before anything else).
 	source: str
 
 	@property
@@ -341,6 +379,9 @@ def _decide(target: tuple, entries: list, layout: str, overrideAllowed: bool) ->
 		# NVDA asks browse mode documents and the focused control before globalCommands: remove their
 		# own binding of these keys, or the JAWS command would never run there.
 		unbind = sorted({entry.location for entry in current if entry.source != "user" and entry.location != _GLOBAL_COMMANDS})
+	else:
+		# NVDA asks the add-ons' global plugins before any other class.
+		unbind = sorted({entry.location for entry in current if entry.source == "addon"})
 	return _Decision("bind", current, unbind)
 
 
@@ -363,8 +404,14 @@ def _decisionText(decision: _Decision) -> str:
 		if removed:
 			parts.append("take it away from " + ", ".join(removed))
 		return f"your NVDA input gestures (gestures.ini) {' and '.join(parts)}, and a new gesture can't take their place"
-	names = ", ".join(sorted({entry.script for entry in decision.others if entry.script}))
-	return f"NVDA already uses this keystroke for {names}"
+	names = ", ".join(sorted({entry.script for entry in decision.others if entry.script and entry.source != "addon"}))
+	addons = ", ".join(sorted({f"{_addonName(entry.module)} ({entry.script})" for entry in decision.others if entry.script and entry.source == "addon"}))
+	parts = []
+	if names:
+		parts.append(f"NVDA already uses this keystroke for {names}")
+	if addons:
+		parts.append(f"the add-on {addons} uses this keystroke")
+	return "; ".join(parts) or "NVDA already uses this keystroke"
 
 
 def _keptReason(decisions: dict, layouts: list, qualify: bool) -> str:
@@ -504,15 +551,126 @@ def planKeys(
 				winners[slot] = line
 
 	claimed: dict = {}
+	insertCandidates: list = []
 	for record in records:
 		if isinstance(record, SkippedKey):
 			plan.skipped.append(record)
 		else:
-			_planLine(plan, record, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed)
+			_planLine(plan, record, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, insertCandidates)
+	# Once every Caps Lock keystroke is planned, it is known what NVDA+key does for Caps Lock.
+	planned: set = set()
+	for line, name, winner in insertCandidates:
+		_planInsertKey(plan, line, name, winner, boundScripts, scriptExists, overrideConflicts, planned)
 	return plan
 
 
-def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed) -> None:
+def _isInsertKeyCandidate(line: _Line, winner: _Line, capsLockLayout: bool, decidingLayout) -> bool:
+	"""Whether ``line`` is an Insert keystroke that runs something else than the Caps Lock keystroke ``winner``.
+
+	Only keystrokes JAWS has in the layout that decides the NVDA layout (the Laptop layout) count, or in
+	its common sections: another chosen layout's keystrokes, such as Classic Laptop's, where Insert is the
+	JAWS key, don't work in the Laptop layout.
+	"""
+	sameLayout = line.layout is None or decidingLayout is None or line.layout.id == decidingLayout.id
+	return (
+		capsLockLayout
+		and sameLayout
+		and line.usesNvdaKey
+		and not line.capsLockKey(capsLockLayout)
+		and winner.capsLockKey(capsLockLayout)
+		and jawsKeyMap.normalizeScriptName(winner.script) != jawsKeyMap.normalizeScriptName(line.script)
+	)
+
+
+def _planInsertKey(plan, line, name, winner, boundScripts, scriptExists, overrideConflicts, planned) -> None:
+	"""Plan the Insert version of a key whose NVDA gesture the Caps Lock keystroke ``winner`` has.
+
+	What NVDA+key already runs for Caps Lock (JAWS's Caps Lock command, bound by this plan or an earlier
+	migration, or NVDA's own command) stays; Insert gets the Insert keystroke's command, unless the
+	user's own input gestures or another add-on use the keystroke, or it is NVDA's own and taking over
+	NVDA's keystrokes wasn't asked for.
+	"""
+
+	def skip(reason: str, kind: str):
+		plan.skipped.append(SkippedKey(line.key, line.script, line.section.name, reason, kind))
+
+	slot = (line.group, name, line.keys)
+	if slot in planned:
+		# The same Insert keystroke written twice in the key map (Insert+h and Insert+H).
+		return
+	planned.add(slot)
+	target = None
+	for module, className, nvdaScript, description in line.targets:
+		if scriptExists is None or scriptExists(module, className, nvdaScript):
+			target = (module, className, nvdaScript, description)
+			break
+	if target is None:
+		skip(f"this NVDA version has no {line.targets[0][2]} command", SKIP_NO_EQUIVALENT)
+		return
+	gesture = line.gesture if line.prefix == f"kb({name})" else f"kb({name}):{line.main}"
+	entries = [entry for entry in _boundEntries(boundScripts, gesture) if entry.layout in (None, name)]
+	unbound = {entry.location for entry in entries if entry.script is None}
+	current = [entry for entry in entries if entry.script is not None and entry.location not in unbound]
+	winnerTargets = {tuple(winnerTarget[:3]) for winnerTarget in winner.targets}
+
+	def isJaws(entry) -> bool:
+		return (entry.module, entry.className, entry.script) in winnerTargets
+
+	plannedWinner = any(
+		binding.jawsKey == winner.key and binding.section == winner.section.name and _identifierLayout(binding.gesture) in (None, name)
+		for binding in plan.bindings
+	)
+	capsLockOwns = plannedWinner or any(isJaws(entry) for entry in current)
+	users = [entry for entry in current if entry.source == "user" and not isJaws(entry)]
+	if users:
+		assigned = sorted({entry.script for entry in users})
+		skip(f"your NVDA input gestures (gestures.ini) assign {', '.join(assigned)} to this keystroke, which Insert keeps running", SKIP_CONFLICT)
+		return
+	addons = [entry for entry in current if entry.source == "addon"]
+	if addons:
+		names = ", ".join(sorted({f"{_addonName(entry.module)} ({entry.script})" for entry in addons}))
+		skip(f"the add-on {names} uses this keystroke, and NVDA may ask it first", SKIP_CONFLICT)
+		return
+	if not capsLockOwns and any((entry.module, entry.className, entry.script) == tuple(target[:3]) for entry in current):
+		skip("NVDA already uses this keystroke for the same command", SKIP_SAME)
+		return
+	nvdaOwn = [] if capsLockOwns else [entry for entry in current if not isJaws(entry)]
+	if nvdaOwn and not overrideConflicts:
+		skip(_decisionText(_Decision("conflict", nvdaOwn)), SKIP_CONFLICT)
+		return
+	plan.insertKeys.append(
+		InsertKey(
+			gesture=gesture,
+			module=target[0],
+			className=target[1],
+			script=target[2],
+			description=target[3],
+			jawsKey=line.key,
+			jawsScript=line.script,
+			section=line.section.name,
+			capsLockKey=winner.key,
+			capsLockScript=winner.script,
+			replaces=sorted({entry.script for entry in nvdaOwn if entry.script}),
+		),
+	)
+
+
+def describeGesture(gesture: str) -> str:
+	"""An NVDA gesture as a person reads it: ``NVDA+j``, or ``NVDA+j, only in NVDA's laptop keyboard layout``."""
+	prefix, _sep, main = str(gesture).partition(":")
+	layout = _identifierLayout(gesture)
+	if layout:
+		return f"{main}, only in NVDA's {layout} keyboard layout"
+	return main or str(gesture)
+
+
+def _addonName(module: str) -> str:
+	"""An add-on's plugin name from its module, such as ``goldenCursor`` for ``globalPlugins.goldenCursor``."""
+	parts = str(module or "").split(".")
+	return parts[1] if len(parts) > 1 and parts[0] == "globalPlugins" else str(module)
+
+
+def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, insertCandidates=None) -> None:
 	"""Add the bindings or the skipped entry for one keystroke."""
 
 	def skip(reason: str, kind: str):
@@ -531,7 +689,12 @@ def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scri
 	won = [name for name in layouts if winners[(line.group, name, line.keys)] is line]
 	if not won:
 		name = layouts[0]
-		reason = _lostTo(line, winners[(line.group, name, line.keys)], capsLock[name], deciding.get(name))
+		winner = winners[(line.group, name, line.keys)]
+		if insertCandidates is not None and _isInsertKeyCandidate(line, winner, capsLock[name], deciding.get(name)):
+			# Decided once the Caps Lock keystrokes are planned (see _planInsertKey).
+			insertCandidates.append((line, name, winner))
+			return
+		reason = _lostTo(line, winner, capsLock[name], deciding.get(name))
 		if reason:
 			skip(reason, SKIP_DUPLICATE)
 		return

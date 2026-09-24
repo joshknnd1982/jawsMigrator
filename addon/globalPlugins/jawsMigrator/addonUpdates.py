@@ -152,7 +152,7 @@ class Fetched:
 
 def _assistantVersion() -> str:
 	addon = updater.installedAddon()
-	return addon[0] if addon else "1.3"
+	return addon[0] if addon else "1.4"
 
 
 def latestClassicSpeech(session=None) -> updater.Release:

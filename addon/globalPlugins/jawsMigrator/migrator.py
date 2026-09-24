@@ -26,6 +26,7 @@ from . import (
 	classicSounds,
 	debugLog,
 	dictMap,
+	insertKeys,
 	jawsDetect,
 	jawsFiles,
 	jawsIndex,
@@ -701,8 +702,10 @@ def describePlan(plan: MigrationPlan) -> None:
 	if plan.voiceProfile is not None:
 		info = plan.voiceProfile.synth
 		debugLog.note(f"JAWS voice profile {plan.voiceProfileName}, synthesizer {plan.jawsSynthName} ({info.label}); JAWS ranges: rate {info.rate}, pitch {info.pitch}, volume {info.volume}")
+		chosenDriver = plan.chosenVoice.driver if plan.chosenVoice is not None else ""
+		eciRange = voices.ECI_RATE_RANGES.get(chosenDriver.lower(), voices.DEFAULT_ECI_RATE_RANGE) if voices.isEciDriver(chosenDriver) else None
 		for name, context in plan.voiceContexts.items():
-			debugLog.note(f"  {name}: {context.describe()} (JAWS values rate {context.rate}, pitch {context.pitch}, volume {context.volume}) -> NVDA {voices.scaledVoiceSettings(plan.voiceProfile, context)}")
+			debugLog.note(f"  {name}: {context.describe()} (JAWS values rate {context.rate}, pitch {context.pitch}, volume {context.volume}) -> NVDA {voices.scaledVoiceSettings(plan.voiceProfile, context, eciRange)}")
 	chosen = plan.chosenVoice
 	debugLog.note(f"NVDA voice: {chosen.label if chosen else 'NVDA keeps its own synthesizer and voice'}")
 	for profilePlan in plan.profiles:
@@ -1006,7 +1009,9 @@ class Migration:
 						result.failed.append((settingsMap.SettingChange(settingsMap.NVDA, ("speech", "symbolLevel"), level, "Punctuation level", "JAWS voice profile"), str(error)))
 				if voiceChoice is not None and plan.voiceProfile is not None:
 					self._say(f"Switching NVDA to {voiceChoice.label}")
-					baseValues = voices.scaledVoiceSettings(plan.voiceProfile, globalContext)
+					# JAWS keeps Eloquence's own speed: an NVDA Eloquence driver needs it as its percentage.
+					eciRange, rateBoost = nvdaApply.eciRateRange(voiceChoice.driver)
+					baseValues = voices.scaledVoiceSettings(plan.voiceProfile, globalContext, eciRange, rateBoost)
 					languageCode = jawsFiles.languageCodeForLcid(jawsFiles.lcidFromText(globalContext.synthLanguage)) or jawsFiles.JAWS_LANGUAGES.get(options.language, (None, None))[1]
 					messages = nvdaApply.applyVoice(voiceChoice.driver, voiceChoice.voiceId or voiceChoice.voiceName, globalContext.voiceName, languageCode, baseValues)
 					result.messages.extend(f"Voice: {message}" for message in messages)
@@ -1084,6 +1089,9 @@ class Migration:
 			for binding, error in failed:
 				debugLog.note(f"not added: {binding.gesture}: {error}")
 			result.messages.extend(f"Gesture {binding.gesture} could not be added: {error}" for binding, error in failed)
+		if options.keyboard:
+			for key in plan.keys.insertKeys:
+				debugLog.note(f"{key.gesture} with Insert -> {key.module}.{key.className}.{key.script} (JAWS {key.jawsKey}={key.jawsScript}); Caps Lock keeps {key.capsLockKey}={key.capsLockScript}")
 
 		# JAWS sounds in place of NVDA's own, through ClassicSpeech; NVDA's files are never changed.
 		if classicSpeech and options.sounds and plan.sounds:
@@ -1113,11 +1121,16 @@ class Migration:
 			updates["activateJawsProfileAtStartup"] = bool(options.activateAtStartup)
 		else:
 			self._retireEarlierJawsProfile(updates)
+		if options.keyboard:
+			# After the gestures, so the entries remember the input gestures the migration left in place.
+			updates[insertKeys.STATE_KEY] = insertKeys.toState(plan.keys.insertKeys, insertKeys.userScripts)
+			updates[insertKeys.VERSION_KEY] = insertKeys.VERSION
 		updates["lastMigration"] = {
 			"when": datetime.datetime.now().isoformat(timespec="seconds"),
 			"jaws": plan.index.jaws.displayName,
 			"target": profileName or "normal configuration",
 			"keyboardLayouts": [layout.id for layout in plan.chosenKeyboardLayouts()] if options.keyboard else [],
+			"overrideConflicts": bool(options.overrideConflicts) if options.keyboard else False,
 		}
 		if result.backup is not None:
 			updates["lastBackup"] = result.backup.path
@@ -1308,7 +1321,7 @@ class Migration:
 
 	def _writeOtherVoiceProfiles(self):
 		"""Save every other selected JAWS voice profile as NVDA's settings for its synthesizer."""
-		from . import classicSpeechWriter
+		from . import classicSpeechWriter, nvdaApply
 
 		plan = self.plan
 		facts = plan.facts
@@ -1320,7 +1333,8 @@ class Migration:
 			globalContext = profilePlan.contexts.get("Global")
 			if globalContext is None:
 				continue
-			values = voices.scaledVoiceSettings(profilePlan.profile, globalContext)
+			eciRange, rateBoost = nvdaApply.eciRateRange(option.driver)
+			values = voices.scaledVoiceSettings(profilePlan.profile, globalContext, eciRange, rateBoost)
 			knownVoices, knownVariants = voices.knownVoices(option.driver, facts.sapiVoices, facts.oneCoreVoices, facts.speechPlatformVoices)
 			resolver = classicSpeechWriter.VoiceResolver(
 				option.driver,

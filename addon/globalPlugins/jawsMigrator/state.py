@@ -48,6 +48,13 @@ DEFAULTS = {
 	"dictionariesRepaired": 0,
 	#: The version of the one-time repair of keystrokes from versions 1.0 to 1.2 (see gestureRepair).
 	"gesturesRepaired": 0,
+	#: JAWS Laptop layout keystrokes that run another command with Insert than with Caps Lock:
+	#: {normalized gesture: entry} (see insertKeys).
+	"insertKeys": {},
+	#: 1 once the Insert keystrokes of a migration were worked out (see insertKeys.repairOnce).
+	"insertKeysVersion": 0,
+	#: The version of the one-time repair of Eloquence rates from versions 1.0 to 1.3 (see rateRepair).
+	"eloquenceRateRepaired": 0,
 	#: A user of versions 1.0 to 1.2 was told once why their separate JAWS profile switches off.
 	"profileNoticeShown": False,
 	#: The user asked not to be offered ClassicSpeech each time the assistant opens.

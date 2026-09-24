@@ -16,7 +16,7 @@ import datetime
 import html
 import os
 
-from . import jawsIndex, managers, safety, settingsMap, voices
+from . import jawsIndex, keyPlan, managers, safety, settingsMap, voices
 
 
 def _e(text) -> str:
@@ -222,7 +222,15 @@ def build(plan, result) -> tuple[str, str]:
 		b.paragraph(f"NVDA's keyboard layout: {layout}.{then}" if layout else "NVDA's keyboard layout was left as it was.")
 	if options.keyboard:
 		# The keystrokes that became gestures, and why the others did not.
-		b.items((binding.label + f" [{binding.gesture}]" for binding in plan.keys.bindings), limit=400)
+		b.items((binding.label + f" [{keyPlan.describeGesture(binding.gesture)}]" for binding in plan.keys.bindings), limit=400)
+		if plan.keys.insertKeys:
+			b.paragraph(
+				f"{len(plan.keys.insertKeys)} JAWS keystrokes do one thing with Insert and another with Caps Lock as the JAWS key. "
+				"NVDA calls both NVDA+key, so the Caps Lock keystroke got the gesture, and the JAWS Migration Assistant runs the "
+				"Insert command whenever you hold Insert. Assigning the keystroke to something else in NVDA's Input Gestures dialog "
+				"makes Insert run your choice instead.",
+			)
+			b.items((key.label + f" [{keyPlan.describeGesture(key.gesture)}]" for key in plan.keys.insertKeys), limit=400)
 		skippedKinds = collections.Counter(item.kind for item in plan.keys.skipped)
 		labels = {
 			"same": "already the same in NVDA",

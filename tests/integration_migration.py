@@ -97,8 +97,9 @@ def main():
 	check(normal.get("speech", {}).get("synth") == "ibmeci", f"the normal configuration speaks with IBMTTS: {normal.get('speech', {}).get('synth')}")
 	ibm = normal.get("speech", {}).get("ibmeci", {})
 	check(choices == ("", False), f"a migration turns on no scheme and no Voice Profiles unless the user chooses them: {choices}")
-	# JAWS shows Eloquence rate 95 as 64 percent, and NVDA gets 64.
-	check(ibm.get("rate") == 64 and ibm.get("pitch") == 65 and ibm.get("variant") == "1", f"Eloquence Reed at JAWS's 64 percent in the normal configuration: {ibm}")
+	# JAWS keeps Eloquence's speed, 95 (shown as 64 percent). IBMTTS gives its rate percentages speeds 40 to 156,
+	# so JAWS's speed is NVDA's 47, not 64 (which would be speed 114, faster than JAWS).
+	check(ibm.get("rate") == 47 and ibm.get("pitch") == 65 and ibm.get("variant") == "1", f"Eloquence Reed at JAWS's speed 95 (NVDA 47) in the normal configuration: {ibm}")
 	check(conf.base.get("general", {}).get("playStartAndExitSounds") is False, "NVDA plays no sounds when it starts or exits, as JAWS")
 	# The earlier JAWS profile: kept as it was, no longer turned on at startup, and off now.
 	check(json.load(open(earlierProfile, encoding="utf-8")) == earlierValues, "the earlier JAWS settings profile is kept as it was")

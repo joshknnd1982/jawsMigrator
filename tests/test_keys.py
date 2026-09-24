@@ -142,6 +142,10 @@ def skipped(plan, jawsKey, section=None) -> list:
 	return [item for item in plan.skipped if item.jawsKey == jawsKey and (section is None or item.section == section)]
 
 
+def insertKeys(plan) -> list:
+	return [(key.gesture, key.jawsKey, key.script, key.capsLockKey) for key in plan.insertKeys]
+
+
 class TargetTests(unittest.TestCase):
 	"""Finding 1 and 6: no target may send the keystroke on; targets that depend on the keystroke."""
 
@@ -216,10 +220,17 @@ class PlanTests(NvdaTestCase):
 			for gesture in ("kb:NVDA+h", "kb(laptop):NVDA+h", "kb:NVDA+j", "kb(laptop):NVDA+j"):
 				self.assertEqual(bindings(plan, gesture), [], (nvdaLayout, gesture))
 			self.assertEqual(bindings(plan, "kb(laptop):NVDA+8"), [("kb(laptop):NVDA+8", "GlobalCommands", "leftMouseClick")])
-			reason = skipped(plan, "Insert+h", "Laptop Keys")[0]
-			self.assertEqual(reason.kind, keyPlan.SKIP_DUPLICATE)
-			self.assertIn("JAWSKey+H runs SaySentence", reason.reason)
-			self.assertEqual(skipped(plan, "Insert+8", "Laptop Keys")[0].kind, keyPlan.SKIP_DUPLICATE)
+			# The Insert keystrokes of those keys run their own command when Insert is held (see insertKeys).
+			self.assertEqual(
+				insertKeys(plan),
+				[
+					("kb(laptop):NVDA+h", "Insert+h", "activateInputGesturesDialog", "JAWSKey+H"),
+					("kb(laptop):NVDA+j", "Insert+J", "showGui", "JAWSKey+J"),
+					("kb(laptop):NVDA+8", "Insert+8", "activateInputGesturesDialog", "JAWSKey+8"),
+				],
+				nvdaLayout,
+			)
+			self.assertEqual(skipped(plan, "Insert+h", "Laptop Keys"), [])
 			self.assertEqual(skipped(plan, "JAWSKey+H", "Laptop Keys")[0].kind, keyPlan.SKIP_NO_EQUIVALENT)
 		# NVDA's desktop layout keeps the common keystrokes when NVDA may use it.
 		plan = self.plan(LAPTOP_JKM, nvdaLayout=None)
@@ -234,13 +245,15 @@ class PlanTests(NvdaTestCase):
 		text = LAPTOP_JKM.replace("JAWSKey+H=SaySentence\nInsert+h=HotKeyHelp\n", "Insert+h=HotKeyHelp\nJAWSKey+H=SaySentence\n")
 		plan = self.plan(text, nvdaLayout="laptop")
 		self.assertEqual(bindings(plan, "kb(laptop):NVDA+h"), [])
-		self.assertEqual(skipped(plan, "Insert+h", "Laptop Keys")[0].kind, keyPlan.SKIP_DUPLICATE)
+		self.assertEqual(insertKeys(plan)[0], ("kb(laptop):NVDA+h", "Insert+h", "activateInputGesturesDialog", "JAWSKey+H"))
 
 	def test_common_capslock_keystroke_beats_laptop_insert(self):
 		text = "[Common Keys]\nJAWSKey+Z=VirtualPCCursorToggle\n[Laptop Keys]\nInsert+Z=ShutDownJAWS\n[Laptop Modifiers]\nCapsLock=14|3|0|0|0|0|0x4000\n"
 		plan = self.plan(text, nvdaLayout="laptop", boundScripts=None)
 		self.assertEqual(bindings(plan), [("kb:NVDA+z", "GlobalCommands", "toggleVirtualBufferPassThrough")])
-		self.assertIn("Caps Lock", skipped(plan, "Insert+Z")[0].reason)
+		# Caps Lock keeps the gesture; Insert+Z runs its own command.
+		self.assertEqual(insertKeys(plan), [("kb(laptop):NVDA+z", "Insert+Z", "quit", "JAWSKey+Z")])
+		self.assertEqual(skipped(plan, "Insert+Z"), [])
 
 	def test_layouts_in_use_decide_same_and_conflict(self):
 		"""Finding 4: a common kb: keystroke is judged in the NVDA layouts that will be used."""

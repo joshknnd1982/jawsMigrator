@@ -13,6 +13,11 @@ percentage of that range (Eloquence rate 95 shows as 64%), and NVDA's settings
 are percentages, so the percentage carries over: JAWS 64% becomes NVDA 64%. Where
 a synthesizer's JAWS range isn't known, the value is not migrated at all.
 
+Eloquence's rate is the exception: JAWS keeps Eloquence's own speed, and NVDA's
+Eloquence drivers start their range at speed 40, so the same percentage is faster
+in NVDA. For an NVDA Eloquence driver the speed carries over instead (see
+``eciRatePercent``): JAWS's 111 (75%) becomes NVDA's 65 with the Eloquence add-on.
+
 The user's copy of a profile only holds what they changed; it is layered over the
 shared copy, as JAWS does. Nothing in this module needs NVDA.
 """
@@ -677,15 +682,54 @@ def matchVoice(voices: dict, jawsVoiceName: str, languageCode: str | None) -> st
 	return None
 
 
-def scaledVoiceSettings(profile: VoiceProfile, context: VoiceContext) -> dict:
-	"""NVDA 0 to 100 values for a JAWS context: ``{"rate": 57, "pitch": 65, "volume": 100}``."""
+#: The Eloquence speeds (ECI speed) NVDA's Eloquence drivers give their 0 and 100 percent rates: their
+#: ``minRate`` and ``maxRate``. IBMTTS uses 40 to 156, the Eloquence add-on 40 to 150.
+ECI_RATE_RANGES = {"ibmeci": (40, 156), "eloquence": (40, 150)}
+DEFAULT_ECI_RATE_RANGE = (40, 150)
+
+
+def isEciDriver(driver: str) -> bool:
+	"""Whether an NVDA synthesizer driver speaks with Eloquence (ETI Eloquence or IBMTTS)."""
+	name = (driver or "").lower()
+	return name in ECI_RATE_RANGES or name in JAWS_SYNTHS["eloq"].nvdaDrivers or "eloquence" in name or name.startswith("ibmeci")
+
+
+def eciRatePercent(jawsRate, eciRange, boost: float = 1.0) -> int | None:
+	"""NVDA's rate for a JAWS Eloquence rate, spoken by an NVDA Eloquence driver.
+
+	JAWS keeps Eloquence's own speed (its 0 to 148, shown as a percentage: 95 is 64%), and an NVDA
+	Eloquence driver gives its rate percentage the speed ``minRate`` plus that percentage of the rest
+	of its range, ``eciRange``. So the same speed is a lower percentage in NVDA: JAWS's 111 (75%) is
+	NVDA's 65 with the Eloquence add-on. ``boost`` is the driver's rate boost multiplier when it is on.
+	"""
+	if jawsRate is None or not eciRange:
+		return None
+	low, high = eciRange
+	if high <= low:
+		return None
+	try:
+		speed = float(jawsRate) / (boost or 1.0)
+	except (TypeError, ValueError):
+		return None
+	return int(max(0, min(100, round((speed - low) * 100.0 / (high - low)))))
+
+
+def scaledVoiceSettings(profile: VoiceProfile, context: VoiceContext, eciRange=None, rateBoost: float = 1.0) -> dict:
+	"""NVDA 0 to 100 values for a JAWS context: ``{"rate": 57, "pitch": 65, "volume": 100}``.
+
+	``eciRange`` is the Eloquence speed range of the NVDA driver the values are for, when that driver
+	speaks with Eloquence (see ``eciRatePercent``): JAWS's Eloquence rate is a speed, not a percentage.
+	"""
 	info = profile.synth
 	result = {}
 	for name, parameter in (("rate", info.rate), ("pitch", info.pitch), ("volume", info.volume)):
 		if parameter is None:
 			# The JAWS range of this setting isn't known for this synthesizer: leave NVDA's.
 			continue
-		percent = parameter.toPercent(getattr(context, name))
+		if name == "rate" and eciRange and info.family == "eloquence":
+			percent = eciRatePercent(context.rate, eciRange, rateBoost)
+		else:
+			percent = parameter.toPercent(getattr(context, name))
 		if percent is not None:
 			result[name] = percent
 	return result

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import wx
 
-from .. import backup, migrator, nvdaEnv
+from .. import backup, migrator, nvdaEnv, restorePreview
 from .common import BORDER, TITLE, labeled, messageBox, openFile, postPopup, prePopup, speak
 
 #: The restore dialog while it is open, so asking for it again brings it forward instead of opening a second one.
@@ -25,7 +25,9 @@ class RestoreDialog(wx.Dialog):
 			label=(
 				"Choose a backup to put back. NVDA's settings, input gestures, speech dictionaries, symbols, "
 				"configuration profiles, ClassicSpeech settings, add-ons and the add-ons' settings return to how they "
-				"were when it was made. Your settings and add-ons from right now are backed up first, so a restore can be undone too."
+				"were when it was made. With a backup from before a migration, NVDA behaves as it did then, for example "
+				"saying \"clickable\" on web pages again; Restore lists what you will notice before it changes anything. "
+				"Your settings and add-ons from right now are backed up first, so a restore can be undone too."
 			),
 		)
 		intro.Wrap(600)
@@ -83,6 +85,10 @@ class RestoreDialog(wx.Dialog):
 			if len(actions) > 12:
 				shown.append(f"and {len(actions) - 12} more")
 			details = ("\n\nAdd-ons, finished when NVDA restarts:\n" + "\n".join(shown)) if shown else "\n\nYour add-ons are already as they were in this backup."
+		# NVDA's own behaviour comes back with its settings: say what will sound different, and where it is set.
+		noticed = restorePreview.describe(info.path)
+		if noticed:
+			details = "\n\nYou will notice:\n" + "\n".join(noticed[:8]) + details
 		if messageBox(
 			f"Restore NVDA's settings, add-ons and add-on settings from {info.label}? Your current settings and add-ons are backed up first.{details}",
 			TITLE,
