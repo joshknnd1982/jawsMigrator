@@ -195,20 +195,42 @@ def main():
 		check(not settingsDialogs.NVDASettingsDialog.categoryClasses, "unloading removes the Settings panel")
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
-		# no menus, no NVDA+Shift+J, nothing in Input Gestures. A module that can't load now costs only its feature.
+		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
+		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
+		def loadsAnyway(why, sound):
+			played.clear()
+			plugin = jawsMigrator.GlobalPlugin()
+			preferences = [item.GetItemLabelText() for item in tray.preferencesMenu.GetMenuItems()]
+			check(
+				"JAWS Migration Assistant settings..." in preferences and tray.toolsMenu.GetMenuItems() and settingsDialogs.NVDASettingsDialog.categoryClasses,
+				f"{why}, the assistant still loads, with its Preferences item, Tools submenu and Settings panel",
+			)
+			plugin.script_commandLayer(None)
+			check(plugin._layerActive and played == [sound], f"and NVDA+Shift+J starts the layer, with {sound}: {played}")
+			plugin.terminate()
+
 		for name in ("layerSound", "labelRepeats"):
 			delattr(jawsMigrator, name)
 			sys.modules[f"jawsMigrator.{name}"] = None
 		try:
-			played.clear()
-			plugin = jawsMigrator.GlobalPlugin()
-			check(tray.toolsMenu.GetMenuItems() and settingsDialogs.NVDASettingsDialog.categoryClasses, "with a module NVDA can't load, the assistant still loads")
-			plugin.script_commandLayer(None)
-			check(plugin._layerActive and played == [("beep", 660, 40)], f"and NVDA+Shift+J starts the layer, with a beep: {played}")
-			plugin.terminate()
+			loadsAnyway("with modules NVDA can't load", ("beep", 660, 40))
 		finally:
 			for name in ("layerSound", "labelRepeats"):
 				del sys.modules[f"jawsMigrator.{name}"]
+
+		def broken(*args, **kwargs):
+			raise RuntimeError("broken for the test")
+
+		steps = [(jawsMigrator.GlobalPlugin, name) for name in ("applyRuntimeSettings", "_followConfigResets", "_scheduleStartupTasks")]
+		steps.append((jawsMigrator.updater.UpdateChecker, "scheduleAutomaticCheck"))
+		saved = [(owner, name, getattr(owner, name)) for owner, name in steps]
+		for owner, name in steps:
+			setattr(owner, name, broken)
+		try:
+			loadsAnyway("with every other step of its start failing", layerSound.copyPath() if jawsSound else ("beep", 660, 40))
+		finally:
+			for owner, name, original in saved:
+				setattr(owner, name, original)
 	finally:
 		frame.Destroy()
 		shutil.rmtree(configDir, ignore_errors=True)

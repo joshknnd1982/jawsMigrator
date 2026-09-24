@@ -111,30 +111,40 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		#: JAWS keystrokes that differ with Insert and with Caps Lock as the JAWS key (see insertKeys).
 		self._insertKeys: dict = {}
 		self._keymapCache = None
+		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
 			return
-		try:
-			self.applyRuntimeSettings()
-		except Exception:
-			# The assistant's menus, settings and commands must work even when one of its own settings can't apply.
-			debugLog.error("could not apply the assistant's own settings")
-		try:
-			import config
+		# Nothing may escape from here: NVDA leaves out a plugin whose start fails, with its menu items, its
+		# Settings panel and all its commands, as version 1.5 lost them to one module NVDA's Python lacks.
+		# The menu items and the Settings panel come first, so whatever else fails, the assistant can still be
+		# opened, a backup restored and the debug log read.
+		for what, step in (
+			("add the NVDA menu items", self._createMenu),
+			("add the settings panel", self._addSettingsPanel),
+			("apply the assistant's own settings", self.applyRuntimeSettings),
+			("follow NVDA's configuration reloads", self._followConfigResets),
+			("schedule the automatic update check", self.updater.scheduleAutomaticCheck),
+			("schedule what runs after NVDA starts", self._scheduleStartupTasks),
+		):
+			try:
+				step()
+			except Exception:
+				debugLog.error(f"could not {what}")
 
-			# Reloading NVDA's configuration rebuilds its symbol dictionaries, without JAWS's rule for times.
-			config.post_configReset.register(self._onConfigReset)
-		except Exception:
-			debugLog.error("could not follow NVDA's configuration reloads")
-		self._createMenu()
-		try:
-			from .gui import settingsPanel
+	def _addSettingsPanel(self):
+		from .gui import settingsPanel
 
-			settingsPanel.JawsMigratorSettingsPanel.plugin = self
-			nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
-		except Exception:
-			debugLog.error("could not add the settings panel")
-		self.updater.scheduleAutomaticCheck()
+		settingsPanel.JawsMigratorSettingsPanel.plugin = self
+		nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
+
+	def _followConfigResets(self):
+		import config
+
+		# Reloading NVDA's configuration rebuilds its symbol dictionaries, without JAWS's rule for times.
+		config.post_configReset.register(self._onConfigReset)
+
+	def _scheduleStartupTasks(self):
 		self._startupProfileTimer = wx.CallLater(2000, self._activateProfileAtStartup)
 		# Voices written by versions 1.0 to 1.2 get their fixed rate, pitch and volume taken out, once.
 		self._repairTimer = wx.CallLater(20000, self._repairVoices)
@@ -201,14 +211,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		JAWS's rule for a colon between digits, a control's type and state said once, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
+		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
 		"""
-		data = state.load()
-		if data.get("jawsSoundsEnabled") or data.get("soundReplacements"):
-			# Version 1.1 played JAWS sounds itself. They play through ClassicSpeech now (classicSounds).
-			state.update({"jawsSoundsEnabled": False, "soundReplacements": {}})
-			_log().info("jawsMigrator: JAWS sounds now play through ClassicSpeech; version 1.1's own sound replacement is off")
-		self._sleepApps = {str(name).lower() for name in data.get("sleepApps") or []}
-		self._insertKeys = insertKeys.load(data)
+		try:
+			data = state.load()
+			if data.get("jawsSoundsEnabled") or data.get("soundReplacements"):
+				# Version 1.1 played JAWS sounds itself. They play through ClassicSpeech now (classicSounds).
+				state.update({"jawsSoundsEnabled": False, "soundReplacements": {}})
+				_log().info("jawsMigrator: JAWS sounds now play through ClassicSpeech; version 1.1's own sound replacement is off")
+			self._sleepApps = {str(name).lower() for name in data.get("sleepApps") or []}
+			self._insertKeys = insertKeys.load(data)
+		except Exception:
+			debugLog.error("could not read the assistant's own settings")
+			data = {}
 		try:
 			from . import numberSymbols
 
