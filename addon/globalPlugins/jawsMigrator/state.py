@@ -59,8 +59,11 @@ DEFAULTS = {
 	"profileNoticeShown": False,
 	#: The user asked not to be offered ClassicSpeech each time the assistant opens.
 	"classicSpeechOfferDeclined": False,
-	#: NVDA says a control's type and state once, when a web page repeats them in the label (see labelRepeats).
+	#: NVDA says a control's type and state once, when a web page repeats them in the label (see labelRepeats),
+	#: and when NVDA would report a change it has just said (see changeRepeats).
 	"sayTypeAndStateOnce": True,
+	#: NVDA+Shift+J plays JAWS's layered keystroke sound; a beep when turned off (see layerSound).
+	"playJawsLayerSound": True,
 }
 
 _lock = threading.RLock()

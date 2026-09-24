@@ -1,7 +1,8 @@
 # Loads the global plugin the way NVDA does, with stand-ins for NVDA's modules and real wx menus,
 # and checks what it adds: the Tools submenu, NVDA menu, Preferences, JAWS Migration Assistant
-# settings, the Settings panel, the NVDA+Shift+J commands and their sound, the check that has NVDA
-# say a control's type and state once; and that unloading takes it all away.
+# settings, the Settings panel, the NVDA+Shift+J commands and their sound (or the beep, when chosen),
+# the check that has NVDA say a control's type and state once, the focus and change notices it passes
+# on to NVDA; and that unloading takes it all away.
 # Needs wxPython. NVDA's settings folder is a temporary one. JAWS's layered keystroke sound is read
 # from this computer's JAWS, if there is one; nothing else is read or written.
 # Run: python tests/plugin_smoke.py
@@ -139,12 +140,22 @@ def main():
 		check(labelRepeats.isRegistered() and handlers == [labelRepeats._speechFilter, otherAddon], "a control's type and state are said once, checked before other add-ons' speech filters")
 		spoken = speechFilter._handlers[id(labelRepeats._speechFilter)](["As low as $49.97/mo, radio button checked 1 of 2", "radio button", "checked"])
 		check(spoken == ["As low as $49.97/mo", "radio button", "checked"], f"the tester's radio button: {spoken}")
+		from jawsMigrator import changeRepeats
+
+		check(changeRepeats.isRegistered() and plugin._changeRepeats is changeRepeats, "what activating a control changed is said once, with it")
 		jawsMigrator.state.set(labelRepeats.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "turned off in the Settings panel, NVDA's speech is left alone")
+		check(not changeRepeats.isRegistered(), "and so are NVDA's change notices")
 		jawsMigrator.state.set(labelRepeats.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
-		check(labelRepeats.isRegistered(), "and on again")
+		check(labelRepeats.isRegistered() and changeRepeats.isRegistered(), "and on again")
+		# The focus and NVDA's change notices go on to NVDA, once each.
+		handled = []
+		control = types.SimpleNamespace(appModule=None, treeInterceptor=None, _speakObjectPropertiesCache={})
+		for event in ("gainFocus", "stateChange", "IA2AttributeChange", "nameChange"):
+			getattr(plugin, f"event_{event}")(control, lambda event=event: handled.append(event))
+		check(handled == ["gainFocus", "stateChange", "IA2AttributeChange", "nameChange"], f"NVDA handles every notice: {handled}")
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 
@@ -160,6 +171,19 @@ def main():
 		plugin._GlobalPlugin__gestures = {"kb:NVDA+shift+j": "commandLayer"}
 		plugin.script_commandLayer(None)
 		check(not plugin._layerActive and len(played) == 1, "pressed again, it leaves the layer quietly")
+		# The beep, when chosen in NVDA's Settings, JAWS Migration Assistant; saving there applies the settings again.
+		played.clear()
+		jawsMigrator.state.set(layerSound.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		plugin.script_commandLayer(None)
+		check(played == [("beep", 660, 40)] and plugin._layerActive, f"with the beep chosen, NVDA+Shift+J beeps: {played}")
+		plugin.script_commandLayer(None)
+		played.clear()
+		jawsMigrator.state.set(layerSound.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		plugin.script_commandLayer(None)
+		check(played == ([layerSound.copyPath()] if jawsSound else [("beep", 660, 40)]), f"and JAWS's sound again when chosen: {played}")
+		plugin.script_commandLayer(None)
 		tray = frame.sysTrayIcon
 		preferences = [item.GetItemLabelText() for item in tray.preferencesMenu.GetMenuItems()]
 		check("JAWS Migration Assistant settings..." in preferences, f"NVDA menu, Preferences: {preferences}")
@@ -194,6 +218,7 @@ def main():
 		check(not tray.toolsMenu.GetMenuItems(), "unloading removes the Tools submenu")
 		check(not settingsDialogs.NVDASettingsDialog.categoryClasses, "unloading removes the Settings panel")
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
+		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -207,15 +232,21 @@ def main():
 			)
 			plugin.script_commandLayer(None)
 			check(plugin._layerActive and played == [sound], f"and NVDA+Shift+J starts the layer, with {sound}: {played}")
+			handled = []
+			control = types.SimpleNamespace(appModule=None, treeInterceptor=None)
+			for event in ("gainFocus", "stateChange", "IA2AttributeChange", "nameChange"):
+				getattr(plugin, f"event_{event}")(control, lambda event=event: handled.append(event))
+			check(len(handled) == 4, f"and NVDA handles the focus and every change notice: {handled}")
 			plugin.terminate()
 
-		for name in ("layerSound", "labelRepeats"):
+		unloadable = ("layerSound", "labelRepeats", "changeRepeats")
+		for name in unloadable:
 			delattr(jawsMigrator, name)
 			sys.modules[f"jawsMigrator.{name}"] = None
 		try:
 			loadsAnyway("with modules NVDA can't load", ("beep", 660, 40))
 		finally:
-			for name in ("layerSound", "labelRepeats"):
+			for name in unloadable:
 				del sys.modules[f"jawsMigrator.{name}"]
 
 		def broken(*args, **kwargs):

@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import labelRepeats, nvdaEnv, state
+from .. import labelRepeats, layerSound, nvdaEnv, state
 from .common import checkListClass, openFile
 
 
@@ -40,6 +40,9 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# Some web pages put "radio button checked 1 of 2" in a control's label, which NVDA would say twice.
 		self.sayOnce = helper.addItem(wx.CheckBox(self, label="Say a control's type and state &once, even when its label repeats them"))
 		self.sayOnce.SetValue(labelRepeats.wanted(state.load()))
+		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
+		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
+		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
 
 		from .. import classicSounds
 
@@ -112,6 +115,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownAutoUpdate = self.autoUpdate.GetValue()
 		self._shownAtStartup = self.atStartup.GetValue()
 		self._shownSayOnce = self.sayOnce.GetValue()
+		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
 		plugin = type(self).plugin
@@ -158,6 +162,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates["activateJawsProfileAtStartup"] = self.atStartup.GetValue()
 		if self.sayOnce.GetValue() != self._shownSayOnce:
 			updates[labelRepeats.STATE_KEY] = self.sayOnce.GetValue()
+		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
+			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}
 		if cleared:
 			updates["sleepApps"] = [name for name in state.get("sleepApps") or [] if name not in cleared]

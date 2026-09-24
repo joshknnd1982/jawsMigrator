@@ -10,8 +10,9 @@ its own gesture in Input Gestures), and keeps the migrated behavior working
 while NVDA runs: JAWS sound effects in place of NVDA's sounds, sleep mode in
 the applications where JAWS slept, and the JAWS settings profile at startup.
 It also has NVDA say a control's type and state once when a web page repeats
-them in the control's label (see labelRepeats), and NVDA+Shift+J plays JAWS's
-layered keystroke sound (see layerSound).
+them in the control's label (see labelRepeats), or when NVDA would say again
+what activating a control in browse mode changed (see changeRepeats), and
+NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound).
 """
 
 from __future__ import annotations
@@ -111,6 +112,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		#: JAWS keystrokes that differ with Insert and with Caps Lock as the JAWS key (see insertKeys).
 		self._insertKeys: dict = {}
 		self._keymapCache = None
+		#: The changeRepeats module, once loaded: NVDA's focus and change notices go through it.
+		self._changeRepeats = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -198,6 +201,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			labelRepeats.unregister()
 		except Exception:
 			pass
+		self._changeRepeats = None
+		try:
+			from . import changeRepeats
+
+			changeRepeats.unregister()
+		except Exception:
+			pass
 		super().terminate()
 
 	def _onConfigReset(self, factoryDefaults=False):
@@ -208,7 +218,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
-		JAWS's rule for a colon between digits, a control's type and state said once, and the layer's sound.
+		JAWS's rule for a colon between digits, a control's type and state said once (and a change said once),
+		and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -244,6 +255,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				labelRepeats.unregister()
 		except Exception:
 			debugLog.error("could not apply saying a control's type and state once")
+		try:
+			from . import changeRepeats
+
+			# Part of saying a control's type and state once: what activating a control changed is said once.
+			if changeRepeats.wanted(data):
+				changeRepeats.register()
+			else:
+				changeRepeats.unregister()
+			self._changeRepeats = changeRepeats
+		except Exception:
+			debugLog.error("could not apply saying a change once")
 		try:
 			from . import layerSound
 
@@ -717,6 +739,30 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def event_gainFocus(self, obj, nextHandler):
 		self._checkSleep(obj)
+		# Browse mode says what activating a control changed as the focus arrives; the control's own notices
+		# of the same change, which follow, aren't said again (see changeRepeats).
+		changeRepeats = self._changeRepeats
+		activation = changeRepeats.beforeFocus(obj) if changeRepeats is not None else None
+		nextHandler()
+		if changeRepeats is not None:
+			changeRepeats.afterFocus(obj, activation)
+
+	def _beforeChange(self, obj, name):
+		changeRepeats = self._changeRepeats
+		if changeRepeats is not None:
+			changeRepeats.beforeChange(obj, name)
+
+	def event_stateChange(self, obj, nextHandler):
+		self._beforeChange(obj, "states")
+		nextHandler()
+
+	def event_IA2AttributeChange(self, obj, nextHandler):
+		# NVDA's IAccessible objects handle this as a change of their states.
+		self._beforeChange(obj, "states")
+		nextHandler()
+
+	def event_nameChange(self, obj, nextHandler):
+		self._beforeChange(obj, "name")
 		nextHandler()
 
 	# -- the command layer ------------------------------------------------------------------

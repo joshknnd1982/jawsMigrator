@@ -5,7 +5,7 @@
 #   checked 1 of 2, radio button, checked" (labelRepeats). The speech sequences are the ones in the
 #   tester's NVDA log; NVDA's words are its English ones;
 # - NVDA+Shift+J plays JAWS's layered keystroke sound, KeyLayerSound.wav (layerSound), from imitation
-#   JAWS folders in a temporary folder.
+#   JAWS folders in a temporary folder, or, since version 1.8, a beep when the user chose it.
 # Run: python -m unittest tests.test_v15_fixes -v
 
 import collections
@@ -461,7 +461,7 @@ class LayerSoundTests(unittest.TestCase):
 		missing = self._jaws(version="2021", sharedSounds=())
 		self.assertTrue(os.path.samefile(layerSound.jawsLayerSound([missing, newest], "JAWS 2021"), self._shared(newest)))
 
-	def _playing(self, installations, migrated="JAWS 2026", writable=True):
+	def _playing(self, installations, migrated="JAWS 2026", writable=True, chosen=True):
 		played = []
 		nvwave = types.SimpleNamespace(playWaveFile=lambda fileName, asynchronous=True: played.append((fileName, asynchronous)))
 		config = os.path.join(self.root, "nvda")
@@ -470,6 +470,7 @@ class LayerSoundTests(unittest.TestCase):
 			mock.patch.object(nvdaEnv, "configDir", return_value=config),
 			mock.patch.object(nvdaEnv, "shouldWriteToDisk", return_value=writable),
 			mock.patch.object(state, "get", side_effect=lambda key: {"jaws": migrated} if key == "lastMigration" else None),
+			mock.patch.object(state, "load", return_value={**state.DEFAULTS, layerSound.STATE_KEY: chosen}),
 		):
 			result = layerSound.play(nvwave)
 			copy = layerSound.copyPath()
@@ -489,6 +490,17 @@ class LayerSoundTests(unittest.TestCase):
 		# Turned off in JAWS: the layer beeps, whatever copy there is.
 		off = self._jaws(version="2025", userJcf="[options]\nKeyLayerSound=\n")
 		self.assertEqual(self._playing([off], "JAWS 2025")[:2], (False, []))
+
+	def test_the_beep_when_chosen(self):
+		# NVDA's Settings, JAWS Migration Assistant: "Play JAWS's layered keystroke sound for NVDA+Shift+J, instead of a beep".
+		self.assertTrue(layerSound.wanted(dict(state.DEFAULTS)), "JAWS's sound, unless the user chose the beep")
+		self.assertFalse(layerSound.wanted({layerSound.STATE_KEY: False}))
+		jaws = self._jaws()
+		result, played, copy = self._playing([jaws], chosen=False)
+		self.assertEqual((result, played), (False, []), "the layer beeps")
+		self.assertTrue(os.path.isfile(copy), "JAWS's sound is copied all the same")
+		# Chosen again after JAWS is uninstalled, the copy plays.
+		self.assertEqual(self._playing([])[:2], (True, [(copy, True)]))
 
 	def test_jaws_file_when_nothing_may_be_written(self):
 		jaws = self._jaws()

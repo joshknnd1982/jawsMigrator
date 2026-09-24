@@ -417,7 +417,16 @@ class SettingsPanelTests(unittest.TestCase):
 		from jawsMigrator import state
 		from jawsMigrator.gui import settingsPanel
 
-		state.update({"sleepApps": ["baseball"], "jawsProfileName": "", "activateJawsProfileAtStartup": False, "checkForUpdatesAutomatically": True, "sayTypeAndStateOnce": True})
+		state.update(
+			{
+				"sleepApps": ["baseball"],
+				"jawsProfileName": "",
+				"activateJawsProfileAtStartup": False,
+				"checkForUpdatesAutomatically": True,
+				"sayTypeAndStateOnce": True,
+				"playJawsLayerSound": True,
+			},
+		)
 		self.calls = []
 		settingsPanel.JawsMigratorSettingsPanel.plugin = types.SimpleNamespace(
 			openAssistant=lambda: self.calls.append("openAssistant"),
@@ -441,13 +450,22 @@ class SettingsPanelTests(unittest.TestCase):
 
 		# While the panel is open, a migration adds applications and turns the profile on at startup
 		# (and a restore of the assistant's state could turn saying a control's type and state once off).
-		state.update({"sleepApps": ["baseball", "winword"], "jawsProfileName": "JAWS settings", "activateJawsProfileAtStartup": True, "sayTypeAndStateOnce": False})
+		state.update(
+			{
+				"sleepApps": ["baseball", "winword"],
+				"jawsProfileName": "JAWS settings",
+				"activateJawsProfileAtStartup": True,
+				"sayTypeAndStateOnce": False,
+				"playJawsLayerSound": False,
+			},
+		)
 		self.dialog.panel.onSave()
 		state.forget()
 		self.assertEqual(state.get("sleepApps"), ["baseball", "winword"])
 		self.assertTrue(state.get("activateJawsProfileAtStartup"))
 		self.assertTrue(state.get("checkForUpdatesAutomatically"))
 		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("playJawsLayerSound"), "a check box the user didn't change saves nothing")
 
 	def test_sayingTypeAndStateOnceIsSavedAndApplied(self):
 		from jawsMigrator import labelRepeats, state
@@ -465,6 +483,23 @@ class SettingsPanelTests(unittest.TestCase):
 		panel.onSave()
 		state.forget()
 		self.assertTrue(state.get(labelRepeats.STATE_KEY))
+
+	def test_layerSoundChoiceIsSavedAndApplied(self):
+		from jawsMigrator import layerSound, state
+
+		panel = self.dialog.panel
+		self.assertEqual(panel.playLayerSound.GetLabel(), "Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep")
+		self.assertTrue(panel.playLayerSound.GetValue(), "checked unless the beep was chosen")
+		panel.playLayerSound.SetValue(False)
+		self.calls.clear()
+		panel.onSave()
+		state.forget()
+		self.assertFalse(state.get(layerSound.STATE_KEY))
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], "NVDA+Shift+J beeps from now on")
+		panel.playLayerSound.SetValue(True)
+		panel.onSave()
+		state.forget()
+		self.assertTrue(state.get(layerSound.STATE_KEY))
 
 	def test_clearingAnApplicationRemovesOnlyThatOne(self):
 		from jawsMigrator import state

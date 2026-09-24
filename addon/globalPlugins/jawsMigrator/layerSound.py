@@ -14,6 +14,10 @@ The sound comes from the JAWS the user migrated from, or else the newest JAWS on
 looked up the first time the layer starts after NVDA starts, and copied into the assistant's own
 folder (``jawsMigrator\\sounds``), so it keeps playing after JAWS is uninstalled. JAWS's file is only
 read. Where JAWS plays no layer sound, or none is found, the layer beeps as before.
+
+The user can choose the beep instead, in NVDA's Settings, JAWS Migration Assistant (``STATE_KEY``,
+on by default). The sound is still looked up and copied then, so it is there if they choose it again
+after JAWS is uninstalled.
 """
 
 from __future__ import annotations
@@ -25,6 +29,8 @@ import tempfile
 
 from . import debugLog, jawsDetect, jawsFiles, nvdaEnv, safety, state
 
+#: The assistant's setting (state.json): the layer plays JAWS's sound when on, beeps when off.
+STATE_KEY = "playJawsLayerSound"
 #: The Default.jcf option naming the sound.
 OPTION = ("options", "KeyLayerSound")
 #: JAWS's own choice, used when Default.jcf doesn't name one.
@@ -35,6 +41,11 @@ COPY_NAME = "keyLayer.wav"
 
 #: The sound the layer plays, once looked up: its path, or "" to beep. None until then.
 _sound: str | None = None
+
+
+def wanted(stateData: dict) -> bool:
+	"""Whether the layer plays JAWS's sound: on unless the user chose the beep."""
+	return isinstance(stateData, dict) and bool(stateData.get(STATE_KEY, True))
 
 
 def soundName(jcf: jawsFiles.IniFile | None) -> str:
@@ -154,7 +165,7 @@ def keepCopy(source: str) -> str | None:
 
 
 def find() -> str:
-	"""The sound the layer plays: a path, or "" to beep."""
+	"""JAWS's layered keystroke sound for the layer: a path, or "" when there is none, so the layer beeps."""
 	migrated = state.get("lastMigration")
 	migratedFrom = str(migrated.get("jaws") or "") if isinstance(migrated, dict) else ""
 	try:
@@ -167,22 +178,27 @@ def find() -> str:
 		return ""
 	if source:
 		sound = keepCopy(source) or source
-		debugLog.note(f"NVDA+Shift+J plays JAWS's layered keystroke sound, {source}" + (f", copied to {sound}" if sound != source else ""))
+		debugLog.note(f"JAWS's layered keystroke sound, for NVDA+Shift+J: {source}" + (f", copied to {sound}" if sound != source else ""))
 		return sound
 	copy = copyPath()
 	if os.path.isfile(copy):
-		debugLog.note(f"NVDA+Shift+J plays the copy of JAWS's layered keystroke sound, {copy}")
+		debugLog.note(f"JAWS's layered keystroke sound, for NVDA+Shift+J: the assistant's copy, {copy}")
 		return copy
 	debugLog.note("no JAWS layered keystroke sound was found, so NVDA+Shift+J beeps")
 	return ""
 
 
 def play(nvwaveModule=None) -> bool:
-	"""Play JAWS's layered keystroke sound. False when there is none, so the layer beeps instead."""
+	"""Play JAWS's layered keystroke sound. False when there is none, or the user chose the beep, so the layer beeps."""
 	global _sound
+	chosen = wanted(state.load())
 	if _sound is None:
+		# Looked up, and copied, even when the beep is chosen: the copy must be there if the user chooses the sound
+		# again after JAWS is uninstalled.
 		_sound = find()
-	if not _sound or not os.path.isfile(_sound):
+		if _sound and not chosen:
+			debugLog.note("NVDA+Shift+J beeps instead, as chosen in NVDA's Settings, JAWS Migration Assistant")
+	if not chosen or not _sound or not os.path.isfile(_sound):
 		return False
 	try:
 		if nvwaveModule is None:
