@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import autoFormsMode, backspaceEcho, documentPolling, driveLetters, labelRepeats, layerSound, listCoordinates, listPosition, nvdaEnv, quickNavHeadings, state, trayChanges
+from .. import autoFormsMode, backspaceEcho, documentPolling, driveLetters, labelRepeats, layerSound, listCoordinates, listPosition, nvdaEnv, quickNavHeadings, startupFocus, state, trayChanges
 from .common import checkListClass, openFile
 
 
@@ -43,6 +43,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# A temperature monitor changes its system tray icon's name every few seconds, which NVDA would read each time.
 		self.quietTray = helper.addItem(wx.CheckBox(self, label="Say a system &tray icon when you move to it, not each time its program changes it"))
 		self.quietTray.SetValue(trayChanges.wanted(state.load()))
+		# Control+Alt+N, the key of NVDA's desktop shortcut, leaves the focus on the taskbar ("Copilot pinned");
+		# JAWS, started with its own desktop shortcut's key, goes back to the window you were in.
+		self.backFromTaskbar = helper.addItem(
+			wx.CheckBox(self, label="When NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, go back to the window you were in"),
+		)
+		self.backFromTaskbar.SetValue(startupFocus.wanted(state.load()))
 		# NVDA's H says "main landmark" before a heading in the page's main part; JAWS's H says the heading alone.
 		self.headingAlone = helper.addItem(
 			wx.CheckBox(self, label="When &quick navigation moves to a heading, don't say the landmark, region or list it is in"),
@@ -157,6 +163,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownAtStartup = self.atStartup.GetValue()
 		self._shownSayOnce = self.sayOnce.GetValue()
 		self._shownQuietTray = self.quietTray.GetValue()
+		self._shownBackFromTaskbar = self.backFromTaskbar.GetValue()
 		self._shownHeadingAlone = self.headingAlone.GetValue()
 		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
 		self._shownPositionLikeJaws = self.positionLikeJaws.GetValue()
@@ -213,6 +220,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[labelRepeats.STATE_KEY] = self.sayOnce.GetValue()
 		if self.quietTray.GetValue() != self._shownQuietTray:
 			updates[trayChanges.STATE_KEY] = self.quietTray.GetValue()
+		if self.backFromTaskbar.GetValue() != self._shownBackFromTaskbar:
+			updates[startupFocus.STATE_KEY] = self.backFromTaskbar.GetValue()
 		if self.headingAlone.GetValue() != self._shownHeadingAlone:
 			updates[quickNavHeadings.STATE_KEY] = self.headingAlone.GetValue()
 		if self.listNoCoordinates.GetValue() != self._shownListNoCoordinates:

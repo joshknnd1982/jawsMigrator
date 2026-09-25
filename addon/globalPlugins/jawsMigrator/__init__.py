@@ -24,8 +24,10 @@ Support, which the assistant offers to install, doesn't read a whole document
 20 times a second, which froze NVDA in a large file (see documentPolling);
 NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); opening
 Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus);
-and NVDA's Elements List opens while a web page is still changing, instead of
-being left half made and unseen with the focus in it (see elementsList).
+NVDA's Elements List opens while a web page is still changing, instead of
+being left half made and unseen with the focus in it (see elementsList); and
+NVDA started with its desktop shortcut's key comes up in the window you were
+in, not on the taskbar, as JAWS does (see startupFocus).
 """
 
 from __future__ import annotations
@@ -143,6 +145,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("add the NVDA menu items", self._createMenu),
 			("add the settings panel", self._addSettingsPanel),
 			("apply the assistant's own settings", self.applyRuntimeSettings),
+			("go back to the window you were in when NVDA starts on the taskbar", self._backFromTaskbar),
 			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
 			("keep NVDA's Elements List working while a web page changes", self._guardElementsList),
 			("follow NVDA's configuration reloads", self._followConfigResets),
@@ -159,6 +162,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		settingsPanel.JawsMigratorSettingsPanel.plugin = self
 		nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
+
+	def _backFromTaskbar(self):
+		from . import startupFocus
+
+		# Not a JAWS setting: NVDA's desktop shortcut's key leaves the focus on the taskbar; JAWS goes back to your window.
+		if startupFocus.wanted(state.load()):
+			startupFocus.atStart()
 
 	def _keepOutlookFocus(self):
 		from . import outlookFocus

@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.17
+- Version: 1.18
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.18](#whats-new-in-118)
 - [What's new in 1.17](#whats-new-in-117)
 - [What's new in 1.16](#whats-new-in-116)
 - [What's new in 1.15](#whats-new-in-115)
@@ -69,10 +70,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.17.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.18.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.18
+
+Fixes from a tester's reports on version 1.17. The tester asked for NVDA to behave as JAWS does, and each change below does what JAWS does in the same place:
+
+- **NVDA+F7 never reaches the program.** The tester was in Edge's Downloads panel, pressed Alt+Left, then NVDA+F7 three seconds later. Edge said "Turn on caret browsing?". NVDA has browse mode's commands only while a browse mode document is ready. The Downloads panel's document had stopped being ready, so NVDA had no command for NVDA+F7. It gave the key to Edge, less NVDA's own key, and F7 is Edge's key for caret browsing. JAWS's Insert+F7 never reaches the program. Now a key that opens the Elements List never does either. That is NVDA+F7, or a key the migration gave the list, such as JAWS's Insert+F6 or Insert+F5, whose F6 and F5 would have moved Edge to its address bar or reloaded the page. When the page is still loading, NVDA opens the list as soon as the page is ready, if that takes no more than three seconds and you press nothing else meanwhile. Otherwise NVDA says what JAWS says there: "This feature is only available from within a virtual document, such as a page on the Internet." Wherever NVDA has a command for the key, it runs it as before. There is nothing to set.
+- **The Elements List shows what is still on the page.** With 1.17, when a web page took a link away while NVDA filled the list, NVDA filled it again, and if that happened at each of its three tries, the list opened empty. Now a link the page took away is left out, and every other link is listed, as JAWS's Links List lists what is on the page. The same goes for headings, form fields, buttons and landmarks; a heading under one the page took away comes under the heading above that. Typing in the list's Filter box after the page changed works too; before, NVDA stopped with an error there. A heading the page moved is read where it is now, not half from where it was.
+- **NVDA started with Control+Alt+N comes up in the window you were in.** The tester heard "Copilot pinned" when NVDA started. That is the name Windows 11 gives the first button of the taskbar when Copilot is pinned there. The focus was already on that button when NVDA started, and NVDA says where the focus is. Windows puts the focus on the taskbar whenever a desktop shortcut's key starts a program, and Control+Alt+N is the key of NVDA's desktop shortcut, so starting or restarting NVDA with it takes you away from your window (NV Access knows this: [nvaccess/nvda#13028](https://github.com/nvaccess/nvda/issues/13028)). NVDA's own restart, from NVDA+Q or after installing an add-on, leaves the focus where it was. JAWS, started with its own desktop shortcut's key, Control+Alt+J, goes back to the window that was active. Now NVDA does too, as it starts and before it says where the focus is: you hear the window you were in, as after Alt+Tab. That is the window Alt+Tab goes back to: the top one that isn't minimized, hidden, on another virtual desktop, or one of Windows' own or NVDA's. When no window is open, or all are minimized, NVDA goes to the desktop. It happens only as NVDA starts: a taskbar you moved to yourself keeps the focus. To leave the focus on the taskbar, uncheck "When NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, go back to the window you were in" in NVDA's Settings, JAWS Migration Assistant.
 
 ## What's new in 1.17
 
@@ -445,6 +454,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - turning on the JAWS settings profile when NVDA starts;
 - saying a control's type and state once, even when its label repeats them, and a change once when you activate a control in browse mode (on unless you turn it off; see [What's new in 1.5](#whats-new-in-15) and [What's new in 1.8](#whats-new-in-18));
 - saying a system tray icon when you move to it, not each time its program changes it (on unless you turn it off; see [What's new in 1.9](#whats-new-in-19));
+- going back to the window you were in when NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it (on unless you turn it off; see [What's new in 1.18](#whats-new-in-118));
 - saying a heading without the landmark, region or list it is in when quick navigation moves to it (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113));
 - leaving out the row and column numbers of items in lists, such as drives, files and messages (on unless you turn it off);
 - leaving out the position, such as 3 of 3, in Alt+Tab and when you come to a list in File Explorer (on unless you turn it off; see [What's new in 1.14](#whats-new-in-114));
@@ -592,7 +602,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
 - Rates and pitches are converted from the percentage JAWS shows, except Eloquence's rate, which keeps JAWS's speed. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
-- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, saying a control's type and state once, saying a system tray icon only when you move to it, saying a heading without what it is in when quick navigation moves to it, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, the focus going back to Outlook after NVDA waits for it, and NVDA's Elements List on a page that is still changing need the assistant: they stop when it is uninstalled or disabled.
+- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, saying a control's type and state once, saying a system tray icon only when you move to it, saying a heading without what it is in when quick navigation moves to it, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, the focus going back to Outlook after NVDA waits for it, NVDA's Elements List on a page that is still changing and its key kept from the program, and the focus going back to your window when NVDA starts on the taskbar need the assistant: they stop when it is uninstalled or disabled.
 - The first time NVDA needs Outlook after Outlook starts, NVDA still moves the focus to its "Waiting for Outlook..." window for a moment, as it does without add-ons: Outlook offers what NVDA reads only after it has lost the focus once.
 - Only headings are said without what they are in. K, B, F and the other quick navigation keys still say the landmark or list they move into, as NVDA says it, and so do the arrow keys and Tab.
 - Backspace is said once the program has deleted, up to half a second after the key. A program slower than that is still silent, as NVDA is without the assistant; the text itself is never changed. While NVDA waits, it can't do anything else.

@@ -558,6 +558,15 @@ def takeAway(identifier):
 	return change
 
 
+#: What the assistant puts in the place of NVDA's own (filter since version 1.18).
+WRAPPED = (
+	(VirtualBufferQuickNavItem, "label"),
+	(VirtualBufferQuickNavItem, "isChild"),
+	(ElementsListDialog, "initElementType"),
+	(ElementsListDialog, "filter"),
+)
+
+
 class ImitationNvdaTestCase(unittest.TestCase):
 	def setUp(self):
 		self.page = Page(REPOSITORY + HEADINGS)
@@ -577,6 +586,7 @@ class ImitationNvdaTestCase(unittest.TestCase):
 			"label": vars(VirtualBufferQuickNavItem)["label"],
 			"isChild": vars(VirtualBufferQuickNavItem)["isChild"],
 			"initElementType": vars(ElementsListDialog)["initElementType"],
+			"filter": vars(ElementsListDialog)["filter"],
 		}
 		modules = {"wx": wx, "textInfos": textInfosPackage, "textInfos.offsets": offsets, "virtualBuffers": virtualBuffers, "browseMode": browseModule}
 		patcher = mock.patch.dict(sys.modules, modules)
@@ -591,7 +601,7 @@ class ImitationNvdaTestCase(unittest.TestCase):
 		elementsList.unregister()
 		elementsList._replaced.clear()
 		elementsList._failed = False
-		for owner, name in ((VirtualBufferQuickNavItem, "label"), (VirtualBufferQuickNavItem, "isChild"), (ElementsListDialog, "initElementType")):
+		for owner, name in WRAPPED:
 			setattr(owner, name, self.originals[name])
 
 	def openList(self, elType="link"):
@@ -684,17 +694,8 @@ class TestersPageTests(ImitationNvdaTestCase):
 		self.assertEqual(dialog.labels(), ["Skip to content; same page", "Homepage; visited", "Issues (10); visited", "What's new in 1.15; same page", "Updates; same page"])
 		self.assertEqual(self.later, [])
 
-	def test_aPageThatNeverHoldsStill(self):
-		# Three listings, each with a link gone before its name is read: the list is left empty, and NVDA says why.
-		elementsList.register()
-		self.document.meanwhile.extend([takeAway(12), takeAway(40), takeAway(41)])
-		dialog = self.openList()
-		self.assertEqual(dialog.labels(), [])
-		self.assertFalse(dialog.activateButton.Enabled or dialog.moveButton.Enabled, "Enter does nothing; Escape closes the dialog")
-		self.assertEqual(dialog.filterEdit.value, "")
-		self.assertEqual([delay for delay, function, args in self.later], [elementsList.SAY_AFTER])
-		self.runLater()
-		self.assertEqual(nvdaStubs.spoken, [elementsList.PAGE_CHANGED])
+	# 1.17's test_aPageThatNeverHoldsStill (a link gone at each of three listings left the list empty) is in
+	# test_v118_fixes: since 1.18 NVDA lists the links still there.
 
 	def test_aPageThatMovesItsLinksEachTime(self):
 		# A page that changes while NVDA lists it, every time, without taking anything away: the list is complete.
@@ -731,21 +732,21 @@ class RegistrationTests(ImitationNvdaTestCase):
 	def test_registerAndUnregister(self):
 		elementsList.register()
 		self.assertTrue(elementsList.isRegistered())
-		for owner, name in ((VirtualBufferQuickNavItem, "label"), (VirtualBufferQuickNavItem, "isChild"), (ElementsListDialog, "initElementType")):
+		for owner, name in WRAPPED:
 			self.assertTrue(elementsList._isOurs(vars(owner)[name]), name)
 		self.assertIsInstance(vars(VirtualBufferQuickNavItem)["label"], property)
 		elementsList.unregister()
 		self.assertFalse(elementsList.isRegistered())
-		for owner, name in ((VirtualBufferQuickNavItem, "label"), (VirtualBufferQuickNavItem, "isChild"), (ElementsListDialog, "initElementType")):
+		for owner, name in WRAPPED:
 			self.assertIs(vars(owner)[name], self.originals[name], name)
 
 	def test_registeredOnce(self):
 		elementsList.register()
 		elementsList.register()
-		self.assertEqual(len(elementsList._replaced), 3)
+		self.assertEqual(len(elementsList._replaced), len(WRAPPED))
 		elementsList.unregister()
 		elementsList.register()
-		self.assertEqual(len(elementsList._replaced), 3)
+		self.assertEqual(len(elementsList._replaced), len(WRAPPED))
 		self.assertIs(vars(ElementsListDialog)["initElementType"].__wrapped__, self.originals["initElementType"], "wrapped once")
 
 	def test_anotherAddonsWrapperStays(self):

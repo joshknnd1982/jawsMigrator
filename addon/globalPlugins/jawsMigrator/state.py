@@ -86,6 +86,9 @@ DEFAULTS = {
 	#: Enhanced Control Support leaves its 50 ms timer off documents NVDA follows itself, where it read the whole text
 	#: each time and a large file froze NVDA (see documentPolling).
 	"documentsWithoutControlSupportTimer": True,
+	#: NVDA started with the focus on the taskbar, as its desktop shortcut's key leaves it, gives the focus back to the
+	#: window you were in, or the desktop, as JAWS does (see startupFocus).
+	"backFromTaskbarAtStart": True,
 }
 
 _lock = threading.RLock()

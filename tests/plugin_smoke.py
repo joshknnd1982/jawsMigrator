@@ -122,6 +122,9 @@ class ElementsListDialog:
 	def initElementType(self, elType):
 		pass
 
+	def filter(self, filterText, newElementType=False):
+		pass
+
 
 class VirtualBufferQuickNavItem:
 	"""NVDA's virtualBuffers.VirtualBufferQuickNavItem."""
@@ -150,6 +153,7 @@ NVDA_PASS_THROUGH = vars(BrowseModeTreeInterceptor)["shouldPassThrough"]
 NVDA_BACKSPACE = vars(EditableText)["_backspaceScriptHelper"]
 NVDA_CARET_WAIT = vars(EditableText)["_hasCaretMoved"]
 NVDA_FILL = vars(ElementsListDialog)["initElementType"]
+NVDA_FILTER = vars(ElementsListDialog)["filter"]
 NVDA_LABEL = vars(VirtualBufferQuickNavItem)["label"]
 NVDA_IS_CHILD = vars(VirtualBufferQuickNavItem)["isChild"]
 
@@ -397,15 +401,38 @@ def main():
 		from jawsMigrator import elementsList
 
 		def elementsListNvdasOwn():
-			return vars(ElementsListDialog)["initElementType"] is NVDA_FILL and vars(VirtualBufferQuickNavItem)["label"] is NVDA_LABEL and vars(VirtualBufferQuickNavItem)["isChild"] is NVDA_IS_CHILD
+			return (
+				vars(ElementsListDialog)["initElementType"] is NVDA_FILL
+				and vars(ElementsListDialog)["filter"] is NVDA_FILTER
+				and vars(VirtualBufferQuickNavItem)["label"] is NVDA_LABEL
+				and vars(VirtualBufferQuickNavItem)["isChild"] is NVDA_IS_CHILD
+				and elementsList.decideGesture not in decider.handlers
+			)
 
 		check(
 			elementsList.isRegistered()
 			and ElementsListDialog.initElementType.__wrapped__ is NVDA_FILL
+			and ElementsListDialog.filter.__wrapped__ is NVDA_FILTER
 			and VirtualBufferQuickNavItem.isChild.__wrapped__ is NVDA_IS_CHILD
 			and VirtualBufferQuickNavItem().label == "Issues (10); visited",
 			"NVDA's Elements List fills again when the page changed meanwhile, and reads an element where it is now",
 		)
+		check(
+			decider.handlers.count(elementsList.decideGesture) == 1 and decider.decide(gesture="kb:a"),
+			"its key is kept from the program where NVDA has no browse mode document, and every other key goes on",
+		)
+		# NVDA started with the focus on the taskbar goes back to the window you were in, unless that is turned off.
+		from unittest import mock
+
+		from jawsMigrator import startupFocus, state
+
+		with mock.patch.object(startupFocus, "atStart") as atStart:
+			plugin._backFromTaskbar()
+			state.update({startupFocus.STATE_KEY: False})
+			plugin._backFromTaskbar()
+			state.update({startupFocus.STATE_KEY: True})
+		check(atStart.call_count == 1, "NVDA started on the taskbar goes back to your window, and not when that is turned off")
+		check(startupFocus.atStart() == 0, "and nothing moves when NVDA isn't starting")
 		# The focus and NVDA's change notices go on to NVDA, once each.
 		handled = []
 		control = types.SimpleNamespace(appModule=None, treeInterceptor=None, _speakObjectPropertiesCache={})
@@ -530,6 +557,7 @@ def main():
 			"documentPolling",
 			"outlookFocus",
 			"elementsList",
+			"startupFocus",
 		)
 		for name in unloadable:
 			delattr(jawsMigrator, name)
