@@ -247,7 +247,11 @@ def _waitGuarded(original):
 
 
 def _noteOtherThread(appModule) -> None:
-	"""Note in NVDA's log, once for each run of Outlook, that another thread asked for its object model first."""
+	"""Note in NVDA's log, once for each run of Outlook, that another thread asked for its object model first.
+
+	A thread NVDA didn't start has a name like "Dummy-241", which says nothing about what asked, so the note
+	carries the stack that asked: add-on or NVDA code, in the order it was called.
+	"""
 	try:
 		if getattr(appModule, OTHER_THREAD_NOTE, False):
 			return
@@ -255,7 +259,8 @@ def _noteOtherThread(appModule) -> None:
 		_log().debug(
 			f"jawsMigrator: Outlook's object model was asked for on the thread {threading.current_thread().name!r}, "
 			"not NVDA's main thread, so NVDA neither gets it nor waits for Outlook there; "
-			"NVDA's main thread gets it when it needs it"
+			"NVDA's main thread gets it when it needs it. What asked:",
+			stack_info=True,
 		)
 	except Exception:
 		pass

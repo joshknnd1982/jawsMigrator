@@ -425,7 +425,10 @@ class SettingsPanelTests(unittest.TestCase):
 				"checkForUpdatesAutomatically": True,
 				"sayTypeAndStateOnce": True,
 				"quietTrayIconChanges": True,
-				"sayHeadingLevelFirst": True,
+				"sayHeadingAlone": True,
+				"listItemsWithoutCoordinates": True,
+				"sayWhatBackspaceDeletes": True,
+				"browseModeOnTabsAndToolbars": True,
 				"playJawsLayerSound": True,
 			},
 		)
@@ -459,7 +462,10 @@ class SettingsPanelTests(unittest.TestCase):
 				"activateJawsProfileAtStartup": True,
 				"sayTypeAndStateOnce": False,
 				"quietTrayIconChanges": False,
-				"sayHeadingLevelFirst": False,
+				"sayHeadingAlone": False,
+				"listItemsWithoutCoordinates": False,
+				"sayWhatBackspaceDeletes": False,
+				"browseModeOnTabsAndToolbars": False,
 				"playJawsLayerSound": False,
 			},
 		)
@@ -470,7 +476,10 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertTrue(state.get("checkForUpdatesAutomatically"))
 		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
-		self.assertFalse(state.get("sayHeadingLevelFirst"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("sayHeadingAlone"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("listItemsWithoutCoordinates"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("sayWhatBackspaceDeletes"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("browseModeOnTabsAndToolbars"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("playJawsLayerSound"), "a check box the user didn't change saves nothing")
 
 	def test_sayingTypeAndStateOnceIsSavedAndApplied(self):
@@ -507,22 +516,70 @@ class SettingsPanelTests(unittest.TestCase):
 		state.forget()
 		self.assertTrue(state.get(trayChanges.STATE_KEY))
 
-	def test_headingLevelFirstIsSavedAndApplied(self):
-		from jawsMigrator import headingOrder, state
+	def _checkBoxIsSavedAndApplied(self, checkBox, label, stateKey, applied):
+		from jawsMigrator import state
+
+		self.assertEqual(checkBox.GetLabel(), label)
+		self.assertTrue(checkBox.GetValue(), "on unless turned off")
+		checkBox.SetValue(False)
+		self.calls.clear()
+		self.dialog.panel.onSave()
+		state.forget()
+		self.assertFalse(state.get(stateKey))
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], applied)
+		checkBox.SetValue(True)
+		self.dialog.panel.onSave()
+		state.forget()
+		self.assertTrue(state.get(stateKey))
+
+	def test_headingAloneIsSavedAndApplied(self):
+		from jawsMigrator import quickNavHeadings
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.headingAlone,
+			"When &quick navigation moves to a heading, don't say the landmark, region or list it is in",
+			quickNavHeadings.STATE_KEY,
+			"quick navigation says what a heading is in again, at once",
+		)
+
+	def test_listItemsWithoutCoordinatesIsSavedAndApplied(self):
+		from jawsMigrator import listCoordinates
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.listNoCoordinates,
+			"Lea&ve out the row and column numbers of items in lists, such as drives, files and messages",
+			listCoordinates.STATE_KEY,
+			"NVDA says a list item's row and column again, at once",
+		)
+
+	def test_backspaceInSlowProgramsIsSavedAndApplied(self):
+		from jawsMigrator import backspaceEcho
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.backspaceSlow,
+			"Say what Backspac&e deletes, even when the program is slow to delete it",
+			backspaceEcho.STATE_KEY,
+			"Backspace is silent again where NVDA doesn't see the caret move in time, at once",
+		)
+
+	def test_browseModeOnTabsAndToolbarsIsSavedAndApplied(self):
+		from jawsMigrator import autoFormsMode
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.tabsBrowse,
+			"Stay in &browse mode when you Tab to a tab or a toolbar button on a web page",
+			autoFormsMode.STATE_KEY,
+			"NVDA goes to focus mode on tabs and toolbars again, at once",
+		)
+
+	def test_version112sLevelFirstSettingIsGone(self):
+		from jawsMigrator import state
 
 		panel = self.dialog.panel
-		self.assertEqual(panel.headingFirst.GetLabel(), "Say a heading's level &before its text when you move to it with quick navigation")
-		self.assertTrue(panel.headingFirst.GetValue(), "on unless turned off")
-		panel.headingFirst.SetValue(False)
-		self.calls.clear()
-		panel.onSave()
-		state.forget()
-		self.assertFalse(state.get(headingOrder.STATE_KEY))
-		self.assertEqual(self.calls, ["applyRuntimeSettings"], "quick navigation says a heading's text first again, at once")
-		panel.headingFirst.SetValue(True)
-		panel.onSave()
-		state.forget()
-		self.assertTrue(state.get(headingOrder.STATE_KEY))
+		self.assertFalse(hasattr(panel, "headingFirst"))
+		self.assertNotIn("sayHeadingLevelFirst", state.DEFAULTS, "a state.json from 1.12 keeps the key, which nothing reads")
+		labels = [child.GetLabel() for child in panel.GetChildren() if isinstance(child, wx.CheckBox)]
+		self.assertFalse([label for label in labels if "level" in label.lower()], labels)
 
 	def test_layerSoundChoiceIsSavedAndApplied(self):
 		from jawsMigrator import layerSound, state

@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import headingOrder, labelRepeats, layerSound, nvdaEnv, state, trayChanges
+from .. import autoFormsMode, backspaceEcho, labelRepeats, layerSound, listCoordinates, nvdaEnv, quickNavHeadings, state, trayChanges
 from .common import checkListClass, openFile
 
 
@@ -43,9 +43,24 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# A temperature monitor changes its system tray icon's name every few seconds, which NVDA would read each time.
 		self.quietTray = helper.addItem(wx.CheckBox(self, label="Say a system &tray icon when you move to it, not each time its program changes it"))
 		self.quietTray.SetValue(trayChanges.wanted(state.load()))
-		# NVDA's H says a heading's text before "heading level 2"; the arrow keys and JAWS say the level first.
-		self.headingFirst = helper.addItem(wx.CheckBox(self, label="Say a heading's level &before its text when you move to it with quick navigation"))
-		self.headingFirst.SetValue(headingOrder.wanted(state.load()))
+		# NVDA's H says "main landmark" before a heading in the page's main part; JAWS's H says the heading alone.
+		self.headingAlone = helper.addItem(
+			wx.CheckBox(self, label="When &quick navigation moves to a heading, don't say the landmark, region or list it is in"),
+		)
+		self.headingAlone.SetValue(quickNavHeadings.wanted(state.load()))
+		# File Explorer's drives, Alt+Tab's windows and Outlook's messages have a row and column; JAWS never says them.
+		self.listNoCoordinates = helper.addItem(
+			wx.CheckBox(self, label="Lea&ve out the row and column numbers of items in lists, such as drives, files and messages"),
+		)
+		self.listNoCoordinates.SetValue(listCoordinates.wanted(state.load()))
+		# NVDA says nothing for Backspace when a slow program deletes after NVDA stopped waiting; JAWS says it at once.
+		self.backspaceSlow = helper.addItem(
+			wx.CheckBox(self, label="Say what Backspac&e deletes, even when the program is slow to delete it"),
+		)
+		self.backspaceSlow.SetValue(backspaceEcho.wanted(state.load()))
+		# NVDA uses focus mode on a web page's tabs and toolbars, so letters go to the page; JAWS stays in its virtual cursor.
+		self.tabsBrowse = helper.addItem(wx.CheckBox(self, label="Stay in &browse mode when you Tab to a tab or a toolbar button on a web page"))
+		self.tabsBrowse.SetValue(autoFormsMode.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -122,7 +137,10 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownAtStartup = self.atStartup.GetValue()
 		self._shownSayOnce = self.sayOnce.GetValue()
 		self._shownQuietTray = self.quietTray.GetValue()
-		self._shownHeadingFirst = self.headingFirst.GetValue()
+		self._shownHeadingAlone = self.headingAlone.GetValue()
+		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
+		self._shownBackspaceSlow = self.backspaceSlow.GetValue()
+		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -172,8 +190,14 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[labelRepeats.STATE_KEY] = self.sayOnce.GetValue()
 		if self.quietTray.GetValue() != self._shownQuietTray:
 			updates[trayChanges.STATE_KEY] = self.quietTray.GetValue()
-		if self.headingFirst.GetValue() != self._shownHeadingFirst:
-			updates[headingOrder.STATE_KEY] = self.headingFirst.GetValue()
+		if self.headingAlone.GetValue() != self._shownHeadingAlone:
+			updates[quickNavHeadings.STATE_KEY] = self.headingAlone.GetValue()
+		if self.listNoCoordinates.GetValue() != self._shownListNoCoordinates:
+			updates[listCoordinates.STATE_KEY] = self.listNoCoordinates.GetValue()
+		if self.backspaceSlow.GetValue() != self._shownBackspaceSlow:
+			updates[backspaceEcho.STATE_KEY] = self.backspaceSlow.GetValue()
+		if self.tabsBrowse.GetValue() != self._shownTabsBrowse:
+			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

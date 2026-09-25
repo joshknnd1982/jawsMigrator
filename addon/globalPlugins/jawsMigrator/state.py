@@ -68,8 +68,16 @@ DEFAULTS = {
 	"playJawsLayerSound": True,
 	#: NVDA says a system tray icon when the focus moves to it, not each time its program changes it (see trayChanges).
 	"quietTrayIconChanges": True,
-	#: Quick navigation says a heading's level before its text, as the arrow keys and JAWS do (see headingOrder).
-	"sayHeadingLevelFirst": True,
+	#: Quick navigation says a heading without the landmark, region or list it is in, as JAWS does (see quickNavHeadings).
+	#: Version 1.12's "sayHeadingLevelFirst" (a heading's level before its text) is gone: JAWS says the text first.
+	"sayHeadingAlone": True,
+	#: An item in a list is said without its row and column numbers, as JAWS says it (see listCoordinates).
+	"listItemsWithoutCoordinates": True,
+	#: Backspace says what it deletes when a slow program deletes after NVDA stopped waiting (see backspaceEcho).
+	"sayWhatBackspaceDeletes": True,
+	#: A web page's tabs, and toolbar buttons reached with Tab, stay in browse mode, as in JAWS's Auto Forms Mode,
+	#: so letters don't reach the page (see autoFormsMode).
+	"browseModeOnTabsAndToolbars": True,
 }
 
 _lock = threading.RLock()

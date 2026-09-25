@@ -460,6 +460,9 @@ class OutlookFocusTests(unittest.TestCase):
 		lines = [record.getMessage() for record in logged.records]
 		self.assertEqual(len([line for line in lines if "was asked for on the thread 'Dummy-32'" in line]), 1)
 		self.assertFalse([line for line in lines if "Dummy-33" in line], "once for each run of Outlook")
+		# Version 1.13: "Dummy-32" names nothing, so the note carries the stack that asked (issue 5's log said 'Dummy-241').
+		noted = [record for record in logged.records if "was asked for on the thread 'Dummy-32'" in record.getMessage()]
+		self.assertIn("test_v111_fixes.py", noted[0].stack_info or "", "the code that asked is in the log")
 		self.assertIn("jawsMigrator: NVDA waits for Outlook to offer its object model", lines)
 		self.assertIn(
 			"jawsMigrator: NVDA's own window kept the focus after NVDA waited for Outlook, so it goes back to the window that had it (rctrl_renwnd32)",

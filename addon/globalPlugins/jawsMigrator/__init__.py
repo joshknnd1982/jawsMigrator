@@ -13,10 +13,13 @@ It also has NVDA say a control's type and state once when a web page repeats
 them in the control's label (see labelRepeats), or when NVDA would say again
 what activating a control in browse mode changed (see changeRepeats), and a
 system tray icon when the focus moves to it, not each time its program changes
-it (see trayChanges), and a heading's level before its text when quick
-navigation moves to it (see headingOrder); NVDA+Shift+J plays JAWS's layered
-keystroke sound (see layerSound); and opening Outlook puts the focus in
-Outlook, not in NVDA's own window (see outlookFocus).
+it (see trayChanges), and a heading without the landmark, region or list it is
+in when quick navigation moves to it (see quickNavHeadings), and an item in a
+list without row and column numbers (see listCoordinates), and what Backspace
+deletes in a slow program (see backspaceEcho); a web page's tabs and toolbar
+buttons stay in browse mode, as in JAWS (see autoFormsMode);
+NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); and opening
+Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus).
 """
 
 from __future__ import annotations
@@ -120,6 +123,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._changeRepeats = None
 		#: The trayChanges module, once loaded: NVDA's name change notices go through it.
 		self._trayChanges = None
+		#: The autoFormsMode module, once loaded: it notes each focus change before NVDA chooses browse or focus mode.
+		self._autoFormsMode = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -229,9 +234,28 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
-			from . import headingOrder
+			from . import quickNavHeadings
 
-			headingOrder.unregister()
+			quickNavHeadings.unregister()
+		except Exception:
+			pass
+		self._autoFormsMode = None
+		try:
+			from . import autoFormsMode
+
+			autoFormsMode.unregister()
+		except Exception:
+			pass
+		try:
+			from . import listCoordinates
+
+			listCoordinates.unregister()
+		except Exception:
+			pass
+		try:
+			from . import backspaceEcho
+
+			backspaceEcho.unregister()
 		except Exception:
 			pass
 		try:
@@ -251,8 +275,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
 		JAWS's rule for a colon between digits, a control's type and state said once (and a change said once),
-		a system tray icon said when the focus moves to it, a heading said level first when quick navigation
-		moves to it, and the layer's sound.
+		a system tray icon said when the focus moves to it, a heading said without what it is in when quick
+		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
+		a slow program too, browse mode kept on a web page's tabs and toolbar buttons, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -311,15 +336,46 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not apply saying a system tray icon when the focus moves to it")
 		try:
-			from . import headingOrder
+			from . import quickNavHeadings
 
-			# Not a JAWS setting: quick navigation reads a heading level first, as the arrow keys and JAWS do.
-			if headingOrder.wanted(data):
-				headingOrder.register()
+			# Not a JAWS setting: JAWS's H says the heading alone, not the landmark it is in (NVDA's order stays).
+			if quickNavHeadings.wanted(data):
+				quickNavHeadings.register()
 			else:
-				headingOrder.unregister()
+				quickNavHeadings.unregister()
 		except Exception:
-			debugLog.error("could not apply saying a heading's level first")
+			debugLog.error("could not apply saying a heading without what it is in")
+		try:
+			from . import listCoordinates
+
+			# Not a JAWS setting: JAWS says a row and column for table cells only, never for an item in a list.
+			if listCoordinates.wanted(data):
+				listCoordinates.register()
+			else:
+				listCoordinates.unregister()
+		except Exception:
+			debugLog.error("could not apply saying list items without row and column numbers")
+		try:
+			from . import backspaceEcho
+
+			# Not a JAWS setting: JAWS says the character Backspace deletes without waiting for the program.
+			if backspaceEcho.wanted(data):
+				backspaceEcho.register()
+			else:
+				backspaceEcho.unregister()
+		except Exception:
+			debugLog.error("could not apply saying what Backspace deletes in slow programs")
+		try:
+			from . import autoFormsMode
+
+			# Not a JAWS setting: JAWS's virtual cursor stays on a web page's tabs and toolbar buttons (Auto Forms Mode).
+			if autoFormsMode.wanted(data):
+				autoFormsMode.register()
+			else:
+				autoFormsMode.unregister()
+			self._autoFormsMode = autoFormsMode
+		except Exception:
+			debugLog.error("could not apply browse mode on a web page's tabs and toolbar buttons")
 		try:
 			from . import layerSound
 
@@ -794,6 +850,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def event_gainFocus(self, obj, nextHandler):
 		self._checkSleep(obj)
+		# Before NVDA's browse mode chooses focus or browse mode for obj, what had the focus before is noted (see autoFormsMode).
+		autoFormsMode = getattr(self, "_autoFormsMode", None)
+		if autoFormsMode is not None:
+			autoFormsMode.noteFocus(obj)
 		# Browse mode says what activating a control changed as the focus arrives; the control's own notices
 		# of the same change, which follow, aren't said again (see changeRepeats).
 		changeRepeats = self._changeRepeats
