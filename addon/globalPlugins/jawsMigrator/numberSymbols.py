@@ -47,27 +47,33 @@ def wanted(stateData: dict) -> bool:
 	return isinstance(stateData, dict) and bool(stateData.get("lastMigration"))
 
 
-def _builtinDefinition(characterProcessing):
+def builtinDefinition(characterProcessing):
+	"""NVDA's built-in symbol dictionary (``locale\\<locale>\\symbols.dic``), or None."""
 	for definition in getattr(characterProcessing, "_symbolDictionaryDefinitions", ()):
 		if getattr(definition, "name", None) == "builtin":
 			return definition
 	return None
 
 
-def colonWord(characterProcessing, locale: str) -> str:
-	"""NVDA's own word for ":" in ``locale`` (from its built-in symbols), or English "colon"."""
-	builtin = _builtinDefinition(characterProcessing)
+def symbolWord(characterProcessing, locale: str, character: str, fallback: str) -> str:
+	"""NVDA's own word for ``character`` in ``locale`` (from its built-in symbols), or ``fallback``."""
+	builtin = builtinDefinition(characterProcessing)
 	for candidate in (locale, locale.split("_", 1)[0], "en"):
 		if builtin is None:
 			break
 		try:
-			symbol = builtin.getSymbols(candidate).symbols.get(":")
+			symbol = builtin.getSymbols(candidate).symbols.get(character)
 		except Exception:
 			continue
 		replacement = getattr(symbol, "replacement", None)
 		if replacement:
 			return replacement
-	return FALLBACK_WORD
+	return fallback
+
+
+def colonWord(characterProcessing, locale: str) -> str:
+	"""NVDA's own word for ":" in ``locale`` (from its built-in symbols), or English "colon"."""
+	return symbolWord(characterProcessing, locale, ":", FALLBACK_WORD)
 
 
 def makeDefinition(characterProcessing):
@@ -81,7 +87,7 @@ def makeDefinition(characterProcessing):
 		"""
 
 		def _initSymbols(self, locale: str):
-			builtin = _builtinDefinition(characterProcessing)
+			builtin = builtinDefinition(characterProcessing)
 			if builtin is None or locale not in builtin.availableLocales:
 				raise FileNotFoundError(f"No {self.name!r} data for locale {locale!r}")
 			symbols = characterProcessing.SpeechSymbols()

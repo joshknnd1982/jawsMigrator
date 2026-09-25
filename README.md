@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.14
+- Version: 1.15
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.15](#whats-new-in-115)
 - [What's new in 1.14](#whats-new-in-114)
 - [What's new in 1.13](#whats-new-in-113)
 - [What's new in 1.12](#whats-new-in-112)
@@ -66,10 +67,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.14.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.15.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.15
+
+Fixes from a tester's reports on versions 1.13 and 1.14:
+
+- **A drive is said without the ":)" after its letter.** File Explorer names a drive with its letter in parentheses: "Data (D:)". At NVDA's Most punctuation level, which the migration set from your JAWS voice profile, NVDA said every symbol in it, "Data left paren D colon right paren", and the end sounded like a smiley. JAWS says "Data (D", with nothing after the letter. Now NVDA leaves out the colon and closing parenthesis after a drive letter: "Data left paren D" at the Most level, "Data D" at Some. This works wherever a drive is named: This PC, the navigation pane, the address bar, Open and Save As dialogs, and a window's title in Alt+Tab. At the All level NVDA still says every symbol, and reading by character still says each one. A ":)" anywhere else, such as a smiley in an e-mail, is said as before. To hear the colon and parenthesis again, uncheck "Say a drive's name as JAWS does, without the colon and parenthesis after its letter, as in Data (D:)" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA no longer freezes in a large Notepad file.** A tester pasted 21 million characters into Windows 11's Notepad and pressed Control+Home. NVDA stopped responding, and came back only when the tester restarted it with Control+Alt+N, 17 seconds later. Each time they went back to a file of 24 million characters in Notepad, NVDA was stuck for a second or two. The cause was Enhanced Control Support, which the assistant offers to install for controls NVDA doesn't recognize. As it comes, with "Rely on events by default" unchecked, it checks the control you are on 20 times a second for a change in its name, value or state. A document's value is all of its text, so it read the whole file each time, and in Notepad each read took about a quarter of a second. NVDA had time for little else, and when a key made NVDA wait for the caret to move, the checks never let it finish. NVDA follows a document's text itself as you type and move, so these checks add nothing there. Now Enhanced Control Support leaves them off documents and multi-line text fields, such as Notepad's document and NVDA's Log Viewer. It goes on checking everything else, including the controls it adds support for and any window you set up in it with NVDA+Alt+C. To let it check documents again, uncheck "Keep Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file" in NVDA's Settings, JAWS Migration Assistant.
 
 ## What's new in 1.14
 
@@ -426,7 +434,9 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying a heading without the landmark, region or list it is in when quick navigation moves to it (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113));
 - leaving out the row and column numbers of items in lists, such as drives, files and messages (on unless you turn it off);
 - leaving out the position, such as 3 of 3, in Alt+Tab and when you come to a list in File Explorer (on unless you turn it off; see [What's new in 1.14](#whats-new-in-114));
+- saying a drive's name without the colon and parenthesis after its letter, as in Data (D:) (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - saying what Backspace deletes, even when the program is slow to delete it (on unless you turn it off);
+- keeping Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
@@ -452,6 +462,8 @@ The migration's Add-ons step lists each one:
 | Custom Browse Mode | An NVDA profile that turns on in browse mode, like JAWS's separate web settings | Browse mode uses the same settings as everything else, as NVDA normally does |
 | Custom Notifications | How notifications are read: full text, just the application, speech or braille | NVDA keeps reading every notification in full |
 | Control Usage Assistant | Tells you how to use the control you are on, like JAWS's screen-sensitive help (Insert+F1); for people new to computers, Windows or NVDA | You look up how to use a control in NVDA's user guide |
+
+Enhanced Control Support, as it comes, checks the control you are on 20 times a second. In a document that means reading all of its text each time, which froze NVDA in a large Notepad file, so while the assistant runs, Enhanced Control Support leaves documents and multi-line text fields to NVDA (see [What's new in 1.15](#whats-new-in-115)).
 
 The add-ons you choose are, after the migration and its backup:
 
@@ -595,7 +607,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 `tests/test_nvda_runtime.py` checks that every module the add-on imports exists in the NVDA installed on the computer. NVDA's own copy of Python has only part of Python's standard library, so code that works in the other tests can still fail to load in NVDA. It is skipped where NVDA isn't installed.
 
-`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, the ones that have quick navigation say a heading without what it is in, leave out a list item's row and column, say what Backspace deletes in a slow program and keep browse mode on a web page's tabs and toolbar buttons, the guard that keeps the focus in Outlook when NVDA waits for it, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
+`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, the ones that have quick navigation say a heading without what it is in, leave out a list item's row and column, say what Backspace deletes in a slow program and keep browse mode on a web page's tabs and toolbar buttons, the one that keeps Enhanced Control Support's timer off documents, the guard that keeps the focus in Outlook when NVDA waits for it, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
 
 Three further scripts need wxPython and a computer with JAWS or JAWS settings. They change nothing outside a temporary folder:
 

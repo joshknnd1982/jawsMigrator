@@ -581,8 +581,8 @@ def symbolsFile(locale: str) -> str:
 def reloadSymbols() -> None:
 	"""Have NVDA read its symbol files again.
 
-	NVDA builds its list of symbol dictionaries anew, so JAWS's rule for a colon between digits goes
-	back in when it was there (see numberSymbols).
+	NVDA builds its list of symbol dictionaries anew, so JAWS's rule for a colon between digits and the
+	rule for a drive's letter go back in when they were there (see numberSymbols and driveLetters).
 	"""
 	try:
 		import characterProcessing
@@ -591,10 +591,11 @@ def reloadSymbols() -> None:
 		characterProcessing.initialize()
 	except Exception:
 		_log().debugWarning("jawsMigrator: could not reload speech symbols", exc_info=True)
-	from . import numberSymbols
+	from . import driveLetters, numberSymbols
 
-	if numberSymbols.isRegistered():
-		numberSymbols.register()
+	for rule in (numberSymbols, driveLetters):
+		if rule.isRegistered():
+			rule.register()
 
 
 # -- input gestures ------------------------------------------------------------------------------

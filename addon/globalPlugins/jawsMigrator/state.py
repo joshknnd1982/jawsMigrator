@@ -76,11 +76,16 @@ DEFAULTS = {
 	#: Alt+Tab says a window without its position, and File Explorer says an item's position only while you move
 	#: through its list, as JAWS's scripts do (see listPosition).
 	"positionLikeJawsInExplorer": True,
+	#: A drive is said without the ":)" after its letter, "Data (D:)" as "Data (D", as JAWS says it (see driveLetters).
+	"driveLetterLikeJaws": True,
 	#: Backspace says what it deletes when a slow program deletes after NVDA stopped waiting (see backspaceEcho).
 	"sayWhatBackspaceDeletes": True,
 	#: A web page's tabs, and toolbar buttons reached with Tab, stay in browse mode, as in JAWS's Auto Forms Mode,
 	#: so letters don't reach the page (see autoFormsMode).
 	"browseModeOnTabsAndToolbars": True,
+	#: Enhanced Control Support leaves its 50 ms timer off documents NVDA follows itself, where it read the whole text
+	#: each time and a large file froze NVDA (see documentPolling).
+	"documentsWithoutControlSupportTimer": True,
 }
 
 _lock = threading.RLock()

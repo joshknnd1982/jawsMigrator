@@ -428,7 +428,9 @@ class SettingsPanelTests(unittest.TestCase):
 				"sayHeadingAlone": True,
 				"listItemsWithoutCoordinates": True,
 				"positionLikeJawsInExplorer": True,
+				"driveLetterLikeJaws": True,
 				"sayWhatBackspaceDeletes": True,
+				"documentsWithoutControlSupportTimer": True,
 				"browseModeOnTabsAndToolbars": True,
 				"playJawsLayerSound": True,
 			},
@@ -466,7 +468,9 @@ class SettingsPanelTests(unittest.TestCase):
 				"sayHeadingAlone": False,
 				"listItemsWithoutCoordinates": False,
 				"positionLikeJawsInExplorer": False,
+				"driveLetterLikeJaws": False,
 				"sayWhatBackspaceDeletes": False,
+				"documentsWithoutControlSupportTimer": False,
 				"browseModeOnTabsAndToolbars": False,
 				"playJawsLayerSound": False,
 			},
@@ -481,7 +485,9 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertFalse(state.get("sayHeadingAlone"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("listItemsWithoutCoordinates"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("positionLikeJawsInExplorer"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("driveLetterLikeJaws"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("sayWhatBackspaceDeletes"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("documentsWithoutControlSupportTimer"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("browseModeOnTabsAndToolbars"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("playJawsLayerSound"), "a check box the user didn't change saves nothing")
 
@@ -565,6 +571,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"NVDA says the position in File Explorer and Alt+Tab again, at once",
 		)
 
+	def test_driveLetterLikeJawsIsSavedAndApplied(self):
+		from jawsMigrator import driveLetters
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.driveLetter,
+			"Say a drive's name as &JAWS does, without the colon and parenthesis after its letter, as in Data (D:)",
+			driveLetters.STATE_KEY,
+			"NVDA says the colon and parenthesis after a drive letter again, at once",
+		)
+
 	def test_backspaceInSlowProgramsIsSavedAndApplied(self):
 		from jawsMigrator import backspaceEcho
 
@@ -573,6 +589,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"Say what Backspac&e deletes, even when the program is slow to delete it",
 			backspaceEcho.STATE_KEY,
 			"Backspace is silent again where NVDA doesn't see the caret move in time, at once",
+		)
+
+	def test_documentsWithoutControlSupportTimerIsSavedAndApplied(self):
+		from jawsMigrator import documentPolling
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.documentsUnpolled,
+			"Keep Enhanced Control Support from reading a document's whole te&xt 20 times a second, which can freeze NVDA in a large file",
+			documentPolling.STATE_KEY,
+			"Enhanced Control Support checks documents again, at once",
 		)
 
 	def test_browseModeOnTabsAndToolbarsIsSavedAndApplied(self):

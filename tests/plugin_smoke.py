@@ -295,6 +295,29 @@ def main():
 		document.passThrough = True
 		plugin.event_gainFocus(tab, lambda: None)
 		check(document.shouldPassThrough(tab, reason=focus) is True, "from a tab to a tab in focus mode: focus mode stays")
+		# Enhanced Control Support keeps its timer off documents NVDA follows. NVDA may import it after the assistant.
+		from jawsMigrator import documentPolling
+
+		enhancedControlSupport = types.ModuleType(documentPolling.MODULE)
+		enhancedControlSupport.TimerMixin = type("TimerMixin", (), {})
+
+		def shouldUseTimerMixin(conf, obj, clsList):
+			return True
+
+		enhancedControlSupport.shouldUseTimerMixin = shouldUseTimerMixin
+		check(documentPolling.isRegistered() and not documentPolling.isInstalled(), "without Enhanced Control Support there is nothing to change")
+		sys.modules[documentPolling.MODULE] = enhancedControlSupport
+		app.ProcessPendingEvents()
+		check(
+			documentPolling.isInstalled() and enhancedControlSupport.shouldUseTimerMixin.__wrapped__ is shouldUseTimerMixin,
+			"loaded after the assistant, Enhanced Control Support leaves its timer off documents once NVDA has loaded every plugin",
+		)
+		jawsMigrator.state.set(documentPolling.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not documentPolling.isRegistered() and enhancedControlSupport.shouldUseTimerMixin is shouldUseTimerMixin, "turned off in the Settings panel, it has its own choice back")
+		jawsMigrator.state.set(documentPolling.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(enhancedControlSupport.shouldUseTimerMixin.__wrapped__ is shouldUseTimerMixin, "and on again, wrapped once")
 		# Opening Outlook puts the focus in Outlook: NVDA's Outlook support is guarded as NVDA loads it.
 		from jawsMigrator import outlookFocus
 
@@ -383,6 +406,11 @@ def main():
 			"and NVDA's field speech, quick navigation report, object speech, Backspace and choice of mode",
 		)
 		check(not autoFormsMode.isRegistered() and plugin._autoFormsMode is None, "and the note of each focus")
+		check(
+			not documentPolling.isRegistered() and enhancedControlSupport.shouldUseTimerMixin is shouldUseTimerMixin,
+			"and Enhanced Control Support's own choice of its timer",
+		)
+		del sys.modules[documentPolling.MODULE]
 		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
@@ -412,8 +440,10 @@ def main():
 			"quickNavHeadings",
 			"listCoordinates",
 			"listPosition",
+			"driveLetters",
 			"autoFormsMode",
 			"backspaceEcho",
+			"documentPolling",
 			"outlookFocus",
 		)
 		for name in unloadable:

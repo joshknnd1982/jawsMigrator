@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import autoFormsMode, backspaceEcho, labelRepeats, layerSound, listCoordinates, listPosition, nvdaEnv, quickNavHeadings, state, trayChanges
+from .. import autoFormsMode, backspaceEcho, documentPolling, driveLetters, labelRepeats, layerSound, listCoordinates, listPosition, nvdaEnv, quickNavHeadings, state, trayChanges
 from .common import checkListClass, openFile
 
 
@@ -59,11 +59,25 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="Don't say the position, such as 3 of 3, in Alt+Tab or when you come to a list in &File Explorer"),
 		)
 		self.positionLikeJaws.SetValue(listPosition.wanted(state.load()))
+		# At its "most" symbol level NVDA says "Data left paren D colon right paren" for a drive; JAWS says "Data (D".
+		self.driveLetter = helper.addItem(
+			wx.CheckBox(self, label="Say a drive's name as &JAWS does, without the colon and parenthesis after its letter, as in Data (D:)"),
+		)
+		self.driveLetter.SetValue(driveLetters.wanted(state.load()))
 		# NVDA says nothing for Backspace when a slow program deletes after NVDA stopped waiting; JAWS says it at once.
 		self.backspaceSlow = helper.addItem(
 			wx.CheckBox(self, label="Say what Backspac&e deletes, even when the program is slow to delete it"),
 		)
 		self.backspaceSlow.SetValue(backspaceEcho.wanted(state.load()))
+		# Enhanced Control Support, as it comes, reads the focused control's value every 50 ms: a document's whole text.
+		# With a large file in Notepad, that froze NVDA.
+		self.documentsUnpolled = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Keep Enhanced Control Support from reading a document's whole te&xt 20 times a second, which can freeze NVDA in a large file",
+			),
+		)
+		self.documentsUnpolled.SetValue(documentPolling.wanted(state.load()))
 		# NVDA uses focus mode on a web page's tabs and toolbars, so letters go to the page; JAWS stays in its virtual cursor.
 		self.tabsBrowse = helper.addItem(wx.CheckBox(self, label="Stay in &browse mode when you Tab to a tab or a toolbar button on a web page"))
 		self.tabsBrowse.SetValue(autoFormsMode.wanted(state.load()))
@@ -146,7 +160,9 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownHeadingAlone = self.headingAlone.GetValue()
 		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
 		self._shownPositionLikeJaws = self.positionLikeJaws.GetValue()
+		self._shownDriveLetter = self.driveLetter.GetValue()
 		self._shownBackspaceSlow = self.backspaceSlow.GetValue()
+		self._shownDocumentsUnpolled = self.documentsUnpolled.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
@@ -203,8 +219,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[listCoordinates.STATE_KEY] = self.listNoCoordinates.GetValue()
 		if self.positionLikeJaws.GetValue() != self._shownPositionLikeJaws:
 			updates[listPosition.STATE_KEY] = self.positionLikeJaws.GetValue()
+		if self.driveLetter.GetValue() != self._shownDriveLetter:
+			updates[driveLetters.STATE_KEY] = self.driveLetter.GetValue()
 		if self.backspaceSlow.GetValue() != self._shownBackspaceSlow:
 			updates[backspaceEcho.STATE_KEY] = self.backspaceSlow.GetValue()
+		if self.documentsUnpolled.GetValue() != self._shownDocumentsUnpolled:
+			updates[documentPolling.STATE_KEY] = self.documentsUnpolled.GetValue()
 		if self.tabsBrowse.GetValue() != self._shownTabsBrowse:
 			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:

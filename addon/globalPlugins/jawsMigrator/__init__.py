@@ -16,9 +16,12 @@ system tray icon when the focus moves to it, not each time its program changes
 it (see trayChanges), and a heading without the landmark, region or list it is
 in when quick navigation moves to it (see quickNavHeadings), and an item in a
 list without row and column numbers (see listCoordinates), a position ("3 of 3")
-in File Explorer and Alt+Tab only where JAWS says one (see listPosition), and what Backspace
+in File Explorer and Alt+Tab only where JAWS says one (see listPosition), a drive
+without the ":)" after its letter, as in "Data (D:)" (see driveLetters), and what Backspace
 deletes in a slow program (see backspaceEcho); a web page's tabs and toolbar
-buttons stay in browse mode, as in JAWS (see autoFormsMode);
+buttons stay in browse mode, as in JAWS (see autoFormsMode); Enhanced Control
+Support, which the assistant offers to install, doesn't read a whole document
+20 times a second, which froze NVDA in a large file (see documentPolling);
 NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); and opening
 Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus).
 """
@@ -215,6 +218,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import driveLetters
+
+			driveLetters.unregister()
+		except Exception:
+			pass
+		try:
 			from . import labelRepeats
 
 			labelRepeats.unregister()
@@ -266,6 +275,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import documentPolling
+
+			documentPolling.unregister()
+		except Exception:
+			pass
+		try:
 			from . import outlookFocus
 
 			outlookFocus.unregister()
@@ -281,10 +296,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
-		JAWS's rule for a colon between digits, a control's type and state said once (and a change said once),
+		JAWS's rule for a colon between digits, a drive said without the ":)" after its letter, a control's type
+		and state said once (and a change said once),
 		a system tray icon said when the focus moves to it, a heading said without what it is in when quick
 		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
-		a slow program too, browse mode kept on a web page's tabs and toolbar buttons, and the layer's sound.
+		a slow program too, Enhanced Control Support's timer kept off documents, browse mode kept on a web page's
+		tabs and toolbar buttons, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -310,6 +327,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				numberSymbols.unregister()
 		except Exception:
 			debugLog.error("could not apply JAWS's rule for a colon between digits")
+		try:
+			from . import driveLetters
+
+			# Not a JAWS setting: JAWS says "Data (D:)" without the ":)" after the letter, which NVDA says at "most".
+			if driveLetters.wanted(data):
+				driveLetters.register()
+			else:
+				driveLetters.unregister()
+		except Exception:
+			debugLog.error("could not apply saying a drive without the colon and parenthesis after its letter")
 		try:
 			from . import labelRepeats
 
@@ -383,6 +410,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				backspaceEcho.unregister()
 		except Exception:
 			debugLog.error("could not apply saying what Backspace deletes in slow programs")
+		try:
+			from . import documentPolling
+
+			# Not a JAWS setting: Enhanced Control Support, which the assistant offers to install, read a whole document
+			# 20 times a second, and a large file in Notepad froze NVDA.
+			if documentPolling.wanted(data):
+				documentPolling.register()
+			else:
+				documentPolling.unregister()
+		except Exception:
+			debugLog.error("could not keep Enhanced Control Support's timer off documents")
 		try:
 			from . import autoFormsMode
 
