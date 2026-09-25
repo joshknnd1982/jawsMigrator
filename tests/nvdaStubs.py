@@ -73,7 +73,26 @@ def install(frame=None):
 		localeGestureMap = GestureMap()
 		_captureFunc = None
 
-	module("inputCore", manager=Manager(), normalizeGestureIdentifier=lambda identifier: identifier.lower())
+	class Decider:
+		"""NVDA's extensionPoints.Decider: NVDA goes on only when every handler returns True."""
+
+		def __init__(self):
+			self.handlers = []
+
+		def register(self, handler):
+			if handler not in self.handlers:
+				self.handlers.append(handler)
+
+		def unregister(self, handler):
+			if handler in self.handlers:
+				self.handlers.remove(handler)
+
+		def decide(self, **kwargs):
+			return all([handler(**kwargs) for handler in list(self.handlers)])
+
+	# Installed once: the add-on's modules keep what they registered with it.
+	decider = getattr(sys.modules.get("inputCore"), "decide_executeGesture", None) or Decider()
+	module("inputCore", manager=Manager(), normalizeGestureIdentifier=lambda identifier: identifier.lower(), decide_executeGesture=decider)
 	module("gui", mainFrame=None, messageBox=lambda *args, **kwargs: None)
 	if frame is not None:
 		frame.prePopup = lambda: None

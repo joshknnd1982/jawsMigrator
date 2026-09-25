@@ -11,8 +11,10 @@ while NVDA runs: JAWS sound effects in place of NVDA's sounds, sleep mode in
 the applications where JAWS slept, and the JAWS settings profile at startup.
 It also has NVDA say a control's type and state once when a web page repeats
 them in the control's label (see labelRepeats), or when NVDA would say again
-what activating a control in browse mode changed (see changeRepeats), and
-NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound).
+what activating a control in browse mode changed (see changeRepeats), and a
+system tray icon when the focus moves to it, not each time its program changes
+it (see trayChanges); and NVDA+Shift+J plays JAWS's layered keystroke sound
+(see layerSound).
 """
 
 from __future__ import annotations
@@ -114,6 +116,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._keymapCache = None
 		#: The changeRepeats module, once loaded: NVDA's focus and change notices go through it.
 		self._changeRepeats = None
+		#: The trayChanges module, once loaded: NVDA's name change notices go through it.
+		self._trayChanges = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -208,6 +212,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			changeRepeats.unregister()
 		except Exception:
 			pass
+		self._trayChanges = None
+		try:
+			from . import trayChanges
+
+			trayChanges.unregister()
+		except Exception:
+			pass
 		super().terminate()
 
 	def _onConfigReset(self, factoryDefaults=False):
@@ -219,7 +230,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
 		JAWS's rule for a colon between digits, a control's type and state said once (and a change said once),
-		and the layer's sound.
+		a system tray icon said when the focus moves to it, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -266,6 +277,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._changeRepeats = changeRepeats
 		except Exception:
 			debugLog.error("could not apply saying a change once")
+		try:
+			from . import trayChanges
+
+			# Not a JAWS setting: a program changing its system tray icon's name doesn't make NVDA read it again.
+			if trayChanges.wanted(data):
+				trayChanges.register()
+			else:
+				trayChanges.unregister()
+			self._trayChanges = trayChanges
+		except Exception:
+			debugLog.error("could not apply saying a system tray icon when the focus moves to it")
 		try:
 			from . import layerSound
 
@@ -763,6 +785,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def event_nameChange(self, obj, nextHandler):
 		self._beforeChange(obj, "name")
+		# A system tray icon whose program changes its name is said when the focus moves to it, not each time.
+		trayChanges = getattr(self, "_trayChanges", None)
+		if trayChanges is not None:
+			trayChanges.beforeNameChange(obj)
 		nextHandler()
 
 	# -- the command layer ------------------------------------------------------------------

@@ -64,6 +64,8 @@ DEFAULTS = {
 	"sayTypeAndStateOnce": True,
 	#: NVDA+Shift+J plays JAWS's layered keystroke sound; a beep when turned off (see layerSound).
 	"playJawsLayerSound": True,
+	#: NVDA says a system tray icon when the focus moves to it, not each time its program changes it (see trayChanges).
+	"quietTrayIconChanges": True,
 }
 
 _lock = threading.RLock()

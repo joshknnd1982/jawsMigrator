@@ -1,8 +1,9 @@
 # Loads the global plugin the way NVDA does, with stand-ins for NVDA's modules and real wx menus,
 # and checks what it adds: the Tools submenu, NVDA menu, Preferences, JAWS Migration Assistant
 # settings, the Settings panel, the NVDA+Shift+J commands and their sound (or the beep, when chosen),
-# the check that has NVDA say a control's type and state once, the focus and change notices it passes
-# on to NVDA; and that unloading takes it all away.
+# the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray
+# icon when the focus moves to it (with its note of each key press), the focus and change notices it
+# passes on to NVDA; and that unloading takes it all away.
 # Needs wxPython. NVDA's settings folder is a temporary one. JAWS's layered keystroke sound is read
 # from this computer's JAWS, if there is one; nothing else is read or written.
 # Run: python tests/plugin_smoke.py
@@ -150,6 +151,18 @@ def main():
 		jawsMigrator.state.set(labelRepeats.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(labelRepeats.isRegistered() and changeRepeats.isRegistered(), "and on again")
+		# A system tray icon is said when the focus moves to it; NVDA's key presses are noted, and always run.
+		from jawsMigrator import trayChanges
+
+		decider = sys.modules["inputCore"].decide_executeGesture
+		check(trayChanges.isRegistered() and plugin._trayChanges is trayChanges, "a system tray icon is said when the focus moves to it")
+		check(decider.handlers == [trayChanges.noteGesture] and decider.decide(gesture="kb:a"), "each key press is noted, and NVDA runs it")
+		jawsMigrator.state.set(trayChanges.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not trayChanges.isRegistered() and not decider.handlers, "turned off in the Settings panel, key presses are no longer noted")
+		jawsMigrator.state.set(trayChanges.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(trayChanges.isRegistered() and decider.handlers == [trayChanges.noteGesture], "and on again, once")
 		# The focus and NVDA's change notices go on to NVDA, once each.
 		handled = []
 		control = types.SimpleNamespace(appModule=None, treeInterceptor=None, _speakObjectPropertiesCache={})
@@ -219,6 +232,7 @@ def main():
 		check(not settingsDialogs.NVDASettingsDialog.categoryClasses, "unloading removes the Settings panel")
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
 		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
+		check(not trayChanges.isRegistered() and plugin._trayChanges is None and not decider.handlers, "and NVDA's key presses")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -239,7 +253,7 @@ def main():
 			check(len(handled) == 4, f"and NVDA handles the focus and every change notice: {handled}")
 			plugin.terminate()
 
-		unloadable = ("layerSound", "labelRepeats", "changeRepeats")
+		unloadable = ("layerSound", "labelRepeats", "changeRepeats", "trayChanges")
 		for name in unloadable:
 			delattr(jawsMigrator, name)
 			sys.modules[f"jawsMigrator.{name}"] = None

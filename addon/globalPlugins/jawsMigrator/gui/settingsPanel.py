@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import labelRepeats, layerSound, nvdaEnv, state
+from .. import labelRepeats, layerSound, nvdaEnv, state, trayChanges
 from .common import checkListClass, openFile
 
 
@@ -40,6 +40,9 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# Some web pages put "radio button checked 1 of 2" in a control's label, which NVDA would say twice.
 		self.sayOnce = helper.addItem(wx.CheckBox(self, label="Say a control's type and state &once, even when its label repeats them"))
 		self.sayOnce.SetValue(labelRepeats.wanted(state.load()))
+		# A temperature monitor changes its system tray icon's name every few seconds, which NVDA would read each time.
+		self.quietTray = helper.addItem(wx.CheckBox(self, label="Say a system &tray icon when you move to it, not each time its program changes it"))
+		self.quietTray.SetValue(trayChanges.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -115,6 +118,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownAutoUpdate = self.autoUpdate.GetValue()
 		self._shownAtStartup = self.atStartup.GetValue()
 		self._shownSayOnce = self.sayOnce.GetValue()
+		self._shownQuietTray = self.quietTray.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -162,6 +166,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates["activateJawsProfileAtStartup"] = self.atStartup.GetValue()
 		if self.sayOnce.GetValue() != self._shownSayOnce:
 			updates[labelRepeats.STATE_KEY] = self.sayOnce.GetValue()
+		if self.quietTray.GetValue() != self._shownQuietTray:
+			updates[trayChanges.STATE_KEY] = self.quietTray.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

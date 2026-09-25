@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.8
+- Version: 1.9
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.9](#whats-new-in-19)
 - [What's new in 1.8](#whats-new-in-18)
 - [What's new in 1.7](#whats-new-in-17)
 - [What's new in 1.6](#whats-new-in-16)
@@ -60,10 +61,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.8.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.9.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.9
+
+A fix from a tester's report on version 1.8:
+
+- **NVDA no longer reads a system tray icon over and over.** Programs keep the name of their system tray icon up to date. A temperature monitor shows your computer's temperatures there and changes them every few seconds, and the clock changes every minute. While the focus was on such an icon, NVDA read it again every time it changed. A tester's NVDA started with the focus on a temperature monitor's icon and kept saying "CPU 129.9 F; Drive C Temperature 113.0 F; ...", with new temperatures every few seconds, until the tester pressed Alt+Tab. Now NVDA says a system tray icon when you move to it, and NVDA+Tab reads it as it is now, but NVDA doesn't read it again when its program changes it. Braille still shows every change. If you press a key on the icon and the icon changes within a moment, NVDA says the change, once for each key press, because your key may have made it. This works on Windows 10 and Windows 11, for the programs' icons, the clock, the system's own icons and the hidden icons. To hear every change again, uncheck "Say a system tray icon when you move to it, not each time its program changes it" in NVDA's Settings, JAWS Migration Assistant.
+
+NVDA itself reads every change of the icon that has the focus, with or without add-ons. The assistant keeps it to one reading while it is installed.
 
 ## What's new in 1.8
 
@@ -364,6 +373,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - automatic update checks;
 - turning on the JAWS settings profile when NVDA starts;
 - saying a control's type and state once, even when its label repeats them, and a change once when you activate a control in browse mode (on unless you turn it off; see [What's new in 1.5](#whats-new-in-15) and [What's new in 1.8](#whats-new-in-18));
+- saying a system tray icon when you move to it, not each time its program changes it (on unless you turn it off; see [What's new in 1.9](#whats-new-in-19));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 
@@ -498,7 +508,8 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
 - Rates and pitches are converted from the percentage JAWS shows, except Eloquence's rate, which keeps JAWS's speed. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
-- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit and saying a control's type and state once need the assistant: they stop when it is uninstalled or disabled.
+- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, saying a control's type and state once, and saying a system tray icon only when you move to it need the assistant: they stop when it is uninstalled or disabled.
+- NVDA can't tell what changed a system tray icon. A change within a moment of a key you press on the icon is said, whatever made it. Any other change isn't said until you move to the icon again or press NVDA+Tab.
 - A control's type and state are only left out of a label when they are at its end, in NVDA's words (or "checkbox", "dropdown" and similar English spellings), right next to where NVDA says them. A page that puts them first, or in another language than NVDA's, is read as it is.
 - JAWS voices from synthesizers with no NVDA equivalent on the computer (for example old hardware synthesizers) cannot be used. The report says which ones.
 - NVDA speech dictionaries are not per application. Rules from JAWS application dictionaries go into the default dictionary; you can leave them out.
@@ -522,7 +533,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 `tests/test_nvda_runtime.py` checks that every module the add-on imports exists in the NVDA installed on the computer. NVDA's own copy of Python has only part of Python's standard library, so code that works in the other tests can still fail to load in NVDA. It is skipped where NVDA isn't installed.
 
-`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, and that NVDA gets every focus and change notice the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
+`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
 
 Three further scripts need wxPython and a computer with JAWS or JAWS settings. They change nothing outside a temporary folder:
 

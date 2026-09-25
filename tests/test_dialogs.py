@@ -424,6 +424,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"activateJawsProfileAtStartup": False,
 				"checkForUpdatesAutomatically": True,
 				"sayTypeAndStateOnce": True,
+				"quietTrayIconChanges": True,
 				"playJawsLayerSound": True,
 			},
 		)
@@ -456,6 +457,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"jawsProfileName": "JAWS settings",
 				"activateJawsProfileAtStartup": True,
 				"sayTypeAndStateOnce": False,
+				"quietTrayIconChanges": False,
 				"playJawsLayerSound": False,
 			},
 		)
@@ -465,6 +467,7 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertTrue(state.get("activateJawsProfileAtStartup"))
 		self.assertTrue(state.get("checkForUpdatesAutomatically"))
 		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("playJawsLayerSound"), "a check box the user didn't change saves nothing")
 
 	def test_sayingTypeAndStateOnceIsSavedAndApplied(self):
@@ -483,6 +486,23 @@ class SettingsPanelTests(unittest.TestCase):
 		panel.onSave()
 		state.forget()
 		self.assertTrue(state.get(labelRepeats.STATE_KEY))
+
+	def test_quietTrayIconsAreSavedAndApplied(self):
+		from jawsMigrator import state, trayChanges
+
+		panel = self.dialog.panel
+		self.assertEqual(panel.quietTray.GetLabel(), "Say a system &tray icon when you move to it, not each time its program changes it")
+		self.assertTrue(panel.quietTray.GetValue(), "on unless turned off")
+		panel.quietTray.SetValue(False)
+		self.calls.clear()
+		panel.onSave()
+		state.forget()
+		self.assertFalse(state.get(trayChanges.STATE_KEY))
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], "NVDA reads every change of a tray icon from now on")
+		panel.quietTray.SetValue(True)
+		panel.onSave()
+		state.forget()
+		self.assertTrue(state.get(trayChanges.STATE_KEY))
 
 	def test_layerSoundChoiceIsSavedAndApplied(self):
 		from jawsMigrator import layerSound, state
