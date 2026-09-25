@@ -11,6 +11,13 @@ lowest JAWS level at which a symbol is spoken becomes its NVDA level: None ->
 none, Some -> some, Most -> most, All -> all, never -> only when reading
 characters.
 
+Spaces and line breaks are the exception: their JAWS names are only said when
+reading characters, whatever the flags. JAWS's files name the no-break space
+("non breaking space") at the Most level, but web pages put it between words
+everywhere, and at NVDA's "most" level NVDA said the name wherever it was
+("tight end non breaking space", "and defensive tackle non breaking space").
+NVDA's own symbols say spaces and line breaks only when reading characters too.
+
 Only symbols the user changed (their copy of a ``.sbl`` differs from the shared
 copy) are migrated unless JAWS's own names are asked for. They go into NVDA's
 user symbol file for the speech language, merged with what is already there.
@@ -21,6 +28,7 @@ from __future__ import annotations
 import codecs
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from . import jawsFiles, safety
@@ -29,6 +37,17 @@ from . import jawsFiles, safety
 _LEVEL_ORDER = ("all", "most", "some", "none")
 #: From least to most verbose: the first level at which a symbol is spoken wins.
 _NVDA_LEVELS = (("none", "none"), ("some", "some"), ("most", "most"), ("all", "all"))
+#: NVDA's levels at which a symbol's name is said within text, not only when reading characters.
+TEXT_LEVELS = frozenset(level for _jawsLevel, level in _NVDA_LEVELS)
+
+
+def isSpaceOrLineBreak(character: str) -> bool:
+	"""Whether ``character`` is a space or a line break, such as the no-break space or the vertical tab.
+
+	Tab and page break aren't: NVDA and JAWS say them as punctuation (NVDA's own symbols say "tab"
+	at the "all" level and "page break" at every level). Neither is Word's non-breaking hyphen (U+001E).
+	"""
+	return len(character) == 1 and (unicodedata.category(character) in ("Zs", "Zl", "Zp") or character in "\n\r\v\x85")
 
 
 @dataclass
@@ -39,6 +58,9 @@ class JawsSymbol:
 
 	@property
 	def nvdaLevel(self) -> str:
+		if isSpaceOrLineBreak(self.character):
+			# Between words it is a pause; its name is for reading characters (see the module's notes).
+			return "char"
 		bits = self.flags.ljust(8, "0")
 		spokenAt = {level: bits[index * 2] == "1" for index, level in enumerate(_LEVEL_ORDER)}
 		for jawsLevel, nvdaLevel in _NVDA_LEVELS:
@@ -127,12 +149,21 @@ def changedSymbols(shared: dict, user: dict) -> dict:
 # -- NVDA symbol files ----------------------------------------------------------------
 
 _ESCAPES = {"\0": "\\0", "\t": "\\t", "\n": "\\n", "\r": "\\r", "\f": "\\f", "\v": "\\v", "#": "\\#", "\\": "\\\\"}
+#: How NVDA reads an escaped first character back (SpeechSymbols.IDENTIFIER_ESCAPES_INPUT).
+_UNESCAPES = {escape[1]: character for character, escape in _ESCAPES.items()}
 
 
 def _identifier(character: str) -> str:
 	if character and character[0] in _ESCAPES:
 		return _ESCAPES[character[0]] + character[1:]
 	return character
+
+
+def symbolOf(identifier: str) -> str:
+	"""The symbol NVDA reads from the first field of a line in its symbols file: ``\\v`` is the vertical tab."""
+	if identifier.startswith("\\") and len(identifier) >= 2:
+		return _UNESCAPES.get(identifier[1], identifier[1]) + identifier[2:]
+	return identifier
 
 
 def symbolLine(character: str, symbol: JawsSymbol) -> str | None:

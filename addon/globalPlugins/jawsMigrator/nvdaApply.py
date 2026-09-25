@@ -579,6 +579,11 @@ def symbolsFile(locale: str) -> str:
 
 
 def reloadSymbols() -> None:
+	"""Have NVDA read its symbol files again.
+
+	NVDA builds its list of symbol dictionaries anew, so JAWS's rule for a colon between digits goes
+	back in when it was there (see numberSymbols).
+	"""
 	try:
 		import characterProcessing
 
@@ -586,6 +591,10 @@ def reloadSymbols() -> None:
 		characterProcessing.initialize()
 	except Exception:
 		_log().debugWarning("jawsMigrator: could not reload speech symbols", exc_info=True)
+	from . import numberSymbols
+
+	if numberSymbols.isRegistered():
+		numberSymbols.register()
 
 
 # -- input gestures ------------------------------------------------------------------------------

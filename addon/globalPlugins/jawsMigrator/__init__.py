@@ -309,7 +309,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			debugLog.error("could not keep NVDA silent as it exits")
 
 	def _repairVoices(self):
-		"""Once, after an update: repair what versions 1.0 to 1.3 wrote, then explain their JAWS profile.
+		"""Once, after an update: repair what versions 1.0 to 1.9 wrote, then explain their JAWS profile.
 
 		The repairs run one after another, each after its own backup where it changes NVDA's settings.
 		Meanwhile the assistant counts as busy, so no migration, restore or sounds change runs at the same time.
@@ -318,7 +318,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._busy:
 			self._repairTimer = wx.CallLater(60000, self._repairVoices)
 			return
-		from . import dictRepair, gestureRepair, migrator, rateRepair
+		from . import dictRepair, gestureRepair, migrator, rateRepair, symbolRepair
 
 		def insertKeysRepair(announce, done=None):
 			def reload():
@@ -334,6 +334,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("the repair of keystrokes", gestureRepair.repairOnce),
 			("the Insert keystrokes of the JAWS Laptop layout", insertKeysRepair),
 			("the repair of the Eloquence rate", lambda announce, done=None: rateRepair.repairOnce(announce, migrator._backupFirst, done)),
+			("the repair of punctuation symbols for spaces and line breaks", symbolRepair.repairOnce),
 		]
 		self._busy = True
 		self._runRepairs(steps)

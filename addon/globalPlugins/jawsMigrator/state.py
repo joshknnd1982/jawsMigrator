@@ -55,6 +55,8 @@ DEFAULTS = {
 	"insertKeysVersion": 0,
 	#: The version of the one-time repair of Eloquence rates from versions 1.0 to 1.3 (see rateRepair).
 	"eloquenceRateRepaired": 0,
+	#: The version of the one-time repair of symbols for spaces and line breaks from versions 1.0 to 1.9 (see symbolRepair).
+	"symbolsRepaired": 0,
 	#: A user of versions 1.0 to 1.2 was told once why their separate JAWS profile switches off.
 	"profileNoticeShown": False,
 	#: The user asked not to be offered ClassicSpeech each time the assistant opens.

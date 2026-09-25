@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.9
+- Version: 1.10
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.10](#whats-new-in-110)
 - [What's new in 1.9](#whats-new-in-19)
 - [What's new in 1.8](#whats-new-in-18)
 - [What's new in 1.7](#whats-new-in-17)
@@ -61,10 +62,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.9.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.10.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.10
+
+A fix from a tester's report on version 1.8:
+
+- **NVDA no longer says "non breaking space" on web pages.** Web pages put a no-break space between words, in place of an ordinary space, all the time. JAWS's symbol file for Eloquence names it "non breaking space" at the Most punctuation level, and the assistant gave the name that level in NVDA. So at NVDA's Most level, NVDA said "non breaking space" wherever a page had one. A tester heard it all through a football news site: "tight end non breaking space", then a link, then "non breaking space", "and defensive tackle non breaking space". Now JAWS's names for spaces and line breaks are said only when you read by character, as NVDA does with its own names for them. Between words, a no-break space is a space again. The same goes for the vertical tab, which Word and HTML e-mail use for a line break: NVDA no longer says "vertical tab" there. Page breaks and tabs are said as before.
+
+If you migrated with an earlier version, the assistant repairs this once, a little after NVDA starts, after backing up NVDA's settings, and tells you what it changed. It only changes the symbols it wrote itself, JAWS's names for spaces and line breaks. Symbols you made yourself in NVDA stay as they are.
 
 ## What's new in 1.9
 
@@ -170,7 +179,7 @@ Items this computer can't use (for example a voice profile for a synthesizer NVD
 | Voice profiles (`.vpf`) | See [Voices](#voices-voice-profiles-and-voice-aliases). |
 | Speech and Sounds Manager (`.smf`) | ClassicSpeech Speech and Sound Schemes. See [ClassicSpeech](#classicspeech). |
 | Dictionary Manager (`.jdf`) | NVDA speech dictionary entries (details below this table). |
-| Punctuation (`.sbl`) | Symbols you changed become NVDA symbol pronunciations, at the NVDA level where JAWS spoke them. You can also choose JAWS's names for every symbol. |
+| Punctuation (`.sbl`) | Symbols you changed become NVDA symbol pronunciations, at the NVDA level where JAWS spoke them. You can also choose JAWS's names for every symbol. Names for spaces and line breaks, such as "non breaking space", are only said when you read by character, as NVDA says its own. |
 | Keyboard Manager (`.jkm`) | NVDA input gestures for JAWS commands NVDA also has. See [Keyboard commands](#keyboard-commands). |
 | Navigation Quick Keys | NVDA browse mode quick navigation letters, when you choose JAWS letters. |
 | Mark Colors in Braille | NVDA's font attribute reporting includes braille when JAWS marked bold, italic or underline. |

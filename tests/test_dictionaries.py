@@ -294,7 +294,9 @@ class SymbolFileTests(unittest.TestCase):
 		loaded, invalid = self.nvdaReads()
 		self.assertEqual(invalid, [])
 		self.assertEqual(set(loaded), {"\x0b", "\x0c", "\n", "#"})
-		self.assertEqual(loaded["\x0b"], ["vertical tab", "most", "-"])
+		# A line break's name is only said when reading characters (version 1.10, see test_v110_fixes).
+		self.assertEqual(loaded["\x0b"], ["vertical tab", "char", "-"])
+		self.assertEqual(loaded["\x0c"], ["page break", "most", "-"])
 
 	def test_nothing_written_when_nothing_can_be(self):
 		self.assertEqual(symbolMap.mergeIntoSymbolFile(self.path, {"\u2029": symbolMap.JawsSymbol("\u2029", "11110101", "paragraph mark")}), 0)
