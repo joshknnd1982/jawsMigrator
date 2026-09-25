@@ -13,8 +13,9 @@ It also has NVDA say a control's type and state once when a web page repeats
 them in the control's label (see labelRepeats), or when NVDA would say again
 what activating a control in browse mode changed (see changeRepeats), and a
 system tray icon when the focus moves to it, not each time its program changes
-it (see trayChanges); and NVDA+Shift+J plays JAWS's layered keystroke sound
-(see layerSound).
+it (see trayChanges); NVDA+Shift+J plays JAWS's layered keystroke sound
+(see layerSound); and opening Outlook puts the focus in Outlook, not in NVDA's
+own window (see outlookFocus).
 """
 
 from __future__ import annotations
@@ -130,6 +131,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("add the NVDA menu items", self._createMenu),
 			("add the settings panel", self._addSettingsPanel),
 			("apply the assistant's own settings", self.applyRuntimeSettings),
+			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
 			("follow NVDA's configuration reloads", self._followConfigResets),
 			("schedule the automatic update check", self.updater.scheduleAutomaticCheck),
 			("schedule what runs after NVDA starts", self._scheduleStartupTasks),
@@ -144,6 +146,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		settingsPanel.JawsMigratorSettingsPanel.plugin = self
 		nvdaGui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(settingsPanel.JawsMigratorSettingsPanel)
+
+	def _keepOutlookFocus(self):
+		from . import outlookFocus
+
+		# Not a JAWS setting: NVDA's wait for Outlook stays on NVDA's main thread, and the focus comes back after it.
+		outlookFocus.register()
 
 	def _followConfigResets(self):
 		import config
@@ -217,6 +225,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import trayChanges
 
 			trayChanges.unregister()
+		except Exception:
+			pass
+		try:
+			from . import outlookFocus
+
+			outlookFocus.unregister()
 		except Exception:
 			pass
 		super().terminate()

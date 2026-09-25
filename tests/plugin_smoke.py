@@ -2,8 +2,9 @@
 # and checks what it adds: the Tools submenu, NVDA menu, Preferences, JAWS Migration Assistant
 # settings, the Settings panel, the NVDA+Shift+J commands and their sound (or the beep, when chosen),
 # the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray
-# icon when the focus moves to it (with its note of each key press), the focus and change notices it
-# passes on to NVDA; and that unloading takes it all away.
+# icon when the focus moves to it (with its note of each key press), the guard that keeps the focus in
+# Outlook when NVDA waits for it, the focus and change notices it passes on to NVDA; and that unloading
+# takes it all away.
 # Needs wxPython. NVDA's settings folder is a temporary one. JAWS's layered keystroke sound is read
 # from this computer's JAWS, if there is one; nothing else is read or written.
 # Run: python tests/plugin_smoke.py
@@ -112,6 +113,11 @@ def installNvda(frame, configDir):
 	for name, module in (("settingsDialogs", settingsDialogs), ("guiHelper", guiHelper)):
 		sys.modules[f"gui.{name}"] = module
 		setattr(gui, name, module)
+
+	def fetchAppModule(processID, appName):
+		return types.SimpleNamespace(processID=processID, appName=appName)
+
+	sys.modules["appModuleHandler"] = types.SimpleNamespace(fetchAppModule=fetchAppModule, nvdaFetchAppModule=fetchAppModule, runningTable={})
 	return settingsDialogs
 
 
@@ -163,6 +169,15 @@ def main():
 		jawsMigrator.state.set(trayChanges.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(trayChanges.isRegistered() and decider.handlers == [trayChanges.noteGesture], "and on again, once")
+		# Opening Outlook puts the focus in Outlook: NVDA's Outlook support is guarded as NVDA loads it.
+		from jawsMigrator import outlookFocus
+
+		appModuleHandler = sys.modules["appModuleHandler"]
+		check(
+			outlookFocus.isRegistered() and appModuleHandler.fetchAppModule.__wrapped__ is appModuleHandler.nvdaFetchAppModule,
+			"NVDA's Outlook support is guarded as NVDA loads it",
+		)
+		check(appModuleHandler.fetchAppModule(4242, "notepad").appName == "notepad", "and NVDA still loads every application's support")
 		# The focus and NVDA's change notices go on to NVDA, once each.
 		handled = []
 		control = types.SimpleNamespace(appModule=None, treeInterceptor=None, _speakObjectPropertiesCache={})
@@ -233,6 +248,7 @@ def main():
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
 		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
 		check(not trayChanges.isRegistered() and plugin._trayChanges is None and not decider.handlers, "and NVDA's key presses")
+		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -253,7 +269,7 @@ def main():
 			check(len(handled) == 4, f"and NVDA handles the focus and every change notice: {handled}")
 			plugin.terminate()
 
-		unloadable = ("layerSound", "labelRepeats", "changeRepeats", "trayChanges")
+		unloadable = ("layerSound", "labelRepeats", "changeRepeats", "trayChanges", "outlookFocus")
 		for name in unloadable:
 			delattr(jawsMigrator, name)
 			sys.modules[f"jawsMigrator.{name}"] = None
@@ -266,7 +282,7 @@ def main():
 		def broken(*args, **kwargs):
 			raise RuntimeError("broken for the test")
 
-		steps = [(jawsMigrator.GlobalPlugin, name) for name in ("applyRuntimeSettings", "_followConfigResets", "_scheduleStartupTasks")]
+		steps = [(jawsMigrator.GlobalPlugin, name) for name in ("applyRuntimeSettings", "_keepOutlookFocus", "_followConfigResets", "_scheduleStartupTasks")]
 		steps.append((jawsMigrator.updater.UpdateChecker, "scheduleAutomaticCheck"))
 		saved = [(owner, name, getattr(owner, name)) for owner, name in steps]
 		for owner, name in steps:
