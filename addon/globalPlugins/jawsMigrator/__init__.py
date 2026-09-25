@@ -13,9 +13,10 @@ It also has NVDA say a control's type and state once when a web page repeats
 them in the control's label (see labelRepeats), or when NVDA would say again
 what activating a control in browse mode changed (see changeRepeats), and a
 system tray icon when the focus moves to it, not each time its program changes
-it (see trayChanges); NVDA+Shift+J plays JAWS's layered keystroke sound
-(see layerSound); and opening Outlook puts the focus in Outlook, not in NVDA's
-own window (see outlookFocus).
+it (see trayChanges), and a heading's level before its text when quick
+navigation moves to it (see headingOrder); NVDA+Shift+J plays JAWS's layered
+keystroke sound (see layerSound); and opening Outlook puts the focus in
+Outlook, not in NVDA's own window (see outlookFocus).
 """
 
 from __future__ import annotations
@@ -228,6 +229,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import headingOrder
+
+			headingOrder.unregister()
+		except Exception:
+			pass
+		try:
 			from . import outlookFocus
 
 			outlookFocus.unregister()
@@ -244,7 +251,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
 		JAWS's rule for a colon between digits, a control's type and state said once (and a change said once),
-		a system tray icon said when the focus moves to it, and the layer's sound.
+		a system tray icon said when the focus moves to it, a heading said level first when quick navigation
+		moves to it, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -302,6 +310,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._trayChanges = trayChanges
 		except Exception:
 			debugLog.error("could not apply saying a system tray icon when the focus moves to it")
+		try:
+			from . import headingOrder
+
+			# Not a JAWS setting: quick navigation reads a heading level first, as the arrow keys and JAWS do.
+			if headingOrder.wanted(data):
+				headingOrder.register()
+			else:
+				headingOrder.unregister()
+		except Exception:
+			debugLog.error("could not apply saying a heading's level first")
 		try:
 			from . import layerSound
 

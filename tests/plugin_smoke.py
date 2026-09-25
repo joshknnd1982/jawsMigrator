@@ -2,9 +2,9 @@
 # and checks what it adds: the Tools submenu, NVDA menu, Preferences, JAWS Migration Assistant
 # settings, the Settings panel, the NVDA+Shift+J commands and their sound (or the beep, when chosen),
 # the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray
-# icon when the focus moves to it (with its note of each key press), the guard that keeps the focus in
-# Outlook when NVDA waits for it, the focus and change notices it passes on to NVDA; and that unloading
-# takes it all away.
+# icon when the focus moves to it (with its note of each key press), the one that has quick navigation
+# say a heading's level first, the guard that keeps the focus in Outlook when NVDA waits for it, the
+# focus and change notices it passes on to NVDA; and that unloading takes it all away.
 # Needs wxPython. NVDA's settings folder is a temporary one. JAWS's layered keystroke sound is read
 # from this computer's JAWS, if there is one; nothing else is read or written.
 # Run: python tests/plugin_smoke.py
@@ -71,17 +71,38 @@ class Labelled(enum.Enum):
 		return "not " + self.value
 
 
+def _shouldSpeakContentFirst(reason, role, presCat, attrs, tableID, states):
+	"""NVDA's choice between a field's text and what it is, first."""
+	return True
+
+
+class TextInfoQuickNavItem:
+	"""NVDA's browseMode.TextInfoQuickNavItem."""
+
+	def report(self, readUnit=None):
+		pass
+
+
+#: NVDA's own report, before the assistant puts its own in its place.
+NVDA_REPORT = vars(TextInfoQuickNavItem)["report"]
+
+
 def installSpeech():
-	"""NVDA's speech extension points and control words, as far as the assistant uses them."""
+	"""NVDA's speech extension points, control words and speech order, and browse mode's quick navigation report,
+	as far as the assistant uses them."""
 	speech = types.ModuleType("speech")
 	speech.extensions = types.ModuleType("speech.extensions")
 	speech.extensions.filter_speechSequence = SpeechFilter()
 	speech.speech = types.ModuleType("speech.speech")
 	speech.speech.getPropertiesSpeech = lambda reason=None, **values: ["1 of 2"]
+	speech.speech._shouldSpeakContentFirst = _shouldSpeakContentFirst
 	controlTypes = types.ModuleType("controlTypes")
 	controlTypes.Role = Labelled("Role", {"RADIOBUTTON": "radio button", "BUTTON": "button"})
 	controlTypes.State = Labelled("State", {"CHECKED": "checked"})
-	for module in (speech, speech.extensions, speech.speech, controlTypes):
+	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS QUICKNAV CARET")
+	browseMode = types.ModuleType("browseMode")
+	browseMode.TextInfoQuickNavItem = TextInfoQuickNavItem
+	for module in (speech, speech.extensions, speech.speech, controlTypes, browseMode):
 		sys.modules[module.__name__] = module
 	return speech.extensions.filter_speechSequence
 
@@ -169,6 +190,28 @@ def main():
 		jawsMigrator.state.set(trayChanges.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(trayChanges.isRegistered() and decider.handlers == [trayChanges.noteGesture], "and on again, once")
+		# Quick navigation says a heading's level first: NVDA's decision on the order, and its quick navigation report.
+		from jawsMigrator import headingOrder
+
+		nvdaDecision, nvdaReport = _shouldSpeakContentFirst, NVDA_REPORT
+		speechModule = sys.modules["speech.speech"]
+
+		def headingOrderWrapped():
+			return (
+				getattr(speechModule._shouldSpeakContentFirst, "__wrapped__", None) is nvdaDecision
+				and getattr(TextInfoQuickNavItem.report, "__wrapped__", None) is nvdaReport
+			)
+
+		def nvdaOrder():
+			return speechModule._shouldSpeakContentFirst is nvdaDecision and TextInfoQuickNavItem.report is nvdaReport
+
+		check(headingOrder.isRegistered() and headingOrderWrapped(), "quick navigation says a heading's level first")
+		jawsMigrator.state.set(headingOrder.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not headingOrder.isRegistered() and nvdaOrder(), "turned off in the Settings panel, NVDA's own order is back")
+		jawsMigrator.state.set(headingOrder.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(headingOrder.isRegistered() and headingOrderWrapped(), "and on again, wrapped once")
 		# Opening Outlook puts the focus in Outlook: NVDA's Outlook support is guarded as NVDA loads it.
 		from jawsMigrator import outlookFocus
 
@@ -248,6 +291,7 @@ def main():
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
 		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
 		check(not trayChanges.isRegistered() and plugin._trayChanges is None and not decider.handlers, "and NVDA's key presses")
+		check(not headingOrder.isRegistered() and nvdaOrder(), "and NVDA's order for quick navigation")
 		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
@@ -269,7 +313,7 @@ def main():
 			check(len(handled) == 4, f"and NVDA handles the focus and every change notice: {handled}")
 			plugin.terminate()
 
-		unloadable = ("layerSound", "labelRepeats", "changeRepeats", "trayChanges", "outlookFocus")
+		unloadable = ("layerSound", "labelRepeats", "changeRepeats", "trayChanges", "headingOrder", "outlookFocus")
 		for name in unloadable:
 			delattr(jawsMigrator, name)
 			sys.modules[f"jawsMigrator.{name}"] = None

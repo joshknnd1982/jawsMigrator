@@ -68,6 +68,8 @@ DEFAULTS = {
 	"playJawsLayerSound": True,
 	#: NVDA says a system tray icon when the focus moves to it, not each time its program changes it (see trayChanges).
 	"quietTrayIconChanges": True,
+	#: Quick navigation says a heading's level before its text, as the arrow keys and JAWS do (see headingOrder).
+	"sayHeadingLevelFirst": True,
 }
 
 _lock = threading.RLock()

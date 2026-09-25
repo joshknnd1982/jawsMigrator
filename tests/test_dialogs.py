@@ -425,6 +425,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"checkForUpdatesAutomatically": True,
 				"sayTypeAndStateOnce": True,
 				"quietTrayIconChanges": True,
+				"sayHeadingLevelFirst": True,
 				"playJawsLayerSound": True,
 			},
 		)
@@ -458,6 +459,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"activateJawsProfileAtStartup": True,
 				"sayTypeAndStateOnce": False,
 				"quietTrayIconChanges": False,
+				"sayHeadingLevelFirst": False,
 				"playJawsLayerSound": False,
 			},
 		)
@@ -468,6 +470,7 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertTrue(state.get("checkForUpdatesAutomatically"))
 		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("sayHeadingLevelFirst"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("playJawsLayerSound"), "a check box the user didn't change saves nothing")
 
 	def test_sayingTypeAndStateOnceIsSavedAndApplied(self):
@@ -503,6 +506,23 @@ class SettingsPanelTests(unittest.TestCase):
 		panel.onSave()
 		state.forget()
 		self.assertTrue(state.get(trayChanges.STATE_KEY))
+
+	def test_headingLevelFirstIsSavedAndApplied(self):
+		from jawsMigrator import headingOrder, state
+
+		panel = self.dialog.panel
+		self.assertEqual(panel.headingFirst.GetLabel(), "Say a heading's level &before its text when you move to it with quick navigation")
+		self.assertTrue(panel.headingFirst.GetValue(), "on unless turned off")
+		panel.headingFirst.SetValue(False)
+		self.calls.clear()
+		panel.onSave()
+		state.forget()
+		self.assertFalse(state.get(headingOrder.STATE_KEY))
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], "quick navigation says a heading's text first again, at once")
+		panel.headingFirst.SetValue(True)
+		panel.onSave()
+		state.forget()
+		self.assertTrue(state.get(headingOrder.STATE_KEY))
 
 	def test_layerSoundChoiceIsSavedAndApplied(self):
 		from jawsMigrator import layerSound, state
