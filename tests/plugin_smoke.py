@@ -12,6 +12,7 @@
 # Run: python tests/plugin_smoke.py
 
 import collections
+import dataclasses
 import enum
 import os
 import shutil
@@ -83,6 +84,22 @@ def _objectSpeech_calculateAllowedProps(reason, shouldReportTextContent, objRole
 	return {"includeTableCellCoords": True, "cellCoordsText": True}
 
 
+def processText(locale, text, symbolLevel, normalize=False):
+	"""NVDA's speech dictionaries, then its symbols (speech.speech.processText), as far as the smoke test goes."""
+	return text.replace(":)", " smiley ")
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class SymbolDictionaryDefinition:
+	"""NVDA's characterProcessing.SymbolDictionaryDefinition, as far as the assistant's symbol rules go."""
+
+	name: str
+	path: str
+	source: str = "builtin"
+	allowComplexSymbols: bool = False
+	mandatory: bool = False
+
+
 class TextInfoQuickNavItem:
 	"""NVDA's browseMode.TextInfoQuickNavItem."""
 
@@ -125,6 +142,7 @@ def installSpeech():
 	speech.speech = types.ModuleType("speech.speech")
 	speech.speech.getPropertiesSpeech = lambda reason=None, **values: ["1 of 2"]
 	speech.speech._objectSpeech_calculateAllowedProps = _objectSpeech_calculateAllowedProps
+	speech.speech.processText = processText
 	speech.getControlFieldSpeech = getControlFieldSpeech
 	controlTypes = types.ModuleType("controlTypes")
 	controlTypes.Role = Labelled(
@@ -138,7 +156,12 @@ def installSpeech():
 	browseMode.BrowseModeTreeInterceptor = BrowseModeTreeInterceptor
 	editableText = types.ModuleType("editableText")
 	editableText.EditableText = EditableText
-	for module in (speech, speech.extensions, speech.speech, controlTypes, browseMode, editableText):
+	characterProcessing = types.ModuleType("characterProcessing")
+	characterProcessing.SymbolDictionaryDefinition = SymbolDictionaryDefinition
+	characterProcessing.SymbolLevel = types.SimpleNamespace(MOST=200, ALL=300)
+	characterProcessing._symbolDictionaryDefinitions = [SymbolDictionaryDefinition(name="builtin", path=""), SymbolDictionaryDefinition(name="user", path="")]
+	characterProcessing.clearSpeechSymbols = lambda: None
+	for module in (speech, speech.extensions, speech.speech, controlTypes, browseMode, editableText, characterProcessing):
 		sys.modules[module.__name__] = module
 	return speech.extensions.filter_speechSequence
 
@@ -318,6 +341,25 @@ def main():
 		jawsMigrator.state.set(documentPolling.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(enhancedControlSupport.shouldUseTimerMixin.__wrapped__ is shouldUseTimerMixin, "and on again, wrapped once")
+		# A drive's ":)" is taken out before NVDA's speech dictionaries, and left out by a symbol rule of its own.
+		from jawsMigrator import driveLetters
+
+		symbolDefinitions = sys.modules["characterProcessing"]._symbolDictionaryDefinitions
+		check(
+			driveLetters.isRegistered()
+			and driveLetters.isGuardingSpeech()
+			and speechModule.processText.__wrapped__ is processText
+			and [definition.name for definition in symbolDefinitions][-2:] == [driveLetters.DEFINITION_NAME, "user"],
+			"a drive's \":)\" is taken out before NVDA's speech dictionaries, and its symbol rule comes before the user's symbols",
+		)
+		said = speechModule.processText("en_US", "Data (D:)", 200)
+		check(said == "Data (D" and speechModule.processText("en_US", "Great :) thanks", 200) == "Great  smiley  thanks", f"Data (D:) at most: {said!r}; a smiley in text as before")
+		jawsMigrator.state.set(driveLetters.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not driveLetters.isRegistered() and speechModule.processText is processText and driveLetters.DEFINITION_NAME not in [d.name for d in symbolDefinitions], "turned off in the Settings panel, NVDA's own are back")
+		jawsMigrator.state.set(driveLetters.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(speechModule.processText.__wrapped__ is processText, "and on again, wrapped once")
 		# Opening Outlook puts the focus in Outlook: NVDA's Outlook support is guarded as NVDA loads it.
 		from jawsMigrator import outlookFocus
 
@@ -411,6 +453,10 @@ def main():
 			"and Enhanced Control Support's own choice of its timer",
 		)
 		del sys.modules[documentPolling.MODULE]
+		check(
+			not driveLetters.isRegistered() and speechModule.processText is processText and driveLetters.DEFINITION_NAME not in [d.name for d in symbolDefinitions],
+			"and NVDA's processText and symbol dictionaries",
+		)
 		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that

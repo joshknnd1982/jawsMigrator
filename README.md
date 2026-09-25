@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.15
+- Version: 1.16
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.16](#whats-new-in-116)
 - [What's new in 1.15](#whats-new-in-115)
 - [What's new in 1.14](#whats-new-in-114)
 - [What's new in 1.13](#whats-new-in-113)
@@ -67,10 +68,16 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.15.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.16.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.16
+
+A fix from a tester's report on version 1.15:
+
+- **No smiley in a drive's name, whatever NVDA's speech dictionaries hold.** With 1.15, a tester still heard File Explorer's "Data (D:)" read with a smiley. NVDA's own symbols, with 1.15's rule, leave the colon and parenthesis out, but NVDA applies its speech dictionaries first, and an entry for ":)" in a dictionary changes the drive's name before that rule ever sees it. Such an entry matches anywhere in the text: that is how NVDA's dictionary dialog makes entries unless you choose otherwise, and how the migration brings over a JAWS dictionary rule made only of symbols. JAWS's own dictionary matches whole words, so it never finds ":)" inside "(D:)". Now the colon and parenthesis after a drive letter are taken out before NVDA's speech dictionaries too: "Data left paren D" at the Most punctuation level, "Data D" at Some. At the All level, and when you read by character, NVDA reads the drive's name as before, and a ":)" anywhere else, such as a smiley in an e-mail, is read as your dictionaries say. It is part of "Say a drive's name as JAWS does, without the colon and parenthesis after its letter, as in Data (D:)" in NVDA's Settings, JAWS Migration Assistant, and turns off with it.
 
 ## What's new in 1.15
 
@@ -607,7 +614,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 `tests/test_nvda_runtime.py` checks that every module the add-on imports exists in the NVDA installed on the computer. NVDA's own copy of Python has only part of Python's standard library, so code that works in the other tests can still fail to load in NVDA. It is skipped where NVDA isn't installed.
 
-`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, the ones that have quick navigation say a heading without what it is in, leave out a list item's row and column, say what Backspace deletes in a slow program and keep browse mode on a web page's tabs and toolbar buttons, the one that keeps Enhanced Control Support's timer off documents, the guard that keeps the focus in Outlook when NVDA waits for it, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
+`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, the ones that have quick navigation say a heading without what it is in, leave out a list item's row and column, say what Backspace deletes in a slow program and keep browse mode on a web page's tabs and toolbar buttons, the one that keeps Enhanced Control Support's timer off documents, the one that takes a drive letter's ":)" out before NVDA's speech dictionaries, the guard that keeps the focus in Outlook when NVDA waits for it, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
 
 Three further scripts need wxPython and a computer with JAWS or JAWS settings. They change nothing outside a temporary folder:
 
