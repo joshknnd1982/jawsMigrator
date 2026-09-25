@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.18
+- Version: 1.19
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.19](#whats-new-in-119)
 - [What's new in 1.18](#whats-new-in-118)
 - [What's new in 1.17](#whats-new-in-117)
 - [What's new in 1.16](#whats-new-in-116)
@@ -70,10 +71,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.18.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.19.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.19
+
+From a tester's answers about version 1.18. The tester asked for NVDA to behave as JAWS does:
+
+- **Links in the Elements List are shown as JAWS's Links List shows them.** The tester compared the two on github.com. JAWS said "Homepage ( g then d ), 2 of 34", where NVDA said "Homepage ( g then d ); visited, 2 of 50, level 0". Now a link in NVDA's Elements List (NVDA+F7) is its text, without NVDA's "visited" and "same page", as in JAWS's list. As JAWS does, NVDA puts "current page" before a link the page marks as the one for the page you are on, as GitHub marks the tab you are on: "Current page Code". And it puts a link's shortcut key after its text, as GitHub gives its user and commit links one: "joshknnd1982 Alt+ArrowUp". NVDA also no longer says "level 0" with each item. The list is a tree, and "level 0" only said that the link is at its top, where every link is. The same goes for buttons and form fields. Where headings or landmarks are under others, NVDA still says each one's level in the list. Typing in the list's Filter box finds a link by what the list shows. To have NVDA's own labels back, uncheck "Show links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA's log shows what happens to the keys you type.** The tester typed a note at the top of NVDA's log, open in Windows 11's Notepad. NVDA said nothing, and letters and spaces were missing from the text itself: "It isn't reading what I'm typing" came out "I sn't reetg wt 'mtyping". NVDA says a character when the program types it, not when you press the key, so it can't say a letter the program never typed. The tester's earlier logs show Notepad losing keys in the same way, each time while NVDA was waiting for Notepad: "message" came out "meg". Those logs are from before version 1.15, when Enhanced Control Support read Notepad's whole document 20 times a second. This time the typing came after the log had been saved, so no log shows what held Notepad up. Now, when NVDA logs at its debug level, NVDA's log says when a program types a key late, which keys it never types, and what NVDA was doing meanwhile. Nothing else changes. See [Debug logs](#debug-logs).
 
 ## What's new in 1.18
 
@@ -462,6 +470,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying what Backspace deletes, even when the program is slow to delete it (on unless you turn it off);
 - keeping Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
+- showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0 (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 
@@ -577,6 +586,8 @@ For finding problems, the assistant keeps detailed logs:
 Errors also go to NVDA's own log. When reporting a problem, attach the debug log and NVDA's log.
 
 To send NVDA's log, attach the file itself rather than copying it out of the Log Viewer. Press Windows+R, type `%temp%` and press Enter. NVDA's log is `nvda.log` in that folder. After NVDA has restarted or stopped unexpectedly, the log from before is `nvda-old.log`. NVDA starts a new log each time it starts, so restart NVDA just before you show the problem, and the log stays short. Selecting all of a very long log in the Log Viewer (NVDA menu, Tools, View log) can freeze NVDA for seconds at each key press, because NVDA reads the selection to announce it, and the Log Viewer is part of NVDA.
+
+When letters go missing as you type, or NVDA doesn't say them, attach `nvda.log` right after it happens, before you type anything about it. When NVDA logs at its debug level, the assistant notes there each key a program you type in was slow to type ("jawsMigrator: notepad typed 's' 1240 ms after the key"), each one it never typed ("jawsMigrator: notepad never typed 's'"), and what NVDA was doing meanwhile, which shows whether NVDA or the program held the typing up.
 
 A log can also grow quickly because of another add-on. With NVDA 2026.2, Emoticons 38.0.0 uses names NVDA has since replaced, and NVDA writes a warning with a full list of calls each time it does. It does that 176 times each time NVDA switches configuration profiles, which happens whenever you move to or from a program with a profile of its own. In one tester's log that was over 12,000 warnings in ten minutes. JAWS has no emoticons of its own: at the Most punctuation level it says ":)" as "colon right paren". If you don't use Emoticons, disabling it (NVDA menu, Tools, Add-on Store, Installed add-ons) keeps the log short. Emoticons 38.2.0 fixes the warnings but needs NVDA 2026.3.
 

@@ -25,9 +25,11 @@ Support, which the assistant offers to install, doesn't read a whole document
 NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); opening
 Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus);
 NVDA's Elements List opens while a web page is still changing, instead of
-being left half made and unseen with the focus in it (see elementsList); and
+being left half made and unseen with the focus in it (see elementsList), and
+shows links as JAWS's Links List does, without "level 0" (see linksList);
 NVDA started with its desktop shortcut's key comes up in the window you were
-in, not on the taskbar, as JAWS does (see startupFocus).
+in, not on the taskbar, as JAWS does (see startupFocus); and NVDA's debug log
+says when a program types a key late or not at all (see typingWatch).
 """
 
 from __future__ import annotations
@@ -133,6 +135,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._trayChanges = None
 		#: The autoFormsMode module, once loaded: it notes each focus change before NVDA chooses browse or focus mode.
 		self._autoFormsMode = None
+		#: The linksList module, once loaded: it gives the Elements List's items the assistant's class.
+		self._linksList = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -148,6 +152,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("go back to the window you were in when NVDA starts on the taskbar", self._backFromTaskbar),
 			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
 			("keep NVDA's Elements List working while a web page changes", self._guardElementsList),
+			("note the keys a program types late or not at all", self._watchTyping),
 			("follow NVDA's configuration reloads", self._followConfigResets),
 			("schedule the automatic update check", self.updater.scheduleAutomaticCheck),
 			("schedule what runs after NVDA starts", self._scheduleStartupTasks),
@@ -181,6 +186,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		# Not a JAWS setting: NVDA+F7 on a page that is still changing left NVDA's dialog half made, unseen, with the focus in it.
 		elementsList.register()
+
+	def _watchTyping(self):
+		from . import typingWatch
+
+		# Not a JAWS setting, and only for NVDA's debug log: a tester's letters went missing in a large file in Notepad.
+		typingWatch.register()
 
 	def _followConfigResets(self):
 		import config
@@ -311,6 +322,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			elementsList.unregister()
 		except Exception:
 			pass
+		self._linksList = None
+		try:
+			from . import linksList
+
+			linksList.unregister()
+		except Exception:
+			pass
+		try:
+			from . import typingWatch
+
+			typingWatch.unregister()
+		except Exception:
+			pass
 		super().terminate()
 
 	def _onConfigReset(self, factoryDefaults=False):
@@ -326,7 +350,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		a system tray icon said when the focus moves to it, a heading said without what it is in when quick
 		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
 		a slow program too, Enhanced Control Support's timer kept off documents, browse mode kept on a web page's
-		tabs and toolbar buttons, and the layer's sound.
+		tabs and toolbar buttons, links shown in the Elements List as JAWS's Links List shows them, and the
+		layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -457,6 +482,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._autoFormsMode = autoFormsMode
 		except Exception:
 			debugLog.error("could not apply browse mode on a web page's tabs and toolbar buttons")
+		try:
+			from . import linksList
+
+			# Not a JAWS setting: JAWS's Links List shows a link's text with "Current Page" and its shortcut key,
+			# without visited, same page or a level.
+			if linksList.wanted(data):
+				linksList.register()
+			else:
+				linksList.unregister()
+			self._linksList = linksList
+		except Exception:
+			debugLog.error("could not apply showing links in the Elements List as JAWS's Links List does")
 		try:
 			from . import layerSound
 
@@ -964,6 +1001,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if trayChanges is not None:
 			trayChanges.beforeNameChange(obj)
 		nextHandler()
+
+	def event_typedCharacter(self, obj, nextHandler, ch=None, **kwargs):
+		# The program typed a key: NVDA's debug log notes one typed late, or one before it never typed (see typingWatch).
+		try:
+			from . import typingWatch
+
+			typingWatch.typed(ch)
+		except Exception:
+			pass
+		nextHandler()
+
+	def chooseNVDAObjectOverlayClasses(self, obj, clsList):
+		# An item of NVDA's own Elements List: no "level 0" where no item is under another (see linksList).
+		linksList = getattr(self, "_linksList", None)
+		if linksList is not None:
+			linksList.chooseOverlay(obj, clsList)
 
 	# -- the command layer ------------------------------------------------------------------
 

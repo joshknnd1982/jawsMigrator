@@ -103,8 +103,15 @@ class SymbolDictionaryDefinition:
 class TextInfoQuickNavItem:
 	"""NVDA's browseMode.TextInfoQuickNavItem."""
 
+	itemType = "link"
+
 	def report(self, readUnit=None):
 		pass
+
+	def _getLabelForProperties(self, labelPropertyGetter):
+		# NVDA's for a link: its name, then its states.
+		states = sorted(state.displayString for state in labelPropertyGetter("states") or ())
+		return "; ".join([labelPropertyGetter("name")] + states)
 
 
 class BrowseModeTreeInterceptor:
@@ -149,6 +156,7 @@ class EditableText:
 
 #: NVDA's own report, choice of mode, Backspace and Elements List, before the assistant puts its own in their place.
 NVDA_REPORT = vars(TextInfoQuickNavItem)["report"]
+NVDA_GET_LABEL = vars(TextInfoQuickNavItem)["_getLabelForProperties"]
 NVDA_PASS_THROUGH = vars(BrowseModeTreeInterceptor)["shouldPassThrough"]
 NVDA_BACKSPACE = vars(EditableText)["_backspaceScriptHelper"]
 NVDA_CARET_WAIT = vars(EditableText)["_hasCaretMoved"]
@@ -174,7 +182,7 @@ def installSpeech():
 		"Role",
 		{"RADIOBUTTON": "radio button", "BUTTON": "button", "HEADING": "heading", "LIST": "list", "LISTITEM": "list item", "TAB": "tab"},
 	)
-	controlTypes.State = Labelled("State", {"CHECKED": "checked", "EDITABLE": "editable"})
+	controlTypes.State = Labelled("State", {"CHECKED": "checked", "EDITABLE": "editable", "VISITED": "visited", "INTERNAL_LINK": "same page"})
 	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS QUICKNAV CARET QUERY")
 	browseMode = types.ModuleType("browseMode")
 	browseMode.TextInfoQuickNavItem = TextInfoQuickNavItem
@@ -421,6 +429,43 @@ def main():
 			decider.handlers.count(elementsList.decideGesture) == 1 and decider.decide(gesture="kb:a"),
 			"its key is kept from the program where NVDA has no browse mode document, and every other key goes on",
 		)
+		# The Elements List shows links as JAWS's Links List does, unless that is turned off.
+		from jawsMigrator import linksList
+
+		states = sys.modules["controlTypes"].State
+		github = {
+			"name": "joshknnd1982",
+			"states": {states.VISITED, states.INTERNAL_LINK},
+			"current": types.SimpleNamespace(displayString="current page"),
+			"keyboardShortcut": "Alt+ArrowUp",
+		}
+		check(
+			linksList.isRegistered()
+			and plugin._linksList is linksList
+			and TextInfoQuickNavItem._getLabelForProperties.__wrapped__ is NVDA_GET_LABEL
+			and TextInfoQuickNavItem()._getLabelForProperties(github.get) == "Current page joshknnd1982 Alt+ArrowUp",
+			"a link in the Elements List is labelled as in JAWS's Links List",
+		)
+		clsList = [object]
+		plugin.chooseNVDAObjectOverlayClasses(types.SimpleNamespace(windowClassName="Edit"), clsList)
+		check(clsList == [object], "anything but an item of NVDA's Elements List keeps its classes")
+		jawsMigrator.state.set(linksList.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(
+			not linksList.isRegistered() and vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL,
+			"turned off in the Settings panel, NVDA's own labels are back",
+		)
+		check(TextInfoQuickNavItem()._getLabelForProperties(github.get) == "joshknnd1982; same page; visited", "as NVDA says them")
+		jawsMigrator.state.set(linksList.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(TextInfoQuickNavItem._getLabelForProperties.__wrapped__ is NVDA_GET_LABEL, "and on again, wrapped once")
+		# NVDA's debug log notes a key a program types late or not at all; nothing else changes, and every key goes on.
+		from jawsMigrator import typingWatch
+
+		check(typingWatch.isRegistered() and decider.handlers.count(typingWatch.noteKey) == 1 and decider.decide(gesture="kb:a"), "the keys a program types are noted")
+		typed = []
+		plugin.event_typedCharacter(types.SimpleNamespace(), lambda: typed.append("a"), ch="a")
+		check(typed == ["a"], "and NVDA says each typed character as before")
 		# NVDA started with the focus on the taskbar goes back to the window you were in, unless that is turned off.
 		from unittest import mock
 
@@ -523,6 +568,11 @@ def main():
 		)
 		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
 		check(not elementsList.isRegistered() and elementsListNvdasOwn(), "and NVDA's Elements List")
+		check(
+			not linksList.isRegistered() and plugin._linksList is None and vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL,
+			"and NVDA's labels in its Elements List",
+		)
+		check(not typingWatch.isRegistered(), "and the keys a program types")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -558,6 +608,8 @@ def main():
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",
+			"linksList",
+			"typingWatch",
 		)
 		for name in unloadable:
 			delattr(jawsMigrator, name)
@@ -571,7 +623,10 @@ def main():
 		def broken(*args, **kwargs):
 			raise RuntimeError("broken for the test")
 
-		steps = [(jawsMigrator.GlobalPlugin, name) for name in ("applyRuntimeSettings", "_keepOutlookFocus", "_guardElementsList", "_followConfigResets", "_scheduleStartupTasks")]
+		steps = [
+			(jawsMigrator.GlobalPlugin, name)
+			for name in ("applyRuntimeSettings", "_keepOutlookFocus", "_guardElementsList", "_watchTyping", "_followConfigResets", "_scheduleStartupTasks")
+		]
 		steps.append((jawsMigrator.updater.UpdateChecker, "scheduleAutomaticCheck"))
 		saved = [(owner, name, getattr(owner, name)) for owner, name in steps]
 		for owner, name in steps:

@@ -14,7 +14,22 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import autoFormsMode, backspaceEcho, documentPolling, driveLetters, labelRepeats, layerSound, listCoordinates, listPosition, nvdaEnv, quickNavHeadings, startupFocus, state, trayChanges
+from .. import (
+	autoFormsMode,
+	backspaceEcho,
+	documentPolling,
+	driveLetters,
+	labelRepeats,
+	layerSound,
+	linksList,
+	listCoordinates,
+	listPosition,
+	nvdaEnv,
+	quickNavHeadings,
+	startupFocus,
+	state,
+	trayChanges,
+)
 from .common import checkListClass, openFile
 
 
@@ -87,6 +102,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# NVDA uses focus mode on a web page's tabs and toolbars, so letters go to the page; JAWS stays in its virtual cursor.
 		self.tabsBrowse = helper.addItem(wx.CheckBox(self, label="Stay in &browse mode when you Tab to a tab or a toolbar button on a web page"))
 		self.tabsBrowse.SetValue(autoFormsMode.wanted(state.load()))
+		# NVDA's Elements List says "Homepage; visited, 2 of 50, level 0"; JAWS's Links List says "Homepage, 2 of 34",
+		# with "Current Page" before a link marked as current and a link's shortcut key after it.
+		self.linksJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Show links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0",
+			),
+		)
+		self.linksJaws.SetValue(linksList.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -171,6 +195,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownBackspaceSlow = self.backspaceSlow.GetValue()
 		self._shownDocumentsUnpolled = self.documentsUnpolled.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
+		self._shownLinksJaws = self.linksJaws.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -236,6 +261,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[documentPolling.STATE_KEY] = self.documentsUnpolled.GetValue()
 		if self.tabsBrowse.GetValue() != self._shownTabsBrowse:
 			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
+		if self.linksJaws.GetValue() != self._shownLinksJaws:
+			updates[linksList.STATE_KEY] = self.linksJaws.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

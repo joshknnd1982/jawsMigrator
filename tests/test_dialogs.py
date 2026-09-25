@@ -618,7 +618,8 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertFalse(hasattr(panel, "headingFirst"))
 		self.assertNotIn("sayHeadingLevelFirst", state.DEFAULTS, "a state.json from 1.12 keeps the key, which nothing reads")
 		labels = [child.GetLabel() for child in panel.GetChildren() if isinstance(child, wx.CheckBox)]
-		self.assertFalse([label for label in labels if "level" in label.lower()], labels)
+		# 1.19's Elements List check box speaks of "level 0", NVDA's level of an item in the list, not a heading's level.
+		self.assertFalse([label for label in labels if "level" in label.lower().replace("level 0", "")], labels)
 
 	def test_layerSoundChoiceIsSavedAndApplied(self):
 		from jawsMigrator import layerSound, state

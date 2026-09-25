@@ -89,6 +89,9 @@ DEFAULTS = {
 	#: NVDA started with the focus on the taskbar, as its desktop shortcut's key leaves it, gives the focus back to the
 	#: window you were in, or the desktop, as JAWS does (see startupFocus).
 	"backFromTaskbarAtStart": True,
+	#: NVDA's Elements List shows a link as JAWS's Links List does: "current page" before it and its shortcut key after it,
+	#: without visited, same page or "level 0" (see linksList).
+	"linksLikeJaws": True,
 }
 
 _lock = threading.RLock()
