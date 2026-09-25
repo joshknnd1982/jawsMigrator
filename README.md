@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.16
+- Version: 1.17
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.17](#whats-new-in-117)
 - [What's new in 1.16](#whats-new-in-116)
 - [What's new in 1.15](#whats-new-in-115)
 - [What's new in 1.14](#whats-new-in-114)
@@ -68,10 +69,16 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.16.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.17.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.17
+
+A fix from a tester's report on version 1.15:
+
+- **NVDA's Elements List opens even while a web page is still changing.** A tester opened the jawsMigrator page on GitHub and pressed NVDA+F7 right after NVDA said "Page ready", just as the page showed an alert. NVDA said "Elements List dialog, tree view", but no dialog appeared, and it kept the focus all the same: Enter activated the Issues link on the page behind it, Escape did nothing, NVDA+F7 did nothing, and only Alt+Tab got the tester out. NVDA fills its Elements List in two steps: it finds the page's links, then reads each one's name. GitHub changed the page in between, so a link was no longer where NVDA had found it, and NVDA 2026.2 stopped with an error halfway through making its dialog, which it left unseen with the focus in it. JAWS's Links List (Insert+F7) comes up whatever the page does meanwhile. Now a link, heading or other element that has moved is read where it is now, and when the page changed while NVDA filled the list, NVDA fills it again, so the list shows the page as it is. If the page still won't hold still after three tries, the list opens empty and NVDA says "The page changed while NVDA listed its elements. Press Escape, then NVDA+F7 again.", so you are never left in a dialog you can't see. There is nothing to set: on a page that isn't changing, the list works as before.
 
 ## What's new in 1.16
 
@@ -585,7 +592,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
 - Rates and pitches are converted from the percentage JAWS shows, except Eloquence's rate, which keeps JAWS's speed. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
-- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, saying a control's type and state once, saying a system tray icon only when you move to it, saying a heading without what it is in when quick navigation moves to it, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, and the focus going back to Outlook after NVDA waits for it need the assistant: they stop when it is uninstalled or disabled.
+- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, saying a control's type and state once, saying a system tray icon only when you move to it, saying a heading without what it is in when quick navigation moves to it, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, the focus going back to Outlook after NVDA waits for it, and NVDA's Elements List on a page that is still changing need the assistant: they stop when it is uninstalled or disabled.
 - The first time NVDA needs Outlook after Outlook starts, NVDA still moves the focus to its "Waiting for Outlook..." window for a moment, as it does without add-ons: Outlook offers what NVDA reads only after it has lost the focus once.
 - Only headings are said without what they are in. K, B, F and the other quick navigation keys still say the landmark or list they move into, as NVDA says it, and so do the arrow keys and Tab.
 - Backspace is said once the program has deleted, up to half a second after the key. A program slower than that is still silent, as NVDA is without the assistant; the text itself is never changed. While NVDA waits, it can't do anything else.
@@ -614,7 +621,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 `tests/test_nvda_runtime.py` checks that every module the add-on imports exists in the NVDA installed on the computer. NVDA's own copy of Python has only part of Python's standard library, so code that works in the other tests can still fail to load in NVDA. It is skipped where NVDA isn't installed.
 
-`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, the ones that have quick navigation say a heading without what it is in, leave out a list item's row and column, say what Backspace deletes in a slow program and keep browse mode on a web page's tabs and toolbar buttons, the one that keeps Enhanced Control Support's timer off documents, the one that takes a drive letter's ":)" out before NVDA's speech dictionaries, the guard that keeps the focus in Outlook when NVDA waits for it, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
+`tests/plugin_smoke.py` needs wxPython. It loads the add-on as NVDA does, with real menus, and checks the NVDA menu items, the Settings panel, the NVDA+Shift+J commands and their sound (JAWS's, when the computer has JAWS, or the beep when chosen), the check that has NVDA say a control's type and state once, the one that has NVDA say a system tray icon when you move to it, the ones that have quick navigation say a heading without what it is in, leave out a list item's row and column, say what Backspace deletes in a slow program and keep browse mode on a web page's tabs and toolbar buttons, the one that keeps Enhanced Control Support's timer off documents, the one that takes a drive letter's ":)" out before NVDA's speech dictionaries, the guard that keeps the focus in Outlook when NVDA waits for it, the one that keeps NVDA's Elements List working while a web page changes, and that NVDA gets every focus and change notice, and runs every key press, the assistant looks at. It also checks that the assistant still loads, with its Preferences item, Tools submenu, Settings panel and NVDA+Shift+J, when some of its modules can't be loaded, and when every other step of its start fails.
 
 Three further scripts need wxPython and a computer with JAWS or JAWS settings. They change nothing outside a temporary folder:
 

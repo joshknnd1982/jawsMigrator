@@ -116,6 +116,24 @@ class BrowseModeTreeInterceptor:
 		return True
 
 
+class ElementsListDialog:
+	"""NVDA's browseMode.ElementsListDialog."""
+
+	def initElementType(self, elType):
+		pass
+
+
+class VirtualBufferQuickNavItem:
+	"""NVDA's virtualBuffers.VirtualBufferQuickNavItem."""
+
+	@property
+	def label(self):
+		return "Issues (10); visited"
+
+	def isChild(self, parent):
+		return False
+
+
 class EditableText:
 	"""NVDA's editableText.EditableText, as far as Backspace goes."""
 
@@ -126,11 +144,14 @@ class EditableText:
 		return (False, None)
 
 
-#: NVDA's own report, choice of mode and Backspace, before the assistant puts its own in their place.
+#: NVDA's own report, choice of mode, Backspace and Elements List, before the assistant puts its own in their place.
 NVDA_REPORT = vars(TextInfoQuickNavItem)["report"]
 NVDA_PASS_THROUGH = vars(BrowseModeTreeInterceptor)["shouldPassThrough"]
 NVDA_BACKSPACE = vars(EditableText)["_backspaceScriptHelper"]
 NVDA_CARET_WAIT = vars(EditableText)["_hasCaretMoved"]
+NVDA_FILL = vars(ElementsListDialog)["initElementType"]
+NVDA_LABEL = vars(VirtualBufferQuickNavItem)["label"]
+NVDA_IS_CHILD = vars(VirtualBufferQuickNavItem)["isChild"]
 
 
 def installSpeech():
@@ -154,6 +175,9 @@ def installSpeech():
 	browseMode = types.ModuleType("browseMode")
 	browseMode.TextInfoQuickNavItem = TextInfoQuickNavItem
 	browseMode.BrowseModeTreeInterceptor = BrowseModeTreeInterceptor
+	browseMode.ElementsListDialog = ElementsListDialog
+	virtualBuffers = types.ModuleType("virtualBuffers")
+	virtualBuffers.VirtualBufferQuickNavItem = VirtualBufferQuickNavItem
 	editableText = types.ModuleType("editableText")
 	editableText.EditableText = EditableText
 	characterProcessing = types.ModuleType("characterProcessing")
@@ -161,7 +185,7 @@ def installSpeech():
 	characterProcessing.SymbolLevel = types.SimpleNamespace(MOST=200, ALL=300)
 	characterProcessing._symbolDictionaryDefinitions = [SymbolDictionaryDefinition(name="builtin", path=""), SymbolDictionaryDefinition(name="user", path="")]
 	characterProcessing.clearSpeechSymbols = lambda: None
-	for module in (speech, speech.extensions, speech.speech, controlTypes, browseMode, editableText, characterProcessing):
+	for module in (speech, speech.extensions, speech.speech, controlTypes, browseMode, virtualBuffers, editableText, characterProcessing):
 		sys.modules[module.__name__] = module
 	return speech.extensions.filter_speechSequence
 
@@ -369,6 +393,19 @@ def main():
 			"NVDA's Outlook support is guarded as NVDA loads it",
 		)
 		check(appModuleHandler.fetchAppModule(4242, "notepad").appName == "notepad", "and NVDA still loads every application's support")
+		# NVDA's Elements List opens while a web page changes: not a setting, it is there from the start.
+		from jawsMigrator import elementsList
+
+		def elementsListNvdasOwn():
+			return vars(ElementsListDialog)["initElementType"] is NVDA_FILL and vars(VirtualBufferQuickNavItem)["label"] is NVDA_LABEL and vars(VirtualBufferQuickNavItem)["isChild"] is NVDA_IS_CHILD
+
+		check(
+			elementsList.isRegistered()
+			and ElementsListDialog.initElementType.__wrapped__ is NVDA_FILL
+			and VirtualBufferQuickNavItem.isChild.__wrapped__ is NVDA_IS_CHILD
+			and VirtualBufferQuickNavItem().label == "Issues (10); visited",
+			"NVDA's Elements List fills again when the page changed meanwhile, and reads an element where it is now",
+		)
 		# The focus and NVDA's change notices go on to NVDA, once each.
 		handled = []
 		control = types.SimpleNamespace(appModule=None, treeInterceptor=None, _speakObjectPropertiesCache={})
@@ -458,6 +495,7 @@ def main():
 			"and NVDA's processText and symbol dictionaries",
 		)
 		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
+		check(not elementsList.isRegistered() and elementsListNvdasOwn(), "and NVDA's Elements List")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -491,6 +529,7 @@ def main():
 			"backspaceEcho",
 			"documentPolling",
 			"outlookFocus",
+			"elementsList",
 		)
 		for name in unloadable:
 			delattr(jawsMigrator, name)
@@ -504,7 +543,7 @@ def main():
 		def broken(*args, **kwargs):
 			raise RuntimeError("broken for the test")
 
-		steps = [(jawsMigrator.GlobalPlugin, name) for name in ("applyRuntimeSettings", "_keepOutlookFocus", "_followConfigResets", "_scheduleStartupTasks")]
+		steps = [(jawsMigrator.GlobalPlugin, name) for name in ("applyRuntimeSettings", "_keepOutlookFocus", "_guardElementsList", "_followConfigResets", "_scheduleStartupTasks")]
 		steps.append((jawsMigrator.updater.UpdateChecker, "scheduleAutomaticCheck"))
 		saved = [(owner, name, getattr(owner, name)) for owner, name in steps]
 		for owner, name in steps:

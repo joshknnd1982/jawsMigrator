@@ -22,8 +22,10 @@ deletes in a slow program (see backspaceEcho); a web page's tabs and toolbar
 buttons stay in browse mode, as in JAWS (see autoFormsMode); Enhanced Control
 Support, which the assistant offers to install, doesn't read a whole document
 20 times a second, which froze NVDA in a large file (see documentPolling);
-NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); and opening
-Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus).
+NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); opening
+Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus);
+and NVDA's Elements List opens while a web page is still changing, instead of
+being left half made and unseen with the focus in it (see elementsList).
 """
 
 from __future__ import annotations
@@ -142,6 +144,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("add the settings panel", self._addSettingsPanel),
 			("apply the assistant's own settings", self.applyRuntimeSettings),
 			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
+			("keep NVDA's Elements List working while a web page changes", self._guardElementsList),
 			("follow NVDA's configuration reloads", self._followConfigResets),
 			("schedule the automatic update check", self.updater.scheduleAutomaticCheck),
 			("schedule what runs after NVDA starts", self._scheduleStartupTasks),
@@ -162,6 +165,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		# Not a JAWS setting: NVDA's wait for Outlook stays on NVDA's main thread, and the focus comes back after it.
 		outlookFocus.register()
+
+	def _guardElementsList(self):
+		from . import elementsList
+
+		# Not a JAWS setting: NVDA+F7 on a page that is still changing left NVDA's dialog half made, unseen, with the focus in it.
+		elementsList.register()
 
 	def _followConfigResets(self):
 		import config
@@ -284,6 +293,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import outlookFocus
 
 			outlookFocus.unregister()
+		except Exception:
+			pass
+		try:
+			from . import elementsList
+
+			elementsList.unregister()
 		except Exception:
 			pass
 		super().terminate()
