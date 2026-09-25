@@ -113,6 +113,9 @@ class TextInfoQuickNavItem:
 		states = sorted(state.displayString for state in labelPropertyGetter("states") or ())
 		return "; ".join([labelPropertyGetter("name")] + states)
 
+	def activate(self):
+		pass
+
 
 class BrowseModeTreeInterceptor:
 	"""NVDA's browseMode.BrowseModeTreeInterceptor."""
@@ -121,6 +124,11 @@ class BrowseModeTreeInterceptor:
 
 	def shouldPassThrough(self, obj, reason=None):
 		return True
+
+	def script_elementsList(self, gesture):
+		pass
+
+	script_elementsList.ignoreTreeInterceptorPassThrough = True
 
 
 class ElementsListDialog:
@@ -164,6 +172,17 @@ NVDA_FILL = vars(ElementsListDialog)["initElementType"]
 NVDA_FILTER = vars(ElementsListDialog)["filter"]
 NVDA_LABEL = vars(VirtualBufferQuickNavItem)["label"]
 NVDA_IS_CHILD = vars(VirtualBufferQuickNavItem)["isChild"]
+NVDA_ELEMENTS_LIST = vars(BrowseModeTreeInterceptor)["script_elementsList"]
+NVDA_ACTIVATE = vars(TextInfoQuickNavItem)["activate"]
+
+
+def linksListNvdasOwn():
+	"""Whether NVDA's own label, Elements List script and activation are in place, as NVDA has them."""
+	return (
+		vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL
+		and vars(BrowseModeTreeInterceptor)["script_elementsList"] is NVDA_ELEMENTS_LIST
+		and vars(TextInfoQuickNavItem)["activate"] is NVDA_ACTIVATE
+	)
 
 
 def installSpeech():
@@ -446,19 +465,28 @@ def main():
 			and TextInfoQuickNavItem()._getLabelForProperties(github.get) == "Current page joshknnd1982 Alt+ArrowUp",
 			"a link in the Elements List is labelled as in JAWS's Links List",
 		)
+		script = BrowseModeTreeInterceptor.script_elementsList
+		check(
+			script.__wrapped__ is NVDA_ELEMENTS_LIST
+			and script.ignoreTreeInterceptorPassThrough
+			and TextInfoQuickNavItem.activate.__wrapped__ is NVDA_ACTIVATE,
+			"on a page without links NVDA says so, and activating a link from the list moves to it, as in JAWS",
+		)
 		clsList = [object]
 		plugin.chooseNVDAObjectOverlayClasses(types.SimpleNamespace(windowClassName="Edit"), clsList)
-		check(clsList == [object], "anything but an item of NVDA's Elements List keeps its classes")
+		check(clsList == [object] and plugin._elementsList is elementsList, "anything but an item of NVDA's Elements List keeps its classes")
 		jawsMigrator.state.set(linksList.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
-		check(
-			not linksList.isRegistered() and vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL,
-			"turned off in the Settings panel, NVDA's own labels are back",
-		)
+		check(not linksList.isRegistered() and linksListNvdasOwn(), "turned off in the Settings panel, NVDA's own labels, script and activation are back")
 		check(TextInfoQuickNavItem()._getLabelForProperties(github.get) == "joshknnd1982; same page; visited", "as NVDA says them")
 		jawsMigrator.state.set(linksList.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
-		check(TextInfoQuickNavItem._getLabelForProperties.__wrapped__ is NVDA_GET_LABEL, "and on again, wrapped once")
+		check(
+			TextInfoQuickNavItem._getLabelForProperties.__wrapped__ is NVDA_GET_LABEL
+			and BrowseModeTreeInterceptor.script_elementsList.__wrapped__ is NVDA_ELEMENTS_LIST
+			and TextInfoQuickNavItem.activate.__wrapped__ is NVDA_ACTIVATE,
+			"and on again, wrapped once",
+		)
 		# NVDA's debug log notes a key a program types late or not at all; nothing else changes, and every key goes on.
 		from jawsMigrator import typingWatch
 
@@ -567,10 +595,10 @@ def main():
 			"and NVDA's processText and symbol dictionaries",
 		)
 		check(not outlookFocus.isRegistered() and appModuleHandler.fetchAppModule is appModuleHandler.nvdaFetchAppModule, "and NVDA's Outlook support")
-		check(not elementsList.isRegistered() and elementsListNvdasOwn(), "and NVDA's Elements List")
+		check(not elementsList.isRegistered() and plugin._elementsList is None and elementsListNvdasOwn(), "and NVDA's Elements List")
 		check(
-			not linksList.isRegistered() and plugin._linksList is None and vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL,
-			"and NVDA's labels in its Elements List",
+			not linksList.isRegistered() and plugin._linksList is None and linksListNvdasOwn(),
+			"and NVDA's labels, script and activation in its Elements List",
 		)
 		check(not typingWatch.isRegistered(), "and the keys a program types")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:

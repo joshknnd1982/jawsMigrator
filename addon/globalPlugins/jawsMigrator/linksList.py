@@ -30,6 +30,26 @@ So, while the assistant runs:
   with each item, in speech or in braille. Where headings or landmarks are under others, NVDA says each one's level
   in the tree as before.
 
+With 1.19 the tester pressed Alt+Left on a GitHub page and came to Edge's New Tab page, which has no links. NVDA+F7
+opened an empty list, and NVDA said only "Elements List dialog, tree view"; the tester wrote down "It said element tree
+view." JAWS's Insert+F7 says "no links" there and opens nothing (Virtual.jss, SelectALinkDialog and
+ReportLinksNotAvailable; common.jsm, cmsgNoLinks). And on the page listing their repositories the tester chose
+"reply-to-sender-outlook" in the list and pressed Enter, went back with Alt+Left, and NVDA+F7 opened on "Current page
+Repositories (48), 10 of 128", the link NVDA's cursor had been on before, not the one chosen. NVDA's list starts on
+the link at its browse mode cursor, as JAWS's Links List starts on the link at its virtual cursor. But NVDA activates a
+link from the list without moving its cursor there (``browseMode.TextInfoQuickNavItem.activate``), so the cursor stayed
+where it was, and so did the place Browse Mode Caret Fix keeps for Alt+Left, which is where the cursor was.
+
+So, also:
+
+- When the Elements List would open on links and the page has none, NVDA says "no links", as JAWS does, and doesn't
+  open the list. A list you left on headings, form fields, buttons or landmarks opens as before, even when the page
+  has none of them, so that you can choose another kind there.
+- Activating a link or button from the Elements List moves browse mode's cursor to it first, as the list's Move to
+  does, without saying it, then activates it: as moving to the link and pressing Enter does. Coming back to the page
+  with Alt+Left brings you back to that link, and the list opens on it again. In focus mode NVDA activates it as
+  before.
+
 It works while the assistant runs, unless it is turned off in NVDA's Settings, JAWS Migration Assistant.
 """
 
@@ -53,6 +73,13 @@ LABEL = "_getLabelForProperties"
 LEFT_OUT = ("VISITED", "INTERNAL_LINK")
 #: The window class of a Windows tree view, such as the Elements List's.
 TREE_CLASS = "SysTreeView32"
+#: NVDA's name for the kind of element JAWS's Links List lists, in its Elements List.
+LINK = "link"
+#: What JAWS says for Insert+F7 on a page without links (Virtual.jss, ReportLinksNotAvailable; common.jsm, cmsgNoLinks).
+NO_LINKS = "no links"
+#: Browse mode's script that opens the Elements List, and what activates an element from it.
+ELEMENTS_LIST = "script_elementsList"
+ACTIVATE = "activate"
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
@@ -93,13 +120,19 @@ def register() -> None:
 	if _enabled:
 		return
 	_enabled = True
-	try:
-		import browseMode
+	for owner, name, guarded in (
+		("TextInfoQuickNavItem", LABEL, _labelGuarded),
+		("BrowseModeTreeInterceptor", ELEMENTS_LIST, _scriptGuarded),
+		("TextInfoQuickNavItem", ACTIVATE, _activateGuarded),
+	):
+		# Each on its own: one NVDA doesn't have leaves the others working.
+		try:
+			import browseMode
 
-		with _lock:
-			_replace(browseMode.TextInfoQuickNavItem, LABEL, _labelGuarded)
-	except Exception:
-		_failure("can't show links in NVDA's Elements List as JAWS's Links List does")
+			with _lock:
+				_replace(getattr(browseMode, owner), name, guarded)
+		except Exception:
+			_failure("can't show links in NVDA's Elements List as JAWS's Links List does")
 
 
 def unregister() -> None:
@@ -213,6 +246,84 @@ def _labelGuarded(original):
 	setattr(_getLabelForProperties, MARK, _TOKEN)
 	setattr(_getLabelForProperties, ORIGINAL, original)
 	return _getLabelForProperties
+
+
+# -- a page without links ------------------------------------------------------------------------------------------
+
+
+def opensOn(document) -> str | None:
+	"""The kind of element NVDA's Elements List opens on in ``document`` ("link" at first, then the one last chosen in it)."""
+	try:
+		dialog = document.ElementsListDialog
+		return dialog.ELEMENT_TYPES[dialog.lastSelectedElementType][0]
+	except Exception:
+		return None
+
+
+def hasAny(document, itemType: str) -> bool:
+	"""Whether ``document`` has an element of ``itemType``, as NVDA's Elements List finds them. True when NVDA can't tell."""
+	try:
+		for _item in document._iterNodesByType(itemType):
+			return True
+	except Exception:
+		return True
+	return False
+
+
+def _scriptGuarded(original):
+	"""Browse mode's script that opens the Elements List: on a page without links, JAWS's "no links" in its place."""
+
+	@functools.wraps(original)
+	def script_elementsList(self, gesture, *args, **kwargs):
+		if _enabled and opensOn(self) == LINK and not hasAny(self, LINK):
+			_log().debug("jawsMigrator: the page has no links, so NVDA says so, as JAWS does, instead of opening an empty Elements List")
+			import ui
+
+			ui.message(NO_LINKS)
+			return None
+		return original(self, gesture, *args, **kwargs)
+
+	setattr(script_elementsList, MARK, _TOKEN)
+	setattr(script_elementsList, ORIGINAL, original)
+	return script_elementsList
+
+
+# -- activating a link ---------------------------------------------------------------------------------------------
+
+
+def moveCursorTo(item) -> bool:
+	"""Put browse mode's cursor at the start of ``item``, as the Elements List's Move to does, without saying it.
+
+	True when it moved. In focus mode it doesn't: NVDA activates the element as before.
+	"""
+	try:
+		import browseMode
+		from controlTypes import OutputReason
+
+		document = item.document
+		if not isinstance(document, browseMode.BrowseModeDocumentTreeInterceptor) or document.passThrough:
+			return False
+		info = item.textInfo.copy()
+		info.collapse()
+		document._set_selection(info, reason=OutputReason.QUICKNAV)
+	except Exception:
+		_failure("could not move browse mode's cursor to the element activated from the Elements List")
+		return False
+	return True
+
+
+def _activateGuarded(original):
+	"""NVDA's activation of an element from its Elements List, once browse mode's cursor is on it."""
+
+	@functools.wraps(original)
+	def activate(self, *args, **kwargs):
+		if _enabled and moveCursorTo(self):
+			_log().debug("jawsMigrator: browse mode's cursor moved to the element activated from the Elements List")
+		return original(self, *args, **kwargs)
+
+	setattr(activate, MARK, _TOKEN)
+	setattr(activate, ORIGINAL, original)
+	return activate
 
 
 # -- "level 0" -----------------------------------------------------------------------------------------------------

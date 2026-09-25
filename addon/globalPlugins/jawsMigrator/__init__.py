@@ -25,8 +25,10 @@ Support, which the assistant offers to install, doesn't read a whole document
 NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); opening
 Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus);
 NVDA's Elements List opens while a web page is still changing, instead of
-being left half made and unseen with the focus in it (see elementsList), and
-shows links as JAWS's Links List does, without "level 0" (see linksList);
+being left half made and unseen with the focus in it, and says its item once
+when it fills the list again (see elementsList), and shows links as JAWS's
+Links List does, without "level 0", says "no links" on a page without links
+and moves to the link it activates (see linksList);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); and NVDA's debug log
 says when a program types a key late or not at all (see typingWatch).
@@ -137,6 +139,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._autoFormsMode = None
 		#: The linksList module, once loaded: it gives the Elements List's items the assistant's class.
 		self._linksList = None
+		#: The elementsList module, once loaded: it gives an item the Elements List no longer has the assistant's class.
+		self._elementsList = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -186,6 +190,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		# Not a JAWS setting: NVDA+F7 on a page that is still changing left NVDA's dialog half made, unseen, with the focus in it.
 		elementsList.register()
+		self._elementsList = elementsList
 
 	def _watchTyping(self):
 		from . import typingWatch
@@ -316,6 +321,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			outlookFocus.unregister()
 		except Exception:
 			pass
+		self._elementsList = None
 		try:
 			from . import elementsList
 
@@ -1017,6 +1023,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		linksList = getattr(self, "_linksList", None)
 		if linksList is not None:
 			linksList.chooseOverlay(obj, clsList)
+		# An item NVDA's Elements List took away as it filled the list again: no focus event (see elementsList).
+		elementsList = getattr(self, "_elementsList", None)
+		if elementsList is not None:
+			elementsList.chooseOverlay(obj, clsList)
 
 	# -- the command layer ------------------------------------------------------------------
 

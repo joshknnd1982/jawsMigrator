@@ -90,7 +90,8 @@ DEFAULTS = {
 	#: window you were in, or the desktop, as JAWS does (see startupFocus).
 	"backFromTaskbarAtStart": True,
 	#: NVDA's Elements List shows a link as JAWS's Links List does: "current page" before it and its shortcut key after it,
-	#: without visited, same page or "level 0" (see linksList).
+	#: without visited, same page or "level 0"; NVDA says "no links" on a page without links, and moves browse mode's
+	#: cursor to the link it activates from the list (see linksList).
 	"linksLikeJaws": True,
 }
 

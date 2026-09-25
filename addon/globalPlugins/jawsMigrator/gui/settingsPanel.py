@@ -103,11 +103,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self.tabsBrowse = helper.addItem(wx.CheckBox(self, label="Stay in &browse mode when you Tab to a tab or a toolbar button on a web page"))
 		self.tabsBrowse.SetValue(autoFormsMode.wanted(state.load()))
 		# NVDA's Elements List says "Homepage; visited, 2 of 50, level 0"; JAWS's Links List says "Homepage, 2 of 34",
-		# with "Current Page" before a link marked as current and a link's shortcut key after it.
+		# with "Current Page" before a link marked as current and a link's shortcut key after it. On a page without links JAWS
+		# says "no links", and the list starts on the link at the cursor, which is the link you activated when you come back.
 		self.linksJaws = helper.addItem(
 			wx.CheckBox(
 				self,
-				label="Show links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0",
+				label=(
+					"Show links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, "
+					'same page or level 0; "no links" on a page without links; activating a link moves to it'
+				),
 			),
 		)
 		self.linksJaws.SetValue(linksList.wanted(state.load()))

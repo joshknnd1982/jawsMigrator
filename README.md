@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.19
+- Version: 1.20
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.20](#whats-new-in-120)
 - [What's new in 1.19](#whats-new-in-119)
 - [What's new in 1.18](#whats-new-in-118)
 - [What's new in 1.17](#whats-new-in-117)
@@ -71,10 +72,20 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.19.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.20.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.20
+
+From a tester's answer about version 1.19: what NVDA+F7 says on a GitHub page right after it loads, and again after Alt+Left. The tester asked for NVDA to behave as JAWS does:
+
+- **NVDA+F7 on a page without links says "no links".** Alt+Left from a GitHub issue took the tester to Edge's New Tab page, which has no links. NVDA+F7 opened an empty Elements List, and NVDA said only "Elements List dialog, tree view"; Down Arrow said nothing. JAWS's Insert+F7 says "no links" there and opens nothing. Now NVDA does the same when its list would open on links. The list remembers the kind of element you chose in it last. If you left it on headings, form fields, buttons or landmarks, it opens as before, even on a page that has none of them, so that you can choose another kind there.
+- **Activating a link from the Elements List moves NVDA's cursor to it.** On the page of the tester's repositories, the list opened on "Current page Repositories (48), 10 of 128", the link NVDA's cursor was on, as JAWS's Links List starts on the link at its cursor. The tester chose "reply-to-sender-outlook" and pressed Enter, then went back with Alt+Left, and NVDA+F7 opened on "Current page Repositories (48)" again. NVDA activated the link without moving its cursor there, so the cursor, and the place NVDA goes back to, stayed on Repositories. Now NVDA moves its cursor to the link first, as the list's Move to button does, without saying it, then activates it, as pressing Enter on the link does. Going back with Alt+Left brings you to the link you chose, and NVDA+F7 opens on it. Buttons in the list work the same way. In focus mode, NVDA activates the link as before.
+- **The Elements List's item is said once when NVDA fills the list again.** When GitHub changed the page just as NVDA filled its list, the tester heard "Skip to content level 1, 1 of 69" three times, then "Skip to content, 1 of 69". Since version 1.17, NVDA fills the list again when the page changes meanwhile. The list's tree has the focus while NVDA fills it, and Windows gave the focus to each item of the first list as NVDA took it away. NVDA said those items after the dialog appeared, when they were already gone, which is also where "level 1" came from. Now NVDA leaves out a focus event for an item the list no longer has, and says the list's item once. There is nothing to set.
+
+The first two can be turned off with the setting "Show links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it", in NVDA's Settings, JAWS Migration Assistant.
 
 ## What's new in 1.19
 
@@ -470,7 +481,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying what Backspace deletes, even when the program is slow to delete it (on unless you turn it off);
 - keeping Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
-- showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0 (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119));
+- showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119) and [What's new in 1.20](#whats-new-in-120));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 

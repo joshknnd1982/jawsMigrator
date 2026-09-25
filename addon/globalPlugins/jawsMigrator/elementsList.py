@@ -33,6 +33,12 @@ So, while the assistant runs:
   when filling the list fails three times for another reason is it left empty, and NVDA says why: the
   dialog still opens, and Escape closes it. (Version 1.17 left the list empty when the page took an element
   away each time; since 1.18 NVDA lists what is still there.)
+- NVDA says the list's item once when it fills the list again. The list's tree has the focus while NVDA fills
+  it, and Windows gives the focus to its selected item each time the selection changes, also to each item of
+  the first list as NVDA takes it away. NVDA reads those focus events after the dialog appears, when the
+  items are gone: with 1.19 a tester heard "Skip to content level 1, 1 of 69" three times, then "Skip to
+  content, 1 of 69". NVDA now leaves out a focus event for an item the list's tree no longer has while
+  another item is selected in it (see chooseOverlay), and says the selected item alone.
 
 The key that opens the list never reaches the program either, as JAWS's Insert+F7 never does. NVDA
 has browse mode's commands only while a browse mode document is ready, and gives a key it has no command
@@ -52,6 +58,7 @@ look at each heading's place added.
 from __future__ import annotations
 
 import functools
+import os
 import threading
 import time
 
@@ -77,6 +84,14 @@ WAIT_FOR_DOCUMENT = 3000
 LOOK_EVERY = 100
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
+#: The window class of a Windows tree view, such as the Elements List's.
+TREE_CLASS = "SysTreeView32"
+#: Windows' tree view messages (CommCtrl.h): the next item (here the selected one, TVGN_CARET), and an item from its
+#: MSAA child ID and back. The child ID of an item the tree no longer has gives no item (0).
+TVM_GETNEXTITEM = 0x1100 + 10
+TVGN_CARET = 9
+TVM_MAPACCIDTOHTREEITEM = 0x1100 + 42
+TVM_MAPHTREEITEMTOACCID = 0x1100 + 43
 
 _enabled = False
 _failed = False
@@ -89,6 +104,10 @@ _replaced: list = []
 _deciding = False
 #: The keys, braille display keys and touch gestures NVDA got, counted, so a wait ends at the next one.
 _gestures = 0
+#: The class the assistant gives an item the Elements List no longer has, made the first time it is needed.
+_goneItem = None
+#: Windows' SendMessageW, with a prototype of the assistant's own, made the first time it is needed.
+_send = None
 
 
 def _log():
@@ -402,6 +421,86 @@ def _sayPageChanged() -> None:
 		ui.message(PAGE_CHANGED)
 	except Exception:
 		pass
+
+
+# -- the focus Windows gave items the list no longer has -----------------------------------------------------------
+
+
+def _sendMessage(windowHandle: int, message: int, wParam: int = 0, lParam: int = 0) -> int:
+	"""Windows' SendMessageW, to a window of NVDA's main thread, as NVDA's own tree view items send theirs."""
+	global _send
+	if _send is None:
+		import ctypes
+		from ctypes import wintypes
+
+		prototype = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+		_send = prototype(("SendMessageW", ctypes.windll.user32))
+	return _send(windowHandle, message, wParam, lParam)
+
+
+def _isElementsListTree(windowHandle) -> bool:
+	"""Whether ``windowHandle`` is the tree of an open Elements List of NVDA's."""
+	import browseMode
+	import wx
+
+	for window in wx.GetTopLevelWindows():
+		if isinstance(window, browseMode.ElementsListDialog):
+			tree = getattr(window, "tree", None)
+			if tree is not None and tree.GetHandle() == windowHandle:
+				return True
+	return False
+
+
+def isGoneItem(windowHandle: int, childID) -> bool:
+	"""Whether MSAA child ``childID`` of the tree view ``windowHandle`` was an item the tree no longer has, while another
+	item is selected in it: one NVDA's Elements List took away as it filled its list again."""
+	if not isinstance(childID, int) or childID <= 0:
+		return False
+	if _sendMessage(windowHandle, TVM_MAPACCIDTOHTREEITEM, childID):
+		# Still in the tree.
+		return False
+	selected = _sendMessage(windowHandle, TVM_GETNEXTITEM, TVGN_CARET)
+	if not selected:
+		# Nothing else to say: NVDA says what it can of this one.
+		return False
+	return _sendMessage(windowHandle, TVM_MAPHTREEITEMTOACCID, selected) not in (0, childID)
+
+
+def goneItemClass():
+	"""The class of an item NVDA's Elements List no longer has: NVDA leaves out the focus Windows gave it."""
+	global _goneItem
+	if _goneItem is None:
+		from NVDAObjects.IAccessible import IAccessible
+
+		class GoneElementsListItem(IAccessible):
+			"""An item NVDA's Elements List took away as it filled its list again: no focus event, as for Excel's cells."""
+
+			shouldAllowIAccessibleFocusEvent = False
+
+		_goneItem = GoneElementsListItem
+	return _goneItem
+
+
+def chooseOverlay(obj, clsList) -> None:
+	"""NVDA's chooseNVDAObjectOverlayClasses: an item NVDA's own Elements List no longer has gets the assistant's class."""
+	if not _enabled:
+		return
+	try:
+		if getattr(obj, "windowClassName", None) != TREE_CLASS:
+			return
+		# The item Windows gave the focus to, by the child ID of its focus event.
+		childID = getattr(obj, "event_childID", None) or getattr(obj, "IAccessibleChildID", None)
+		if not isinstance(childID, int) or childID <= 0:
+			return
+		if obj.processID != os.getpid() or threading.current_thread() is not threading.main_thread():
+			# wx and the tree are NVDA's main thread's.
+			return
+		if not _isElementsListTree(obj.windowHandle) or not isGoneItem(obj.windowHandle, childID):
+			return
+		clsList.insert(0, goneItemClass())
+		_log().debug(f"jawsMigrator: item {childID} of NVDA's Elements List is gone since NVDA filled the list again, so NVDA doesn't say it")
+	except Exception:
+		_failure("could not tell whether an item of NVDA's Elements List is still there")
 
 
 def _builtInGestures(cls) -> frozenset:
