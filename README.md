@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.13
+- Version: 1.14
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.14](#whats-new-in-114)
 - [What's new in 1.13](#whats-new-in-113)
 - [What's new in 1.12](#whats-new-in-112)
 - [What's new in 1.11](#whats-new-in-111)
@@ -65,10 +66,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.13.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.14.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.14
+
+Fixes from a tester's reports on version 1.13:
+
+- **No "3 of 3" when you come to File Explorer, or in Alt+Tab.** Version 1.13 took the row and column out of "Data (D:), row 2, column 1, 3 of 3", but pressing Alt+Tab to get back to This PC still said "Data (D:), 3 of 3", where JAWS says "Data (D:)". Alt+Tab itself said each window's place in the list: "This PC - File Explorer, 2 of 11". JAWS's Alt+Tab says only the window's name. In File Explorer, JAWS says the position as you arrow from drive to drive or file to file, if its "Announce Position and Count" is on, but not when you come to the list from somewhere else. NVDA says the position whenever an item gets the focus. Now Alt+Tab says the window's name alone. File Explorer says "Data (D:)" when you switch to its window, open a folder or Tab to its list, and that includes the file list in Open and Save As dialogs. The arrow keys still say "2 of 3" while "Report object position information" is on (NVDA's Settings, Object Presentation), and NVDA+Tab still says everything. Other lists, menus and tree views haven't changed. To hear the position everywhere again, uncheck "Don't say the position, such as 3 of 3, in Alt+Tab or when you come to a list in File Explorer".
+- **Sending NVDA's log.** A tester's NVDA log grew to 24 million characters in ten minutes. Selecting it all in NVDA's Log Viewer froze NVDA for about three seconds at each key press, and the copy never reached the clipboard. [Debug logs](#debug-logs) now says how to attach the log file itself, and what filled that log.
 
 ## What's new in 1.13
 
@@ -417,6 +425,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying a system tray icon when you move to it, not each time its program changes it (on unless you turn it off; see [What's new in 1.9](#whats-new-in-19));
 - saying a heading without the landmark, region or list it is in when quick navigation moves to it (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113));
 - leaving out the row and column numbers of items in lists, such as drives, files and messages (on unless you turn it off);
+- leaving out the position, such as 3 of 3, in Alt+Tab and when you come to a list in File Explorer (on unless you turn it off; see [What's new in 1.14](#whats-new-in-114));
 - saying what Backspace deletes, even when the program is slow to delete it (on unless you turn it off);
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
@@ -529,7 +538,11 @@ For finding problems, the assistant keeps detailed logs:
 - `jawsMigrator\debug.log`: what the assistant did outside migrations, such as repairs, sounds and add-on installs, and any errors. NVDA menu, Tools, JAWS Migration Assistant, Open the debug log opens it.
 - `debug.log` in each migration's folder: every step of that migration. It lists the JAWS values read (rates in JAWS's own units, voice aliases, the web verbosity level...), the NVDA and ClassicSpeech settings written and where, each scheme item and voice decision, the keystrokes, the add-ons installed, and any error with its details.
 
-Errors also go to NVDA's own log. When reporting a problem, attach the debug log and NVDA's log (NVDA menu, Tools, View log).
+Errors also go to NVDA's own log. When reporting a problem, attach the debug log and NVDA's log.
+
+To send NVDA's log, attach the file itself rather than copying it out of the Log Viewer. Press Windows+R, type `%temp%` and press Enter. NVDA's log is `nvda.log` in that folder. After NVDA has restarted or stopped unexpectedly, the log from before is `nvda-old.log`. NVDA starts a new log each time it starts, so restart NVDA just before you show the problem, and the log stays short. Selecting all of a very long log in the Log Viewer (NVDA menu, Tools, View log) can freeze NVDA for seconds at each key press, because NVDA reads the selection to announce it, and the Log Viewer is part of NVDA.
+
+A log can also grow quickly because of another add-on. With NVDA 2026.2, Emoticons 38.0.0 uses names NVDA has since replaced, and NVDA writes a warning with a full list of calls each time it does. It does that 176 times each time NVDA switches configuration profiles, which happens whenever you move to or from a program with a profile of its own. In one tester's log that was over 12,000 warnings in ten minutes. JAWS has no emoticons of its own: at the Most punctuation level it says ":)" as "colon right paren". If you don't use Emoticons, disabling it (NVDA menu, Tools, Add-on Store, Installed add-ons) keeps the log short. Emoticons 38.2.0 fixes the warnings but needs NVDA 2026.3.
 
 ## Where things are kept
 

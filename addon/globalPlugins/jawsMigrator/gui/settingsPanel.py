@@ -14,7 +14,7 @@ import gui
 from gui import guiHelper
 from gui.settingsDialogs import SettingsPanel
 
-from .. import autoFormsMode, backspaceEcho, labelRepeats, layerSound, listCoordinates, nvdaEnv, quickNavHeadings, state, trayChanges
+from .. import autoFormsMode, backspaceEcho, labelRepeats, layerSound, listCoordinates, listPosition, nvdaEnv, quickNavHeadings, state, trayChanges
 from .common import checkListClass, openFile
 
 
@@ -53,6 +53,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="Lea&ve out the row and column numbers of items in lists, such as drives, files and messages"),
 		)
 		self.listNoCoordinates.SetValue(listCoordinates.wanted(state.load()))
+		# NVDA says "3 of 3" wherever the focus goes; JAWS's Alt+Tab says a window's name alone, and its File Explorer
+		# script says the position only when you move from item to item.
+		self.positionLikeJaws = helper.addItem(
+			wx.CheckBox(self, label="Don't say the position, such as 3 of 3, in Alt+Tab or when you come to a list in &File Explorer"),
+		)
+		self.positionLikeJaws.SetValue(listPosition.wanted(state.load()))
 		# NVDA says nothing for Backspace when a slow program deletes after NVDA stopped waiting; JAWS says it at once.
 		self.backspaceSlow = helper.addItem(
 			wx.CheckBox(self, label="Say what Backspac&e deletes, even when the program is slow to delete it"),
@@ -139,6 +145,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownQuietTray = self.quietTray.GetValue()
 		self._shownHeadingAlone = self.headingAlone.GetValue()
 		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
+		self._shownPositionLikeJaws = self.positionLikeJaws.GetValue()
 		self._shownBackspaceSlow = self.backspaceSlow.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
@@ -194,6 +201,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[quickNavHeadings.STATE_KEY] = self.headingAlone.GetValue()
 		if self.listNoCoordinates.GetValue() != self._shownListNoCoordinates:
 			updates[listCoordinates.STATE_KEY] = self.listNoCoordinates.GetValue()
+		if self.positionLikeJaws.GetValue() != self._shownPositionLikeJaws:
+			updates[listPosition.STATE_KEY] = self.positionLikeJaws.GetValue()
 		if self.backspaceSlow.GetValue() != self._shownBackspaceSlow:
 			updates[backspaceEcho.STATE_KEY] = self.backspaceSlow.GetValue()
 		if self.tabsBrowse.GetValue() != self._shownTabsBrowse:

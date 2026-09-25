@@ -73,6 +73,9 @@ DEFAULTS = {
 	"sayHeadingAlone": True,
 	#: An item in a list is said without its row and column numbers, as JAWS says it (see listCoordinates).
 	"listItemsWithoutCoordinates": True,
+	#: Alt+Tab says a window without its position, and File Explorer says an item's position only while you move
+	#: through its list, as JAWS's scripts do (see listPosition).
+	"positionLikeJawsInExplorer": True,
 	#: Backspace says what it deletes when a slow program deletes after NVDA stopped waiting (see backspaceEcho).
 	"sayWhatBackspaceDeletes": True,
 	#: A web page's tabs, and toolbar buttons reached with Tab, stay in browse mode, as in JAWS's Auto Forms Mode,

@@ -15,7 +15,8 @@ what activating a control in browse mode changed (see changeRepeats), and a
 system tray icon when the focus moves to it, not each time its program changes
 it (see trayChanges), and a heading without the landmark, region or list it is
 in when quick navigation moves to it (see quickNavHeadings), and an item in a
-list without row and column numbers (see listCoordinates), and what Backspace
+list without row and column numbers (see listCoordinates), a position ("3 of 3")
+in File Explorer and Alt+Tab only where JAWS says one (see listPosition), and what Backspace
 deletes in a slow program (see backspaceEcho); a web page's tabs and toolbar
 buttons stay in browse mode, as in JAWS (see autoFormsMode);
 NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); and opening
@@ -253,6 +254,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import listPosition
+
+			listPosition.unregister()
+		except Exception:
+			pass
+		try:
 			from . import backspaceEcho
 
 			backspaceEcho.unregister()
@@ -355,6 +362,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				listCoordinates.unregister()
 		except Exception:
 			debugLog.error("could not apply saying list items without row and column numbers")
+		try:
+			from . import listPosition
+
+			# Not a JAWS setting: JAWS's Alt+Tab says a window's name alone, and its File Explorer script says the
+			# position only when you move from item to item.
+			if listPosition.wanted(data):
+				listPosition.register()
+			else:
+				listPosition.unregister()
+		except Exception:
+			debugLog.error("could not apply saying a position in File Explorer and Alt+Tab where JAWS says one")
 		try:
 			from . import backspaceEcho
 

@@ -19,6 +19,9 @@ them. NVDA still notes the table as it does (so a table cell after the list is r
 still follows NVDA's "Report object position information". Table cells, in Excel, Word and on web pages,
 keep their coordinates. It works while the assistant runs, unless it is turned off in NVDA's Settings, JAWS
 Migration Assistant.
+
+The same wrapper applies listPosition's rule ("3 of 3" in File Explorer and Alt+Tab only where JAWS says it)
+while that is on, so the two settings never stack two wrappers that could only be taken off in one order.
 """
 
 from __future__ import annotations
@@ -51,6 +54,8 @@ _listItem = None
 _query = None
 #: Whether the log has said once that a list item's row and column were left out.
 _logged = False
+#: listPosition's rule while it is on: called with what NVDA may say about the list item and why NVDA reads it.
+_positionRule = None
 
 
 def _log():
@@ -77,10 +82,37 @@ def wanted(stateData: dict) -> bool:
 
 def register() -> None:
 	"""Have NVDA say list items without row and column numbers, from now on."""
-	global _enabled, _listItem, _query
+	global _enabled
 	if _enabled:
 		return
 	_enabled = True
+	_install("NVDA says a list item without its row and column numbers", "can't have NVDA say list items without row and column numbers")
+
+
+def unregister() -> None:
+	"""Stop leaving out a list item's row and column; NVDA gets its own function back unless listPosition's rule is on."""
+	global _enabled
+	if not _enabled:
+		return
+	_enabled = False
+	_uninstallIfUnused()
+
+
+def setPositionRule(rule) -> bool:
+	"""Apply listPosition's ``rule(allowed, reason)`` to each list item NVDA reads, or stop (None). True when it applies."""
+	global _positionRule
+	_positionRule = rule
+	if rule is None:
+		_uninstallIfUnused()
+		return True
+	return _install(
+		"NVDA says a position in File Explorer and Alt+Tab where JAWS says it",
+		"can't have NVDA say a position in File Explorer and Alt+Tab where JAWS says it",
+	)
+
+
+def _install(said: str, failed: str) -> bool:
+	global _listItem, _query
 	try:
 		from controlTypes import OutputReason, Role
 		from speech import speech
@@ -88,17 +120,16 @@ def register() -> None:
 		_listItem = Role.LISTITEM
 		_query = OutputReason.QUERY
 		with _lock:
-			_replace(speech, ALLOWED, _allowedGuarded)
+			return _replace(speech, ALLOWED, _allowedGuarded, said)
 	except Exception:
-		_failure("can't have NVDA say list items without row and column numbers")
+		_failure(failed)
+		return False
 
 
-def unregister() -> None:
-	"""Give NVDA its own function back, where nothing has been put over the assistant's since."""
-	global _enabled
-	if not _enabled:
+def _uninstallIfUnused() -> None:
+	"""Give NVDA its own function back, once neither rule is on, where nothing has been put over the assistant's since."""
+	if _enabled or _positionRule is not None:
 		return
-	_enabled = False
 	with _lock:
 		for owner, name, installed, original in reversed(_replaced):
 			try:
@@ -124,7 +155,7 @@ def _isOurs(function) -> bool:
 	return False
 
 
-def _replace(owner, name: str, guarded) -> bool:
+def _replace(owner, name: str, guarded, said: str) -> bool:
 	"""Put the assistant's version of ``name`` in the place of NVDA's own on ``owner``, once. True when it is there."""
 	current = vars(owner).get(name)
 	if _isOurs(current):
@@ -136,28 +167,36 @@ def _replace(owner, name: str, guarded) -> bool:
 	installed = guarded(current)
 	setattr(owner, name, installed)
 	_replaced.append((owner, name, installed, current))
-	_log().debug(f"jawsMigrator: NVDA says a list item without its row and column numbers ({getattr(owner, '__name__', owner)}.{name})")
+	_log().debug(f"jawsMigrator: {said} ({getattr(owner, '__name__', owner)}.{name})")
 	return True
 
 
 def _allowedGuarded(original):
-	"""What NVDA may say about an object: no row and column numbers for a list item, except for NVDA+Tab."""
+	"""What NVDA may say about an object: no row and column numbers for a list item, except for NVDA+Tab,
+	and listPosition's rule for its position while that is on."""
 
 	@functools.wraps(original)
 	def _objectSpeech_calculateAllowedProps(reason, shouldReportTextContent, objRole, *args, **kwargs):
 		global _logged
 		allowed = original(reason, shouldReportTextContent, objRole, *args, **kwargs)
-		if not _enabled or objRole != _listItem or reason == _query:
+		if objRole != _listItem:
 			return allowed
-		try:
-			if any(allowed.get(name) for name in COORDINATES):
-				for name in COORDINATES:
-					allowed[name] = False
-				if not _logged:
-					_logged = True
-					_log().debug("jawsMigrator: a list item's row and column numbers are left out, as JAWS leaves them out (NVDA+Tab still says them)")
-		except Exception:
-			_failure("could not leave out a list item's row and column numbers")
+		if _enabled and reason != _query:
+			try:
+				if any(allowed.get(name) for name in COORDINATES):
+					for name in COORDINATES:
+						allowed[name] = False
+					if not _logged:
+						_logged = True
+						_log().debug("jawsMigrator: a list item's row and column numbers are left out, as JAWS leaves them out (NVDA+Tab still says them)")
+			except Exception:
+				_failure("could not leave out a list item's row and column numbers")
+		rule = _positionRule
+		if rule is not None:
+			try:
+				rule(allowed, reason)
+			except Exception:
+				_failure("could not leave out a list item's position")
 		return allowed
 
 	setattr(_objectSpeech_calculateAllowedProps, MARK, _TOKEN)

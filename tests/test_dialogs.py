@@ -427,6 +427,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"quietTrayIconChanges": True,
 				"sayHeadingAlone": True,
 				"listItemsWithoutCoordinates": True,
+				"positionLikeJawsInExplorer": True,
 				"sayWhatBackspaceDeletes": True,
 				"browseModeOnTabsAndToolbars": True,
 				"playJawsLayerSound": True,
@@ -464,6 +465,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"quietTrayIconChanges": False,
 				"sayHeadingAlone": False,
 				"listItemsWithoutCoordinates": False,
+				"positionLikeJawsInExplorer": False,
 				"sayWhatBackspaceDeletes": False,
 				"browseModeOnTabsAndToolbars": False,
 				"playJawsLayerSound": False,
@@ -478,6 +480,7 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("sayHeadingAlone"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("listItemsWithoutCoordinates"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("positionLikeJawsInExplorer"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("sayWhatBackspaceDeletes"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("browseModeOnTabsAndToolbars"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("playJawsLayerSound"), "a check box the user didn't change saves nothing")
@@ -550,6 +553,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"Lea&ve out the row and column numbers of items in lists, such as drives, files and messages",
 			listCoordinates.STATE_KEY,
 			"NVDA says a list item's row and column again, at once",
+		)
+
+	def test_positionLikeJawsIsSavedAndApplied(self):
+		from jawsMigrator import listPosition
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.positionLikeJaws,
+			"Don't say the position, such as 3 of 3, in Alt+Tab or when you come to a list in &File Explorer",
+			listPosition.STATE_KEY,
+			"NVDA says the position in File Explorer and Alt+Tab again, at once",
 		)
 
 	def test_backspaceInSlowProgramsIsSavedAndApplied(self):

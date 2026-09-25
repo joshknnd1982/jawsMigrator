@@ -129,7 +129,7 @@ def installSpeech():
 	controlTypes = types.ModuleType("controlTypes")
 	controlTypes.Role = Labelled(
 		"Role",
-		{"RADIOBUTTON": "radio button", "BUTTON": "button", "HEADING": "heading", "LISTITEM": "list item", "TAB": "tab"},
+		{"RADIOBUTTON": "radio button", "BUTTON": "button", "HEADING": "heading", "LIST": "list", "LISTITEM": "list item", "TAB": "tab"},
 	)
 	controlTypes.State = Labelled("State", {"CHECKED": "checked", "EDITABLE": "editable"})
 	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS QUICKNAV CARET QUERY")
@@ -230,7 +230,7 @@ def main():
 		# Quick navigation says a heading without what it is in, a list item has no row and column, and a web page's
 		# tabs and toolbar buttons stay in browse mode: NVDA's field speech, quick navigation report, what NVDA may say
 		# about an object, and its choice of mode.
-		from jawsMigrator import autoFormsMode, backspaceEcho, listCoordinates, quickNavHeadings
+		from jawsMigrator import autoFormsMode, backspaceEcho, listCoordinates, listPosition, quickNavHeadings
 
 		speechPackage, speechModule = sys.modules["speech"], sys.modules["speech.speech"]
 		nvdaFieldSpeech, nvdaAllowed = getControlFieldSpeech, _objectSpeech_calculateAllowedProps
@@ -256,22 +256,30 @@ def main():
 			)
 
 		def allRegistered():
-			return quickNavHeadings.isRegistered() and listCoordinates.isRegistered() and autoFormsMode.isRegistered() and backspaceEcho.isRegistered()
+			return (
+				quickNavHeadings.isRegistered()
+				and listCoordinates.isRegistered()
+				and listPosition.isRegistered()
+				and listCoordinates._positionRule is listPosition.leaveOutPosition
+				and autoFormsMode.isRegistered()
+				and backspaceEcho.isRegistered()
+			)
 
-		check(allRegistered() and wrapped() and plugin._autoFormsMode is autoFormsMode, "headings, list items, Backspace and web page tabs as in JAWS")
+		check(allRegistered() and wrapped() and plugin._autoFormsMode is autoFormsMode, "headings, list items and their positions, Backspace and web page tabs as in JAWS")
 		check(decider.handlers.count(autoFormsMode.noteGesture) == 1, "Tab is noted, once")
-		for module in (quickNavHeadings, listCoordinates, autoFormsMode, backspaceEcho):
+		for module in (quickNavHeadings, listCoordinates, listPosition, autoFormsMode, backspaceEcho):
 			jawsMigrator.state.set(module.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
 		check(
 			not quickNavHeadings.isRegistered()
 			and not listCoordinates.isRegistered()
+			and not listPosition.isRegistered()
 			and not autoFormsMode.isRegistered()
 			and not backspaceEcho.isRegistered()
 			and nvdasOwn(),
 			"turned off in the Settings panel, NVDA's own are back",
 		)
-		for module in (quickNavHeadings, listCoordinates, autoFormsMode, backspaceEcho):
+		for module in (quickNavHeadings, listCoordinates, listPosition, autoFormsMode, backspaceEcho):
 			jawsMigrator.state.set(module.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(allRegistered() and wrapped(), "and on again, wrapped once")
@@ -367,7 +375,11 @@ def main():
 		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
 		check(not trayChanges.isRegistered() and plugin._trayChanges is None and not decider.handlers, "and NVDA's key presses")
 		check(
-			not quickNavHeadings.isRegistered() and not listCoordinates.isRegistered() and not backspaceEcho.isRegistered() and nvdasOwn(),
+			not quickNavHeadings.isRegistered()
+			and not listCoordinates.isRegistered()
+			and not listPosition.isRegistered()
+			and not backspaceEcho.isRegistered()
+			and nvdasOwn(),
 			"and NVDA's field speech, quick navigation report, object speech, Backspace and choice of mode",
 		)
 		check(not autoFormsMode.isRegistered() and plugin._autoFormsMode is None, "and the note of each focus")
@@ -392,7 +404,18 @@ def main():
 			check(len(handled) == 4, f"and NVDA handles the focus and every change notice: {handled}")
 			plugin.terminate()
 
-		unloadable = ("layerSound", "labelRepeats", "changeRepeats", "trayChanges", "quickNavHeadings", "listCoordinates", "autoFormsMode", "backspaceEcho", "outlookFocus")
+		unloadable = (
+			"layerSound",
+			"labelRepeats",
+			"changeRepeats",
+			"trayChanges",
+			"quickNavHeadings",
+			"listCoordinates",
+			"listPosition",
+			"autoFormsMode",
+			"backspaceEcho",
+			"outlookFocus",
+		)
 		for name in unloadable:
 			delattr(jawsMigrator, name)
 			sys.modules[f"jawsMigrator.{name}"] = None
