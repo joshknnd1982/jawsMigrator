@@ -661,6 +661,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"NVDA says page and section numbers in Outlook messages again, at once",
 		)
 
+	def test_outlookMessagesAsJawsIsSavedAndApplied(self):
+		from jawsMigrator import outlookMessages
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.outlookAsJaws,
+			'Read an Outlook message from the top when it opens, as JAWS does, with "send mail link" for an e-mail address and no heading for the From line of a quoted message',
+			outlookMessages.STATE_KEY,
+			"NVDA says the first line of an Outlook message it opens, \"link\" and \"heading level 1\" again, at once",
+		)
+
 	def test_quietColumnsReviewListBoundsIsSavedAndApplied(self):
 		from jawsMigrator import listBounds
 
@@ -669,6 +679,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'Keep Columns Review from saying "List top" and "List bottom" at the ends of a list',
 			listBounds.STATE_KEY,
 			'Columns Review says "List top" again, at once',
+		)
+
+	def test_sayLinksAsJawsIsSavedAndApplied(self):
+		from jawsMigrator import linkSpeech
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.linksAsJaws,
+			'Say links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading',
+			linkSpeech.STATE_KEY,
+			'NVDA says "same page", link titles and "link" before a heading again, at once',
 		)
 
 	def test_version112sLevelFirstSettingIsGone(self):

@@ -532,9 +532,11 @@ def mapSettings(
 	value = r.int("HTML", "IncludeGraphics")
 	if value is not None:
 		add(NVDA, ("documentFormatting", "reportGraphics"), value != 0, f"Report graphics: {'on' if value else 'off'}", r.src("HTML", "IncludeGraphics"))
-	value = r.int("HTML", "IdentifyLinkType")
+	# NVDA's only link type is "same page" (controlTypes.STATES_LINK_TYPE): JAWS's "Identify same page links".
+	# JAWS's "Identify link type" names mail, FTP and news links, which NVDA doesn't.
+	value = r.int("HTML", "IdentifySamePageLinks")
 	if value is not None:
-		add(NVDA, ("documentFormatting", "reportLinkType"), bool(value), f"Report link type: {'on' if value else 'off'}", r.src("HTML", "IdentifyLinkType"))
+		add(NVDA, ("documentFormatting", "reportLinkType"), bool(value), f"Report link type: {'on' if value else 'off'}", r.src("HTML", "IdentifySamePageLinks"))
 	value = r.int("HTML", "MaxLineLength")
 	if value is not None and value > 0:
 		add(NVDA, ("virtualBuffers", "maxLineLength"), value, f"Maximum number of characters on one line: {value}", r.src("HTML", "MaxLineLength"))

@@ -24,11 +24,13 @@ from .. import (
 	fieldEdges,
 	labelRepeats,
 	layerSound,
+	linkSpeech,
 	linksList,
 	listBounds,
 	listCoordinates,
 	listPosition,
 	nvdaEnv,
+	outlookMessages,
 	outlookPages,
 	outlookRows,
 	quickNavHeadings,
@@ -153,12 +155,30 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# JAWS says no page or section in Outlook.
 		self.outlookNoPages = helper.addItem(wx.CheckBox(self, label="Don't say page and section numbers in Outlook messages"))
 		self.outlookNoPages.SetValue(outlookPages.wanted(state.load()))
+		# JAWS read a message from the top when it opened, with "Send Mail Link" for an address and no heading for the
+		# From line of the message it quoted; NVDA said nothing, then "heading level 1, From:" and "link".
+		self.outlookAsJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label='Read an Outlook message from the top when it opens, as JAWS does, with "send mail link" for an e-mail address and no heading for the From line of a quoted message',
+			),
+		)
+		self.outlookAsJaws.SetValue(outlookMessages.wanted(state.load()))
 		# The Columns Review add-on, as it comes, says "List top" at a list's first item, as File Explorer opens a folder,
 		# and "List bottom" at its last; JAWS says the item alone.
 		self.quietListBounds = helper.addItem(
 			wx.CheckBox(self, label='Keep Columns Review from saying "List top" and "List bottom" at the ends of a list'),
 		)
 		self.quietListBounds.SetValue(listBounds.wanted(state.load()))
+		# NVDA said "HEADLINES, same page, link, Homepage, heading, level 3" for a heading on a web page; JAWS said
+		# "HEADLINES, heading level 3, Link": no "same page" for a link to the page itself, no title, the heading first.
+		self.linksAsJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label='Say links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading',
+			),
+		)
+		self.linksAsJaws.SetValue(linkSpeech.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -249,7 +269,9 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownStayInFields = self.stayInFields.GetValue()
 		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
 		self._shownOutlookNoPages = self.outlookNoPages.GetValue()
+		self._shownOutlookAsJaws = self.outlookAsJaws.GetValue()
 		self._shownQuietListBounds = self.quietListBounds.GetValue()
+		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -327,8 +349,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[outlookRows.STATE_KEY] = self.outlookLeftMessage.GetValue()
 		if self.outlookNoPages.GetValue() != self._shownOutlookNoPages:
 			updates[outlookPages.STATE_KEY] = self.outlookNoPages.GetValue()
+		if self.outlookAsJaws.GetValue() != self._shownOutlookAsJaws:
+			updates[outlookMessages.STATE_KEY] = self.outlookAsJaws.GetValue()
 		if self.quietListBounds.GetValue() != self._shownQuietListBounds:
 			updates[listBounds.STATE_KEY] = self.quietListBounds.GetValue()
+		if self.linksAsJaws.GetValue() != self._shownLinksAsJaws:
+			updates[linkSpeech.STATE_KEY] = self.linksAsJaws.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

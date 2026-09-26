@@ -36,9 +36,14 @@ the arrow keys stay in an edit field on a web page when they reach its start or
 end, as in JAWS's Auto Forms Mode (see fieldEdges);
 in Outlook's message list, NVDA says the message you move to, not the one you
 leave (see outlookRows), and an Outlook message without page and section
-numbers (see outlookPages);
+numbers (see outlookPages); an Outlook message you open is read from the top,
+with "send mail link" for an e-mail address and no heading for the From line
+of a message it quotes, as JAWS reads it (see outlookMessages);
 the Columns Review add-on doesn't say "List top" or "List bottom" at the ends
 of a list, which JAWS never says (see listBounds);
+a link on a web page is said as JAWS says it: "same page" only for a link to
+a place on the page, without its title, and "link" after the heading it is in
+when quick navigation moves to the heading (see linkSpeech);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
@@ -396,9 +401,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import outlookMessages
+
+			outlookMessages.unregister()
+		except Exception:
+			pass
+		try:
 			from . import listBounds
 
 			listBounds.unregister()
+		except Exception:
+			pass
+		try:
+			from . import linkSpeech
+
+			linkSpeech.unregister()
 		except Exception:
 			pass
 		try:
@@ -635,6 +652,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not apply leaving page and section numbers out of Outlook messages")
 		try:
+			from . import outlookMessages
+
+			# JAWS's Outlook settings, as JAWS comes: a message is read from the top when it opens ("Messages
+			# automatically read"), a link to an e-mail address is a "Send Mail Link" (IdentifyLinkType), and headings are
+			# Word's heading styles, not the outline level Word gives the From line of a quoted message.
+			if outlookMessages.wanted(data):
+				outlookMessages.register()
+			else:
+				outlookMessages.unregister()
+		except Exception:
+			debugLog.error("could not apply reading Outlook messages as JAWS does")
+		try:
 			from . import listBounds
 
 			# Not a JAWS setting: the Columns Review add-on, as it comes, says "List top" at a list's first item and
@@ -645,6 +674,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				listBounds.unregister()
 		except Exception:
 			debugLog.error("could not keep Columns Review from saying the ends of a list")
+		try:
+			from . import linkSpeech
+
+			# Not a JAWS setting as such: JAWS, as it comes, says "same page" only for a link to a place on the page
+			# (IdentifySamePageLinks), a link's text and not its title (LinkText), and "Link" after the heading it is in.
+			if linkSpeech.wanted(data):
+				linkSpeech.register()
+			else:
+				linkSpeech.unregister()
+		except Exception:
+			debugLog.error("could not have NVDA say links as JAWS says them")
 		try:
 			from . import layerSound
 

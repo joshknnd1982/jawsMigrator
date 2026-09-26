@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.25](#whats-new-in-125)
 - [What's new in 1.24](#whats-new-in-124)
 - [What's new in 1.23](#whats-new-in-123)
 - [What's new in 1.22](#whats-new-in-122)
@@ -76,10 +77,23 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.24.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.25.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.25
+
+From a tester's reports:
+
+- **An Outlook message is read from the top when you open it, as JAWS reads it.** The tester opened the same message with JAWS and with NVDA. JAWS read it straight through: "From: Send Mail Link nvda-addons@nvda-addons.groups.io < Send Mail Link nvda-addons@nvda-addons.groups.io> On Behalf Of Alireza Mamani via groups.io", then the message itself. NVDA said nothing, and then, with the arrow keys, "heading level 1, From:", "link, nvda-addons@nvda-addons.groups.io" and "heading level 1, <". Three things were different:
+  - JAWS reads a message you open from the top, as its Outlook settings have it when JAWS comes ("Messages automatically read"). NVDA reads a document as it opens only with "Automatic Say All on page load", one setting for web pages and messages alike, and the migration takes it from JAWS's setting for web pages, which is off as JAWS comes. So NVDA said only the first line of a message, and the Outlook First Line Silence add-on the tester has keeps even that quiet. Now NVDA reads an Outlook message you open from the top, as NVDA+Down Arrow does, and a key stops it as it stops NVDA+Down Arrow. Web pages are as before. Coming back to a message that is already open, with Alt+Tab for example, doesn't read it again, and messages you write are as before.
+  - JAWS says "Send Mail Link" for a link to an e-mail address, where NVDA says "link". Now NVDA says "send mail link" for one in an Outlook message, while "Link type" is checked in NVDA's Document Formatting settings, as it is when NVDA comes. Braille shows the link as before.
+  - NVDA said "heading level 1" before "From:", and again after each address. When you reply to a message or forward it, Outlook gives the From line of the message it quotes an outline level, so that it can collapse what comes after it, and Word tells NVDA that line is a heading. JAWS says a heading only for text in one of Word's heading styles, and that line isn't. Now, in an Outlook message, NVDA says a heading only for text in a heading style, such as "Heading 1": the headings of a newsletter are said as before.
+
+  The last two are for messages NVDA reads through UI Automation, as it does with a recent Office such as the tester's. To have NVDA say Outlook messages as before, uncheck 'Read an Outlook message from the top when it opens, as JAWS does, with "send mail link" for an e-mail address and no heading for the From line of a quoted message' in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA says a heading that is a link as JAWS does.** On profootballrumors.com the tester pressed H. JAWS said "HEADLINES, heading level 3, Link", "Pro Football Rumors, heading level 1, Link" and "Vikings To Sign P Johnny Hekker, heading level 2, Link". NVDA said "HEADLINES, same page, link, Homepage, heading, level 3", "Pro Football Rumors, same page, link, Home, heading, level 1" and "Vikings To Sign P Johnny Hekker, link, heading, level 2". Each of those headings is a link, and three things differed. First, NVDA called a link to the page you are on a "same page" link: HEADLINES and Pro Football Rumors go to the site's home page, and the tester was on it. JAWS says "same page" only for a link to a place on the page, such as "Skip to content", and now NVDA does too: it says "same page" only when the link's address has a "#". Second, "Homepage" and "Home" are the links' titles, which a page gives links for the mouse pointer. NVDA says them because "Report object descriptions" is checked in its Object Presentation settings when NVDA comes; JAWS says a link's text, not its title. Now NVDA leaves a link's title out in Edge and Chrome (Firefox doesn't tell NVDA which description is a title), and still says a description the page writes for screen readers. Third, NVDA said "link" before "heading, level 3". Now, when H, Shift+H, 1 to 9 or the Elements List moves to a heading that is a link, NVDA says the text, then "visited" if you have been there (on reddit.com the tester's JAWS said "visited, heading level 2"), then the heading and its level, then "link". Tab, K and the arrow keys say links as before. To have NVDA's own way back, uncheck 'Say links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading' in NVDA's Settings, JAWS Migration Assistant.
+- **Migrating JAWS settings: NVDA's "Report link type" follows JAWS's "Identify same page links".** NVDA's only link type is "same page". The migration took it from JAWS's "Identify link type", which is about mail and FTP links, which NVDA doesn't name on web pages.
 
 ## What's new in 1.24
 
@@ -522,7 +536,9 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
+- reading an Outlook message from the top when it opens, as JAWS does, with "send mail link" for an e-mail address and no heading for the From line of a quoted message (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
+- saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 

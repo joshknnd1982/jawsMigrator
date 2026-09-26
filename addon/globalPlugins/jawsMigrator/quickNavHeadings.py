@@ -17,7 +17,8 @@ So while quick navigation reports a heading, NVDA leaves out the containers the 
 heading: landmarks, regions, lists, tables and their cells, articles, groupings and frames (the fields
 outside the heading whose presentation category is a container or a table cell). The heading itself, a
 link in it or around it, and the name and description quick navigation adds are said as NVDA says them,
-in NVDA's order: the text first, then "heading, level 2". That is H and Shift+H, 1 to 9, and Move to in
+in NVDA's order: the text first, then "heading, level 2" (on a web page, linkSpeech puts a link's "link"
+after the heading, as JAWS does). That is H and Shift+H, 1 to 9, and Move to in
 the Elements List: ``browseMode.TextInfoQuickNavItem.report`` for the item types "heading" and "heading1"
 to "heading9". D still says the landmark it moves to, and the arrow keys and Tab still say the landmarks
 and lists they enter. It works while the assistant runs, unless it is turned off in NVDA's Settings, JAWS

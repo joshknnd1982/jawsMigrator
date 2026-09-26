@@ -110,6 +110,13 @@ DEFAULTS = {
 	#: The Columns Review add-on says nothing at the ends of a list where it would say "List top", "List bottom" or
 	#: "Mono-item list" with the voice; JAWS says the item alone. Its beeps stay (see listBounds).
 	"quietColumnsReviewListBounds": True,
+	#: A link on a web page is said as JAWS says it: "same page" only for a link to a place on the page (a "#" in its
+	#: address), without the title NVDA says as its description, and, when quick navigation moves to a heading, "link"
+	#: after the heading and its level (see linkSpeech).
+	"sayLinksAsJaws": True,
+	#: An Outlook message you open is read from the top, as JAWS reads it, with "send mail link" for a link to an e-mail
+	#: address, and without "heading level 1" for the From line of a message it quotes (see outlookMessages).
+	"outlookMessagesAsJaws": True,
 }
 
 _lock = threading.RLock()
