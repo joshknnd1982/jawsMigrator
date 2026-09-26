@@ -35,7 +35,10 @@ an alert with nothing in it isn't said as "alert" alone (see emptyAlerts);
 the arrow keys stay in an edit field on a web page when they reach its start or
 end, as in JAWS's Auto Forms Mode (see fieldEdges);
 in Outlook's message list, NVDA says the message you move to, not the one you
-leave (see outlookRows);
+leave (see outlookRows), and an Outlook message without page and section
+numbers (see outlookPages);
+the Columns Review add-on doesn't say "List top" or "List bottom" at the ends
+of a list, which JAWS never says (see listBounds);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
@@ -387,6 +390,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import outlookPages
+
+			outlookPages.unregister()
+		except Exception:
+			pass
+		try:
+			from . import listBounds
+
+			listBounds.unregister()
+		except Exception:
+			pass
+		try:
 			from . import typingWatch
 
 			typingWatch.unregister()
@@ -608,6 +623,28 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._outlookRows = outlookRows
 		except Exception:
 			debugLog.error("could not apply saying only the Outlook message you move to")
+		try:
+			from . import outlookPages
+
+			# Not a JAWS setting: JAWS says no page or section in Outlook, and NVDA's Outlook support leaves them out through
+			# Word's object model, but NVDA said "page 1, section 1" in a message it read through UI Automation.
+			if outlookPages.wanted(data):
+				outlookPages.register()
+			else:
+				outlookPages.unregister()
+		except Exception:
+			debugLog.error("could not apply leaving page and section numbers out of Outlook messages")
+		try:
+			from . import listBounds
+
+			# Not a JAWS setting: the Columns Review add-on, as it comes, says "List top" at a list's first item and
+			# "List bottom" at its last, where JAWS says the item alone.
+			if listBounds.wanted(data):
+				listBounds.register()
+			else:
+				listBounds.unregister()
+		except Exception:
+			debugLog.error("could not keep Columns Review from saying the ends of a list")
 		try:
 			from . import layerSound
 

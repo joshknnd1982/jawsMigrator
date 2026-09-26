@@ -651,6 +651,26 @@ class SettingsPanelTests(unittest.TestCase):
 			"NVDA says the Outlook message you leave again, at once",
 		)
 
+	def test_outlookWithoutPageNumbersIsSavedAndApplied(self):
+		from jawsMigrator import outlookPages
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.outlookNoPages,
+			"Don't say page and section numbers in Outlook messages",
+			outlookPages.STATE_KEY,
+			"NVDA says page and section numbers in Outlook messages again, at once",
+		)
+
+	def test_quietColumnsReviewListBoundsIsSavedAndApplied(self):
+		from jawsMigrator import listBounds
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.quietListBounds,
+			'Keep Columns Review from saying "List top" and "List bottom" at the ends of a list',
+			listBounds.STATE_KEY,
+			'Columns Review says "List top" again, at once',
+		)
+
 	def test_version112sLevelFirstSettingIsGone(self):
 		from jawsMigrator import state
 

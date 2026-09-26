@@ -104,6 +104,12 @@ DEFAULTS = {
 	#: In Outlook's message list, the message you leave isn't said again, with the status of the one you move to; JAWS
 	#: says only the message you move to (see outlookRows).
 	"quietLeftOutlookMessage": True,
+	#: An Outlook message NVDA reads through UI Automation is said without page and section numbers, as JAWS says it and
+	#: as NVDA's Outlook support does through Word's object model (see outlookPages).
+	"outlookWithoutPageNumbers": True,
+	#: The Columns Review add-on says nothing at the ends of a list where it would say "List top", "List bottom" or
+	#: "Mono-item list" with the voice; JAWS says the item alone. Its beeps stay (see listBounds).
+	"quietColumnsReviewListBounds": True,
 }
 
 _lock = threading.RLock()

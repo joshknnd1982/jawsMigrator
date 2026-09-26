@@ -603,6 +603,94 @@ def main():
 			check(not outlookRows.isRegistered() and renamed == [reply], "turned off in the Settings panel, NVDA says it as it does")
 			jawsMigrator.state.set(outlookRows.STATE_KEY, True)
 			plugin.applyRuntimeSettings()
+		# NVDA said "page 1, section 1" in an Outlook message it read through UI Automation: its text there has no page
+		# and section numbers now, and Word's keeps them. The imitation NVDA has no UI Automation support for Word until here.
+		from jawsMigrator import outlookPages
+
+		check(not outlookPages.isRegistered(), "without NVDA's UI Automation support for Word there is nothing to change")
+
+		class FormatField(dict):
+			"""NVDA's textInfos.FormatField."""
+
+		class FieldCommand:
+			"""NVDA's textInfos.FieldCommand."""
+
+			def __init__(self, command, field):
+				self.command, self.field = command, field
+
+		def nvdasWordText(info, formatConfig=None):
+			return [FieldCommand("formatChange", FormatField({"page-number": 1, "section-number": 1, "font-name": "Aptos"})), "Have you set it to auto check yet?"]
+
+		WordText = type("WordDocumentTextInfo", (), {"getTextWithFields": nvdasWordText})
+		wordDocument = types.ModuleType("NVDAObjects.UIA.wordDocument")
+		wordDocument.WordDocumentTextInfo = WordText
+		textInfosModule = types.ModuleType("textInfos")
+		textInfosModule.FieldCommand, textInfosModule.FormatField = FieldCommand, FormatField
+		fakeWord = {
+			"textInfos": textInfosModule,
+			"NVDAObjects": types.ModuleType("NVDAObjects"),
+			"NVDAObjects.UIA": types.ModuleType("NVDAObjects.UIA"),
+			"NVDAObjects.UIA.wordDocument": wordDocument,
+		}
+
+		def formatting(appName):
+			info = WordText()
+			info.obj = types.SimpleNamespace(appModule=types.SimpleNamespace(appName=appName))
+			return sorted(info.getTextWithFields()[0].field)
+
+		with mock.patch.dict(sys.modules, fakeWord):
+			plugin.applyRuntimeSettings()
+			check(
+				outlookPages.isRegistered()
+				and formatting("outlook") == ["font-name"]
+				and formatting("winword") == ["font-name", "page-number", "section-number"],
+				"an Outlook message has no page and section numbers, and Word keeps them",
+			)
+			jawsMigrator.state.set(outlookPages.STATE_KEY, False)
+			plugin.applyRuntimeSettings()
+			check(
+				not outlookPages.isRegistered()
+				and vars(WordText)["getTextWithFields"] is nvdasWordText
+				and formatting("outlook") == ["font-name", "page-number", "section-number"],
+				"turned off in the Settings panel, NVDA says them as it does",
+			)
+			jawsMigrator.state.set(outlookPages.STATE_KEY, True)
+			plugin.applyRuntimeSettings()
+			check(outlookPages.isRegistered(), "and on again")
+		# The Columns Review add-on said "List top: " as File Explorer opened a folder; JAWS says the item alone. Its beeps stay.
+		from jawsMigrator import listBounds
+
+		saidBounds = []
+		columnsReviewSaysWith = ["voice"]
+
+		def reportListBounds(self, obj):
+			saidBounds.append("List top: " if columnsReviewSaysWith[0] == "voice" else "beep")
+
+		columnsReview = types.ModuleType(listBounds.MODULE)
+		columnsReview.GlobalPlugin = type("GlobalPlugin", (), {"reportListBounds": reportListBounds})
+		columnsReview.configManager = types.SimpleNamespace(
+			ConfigFromObject=type("ConfigFromObject", (), {"__init__": lambda self, obj: None, "announceListBoundsWith": property(lambda self: columnsReviewSaysWith[0])}),
+		)
+		firstFile = types.SimpleNamespace(name="$RECYCLE.BIN")
+		check(listBounds.isRegistered() and not listBounds.isInstalled(), "without Columns Review there is nothing to change")
+		sys.modules[listBounds.MODULE] = columnsReview
+		plugin.applyRuntimeSettings()
+		columnsReview.GlobalPlugin().reportListBounds(firstFile)
+		columnsReviewSaysWith[0] = "beep"
+		columnsReview.GlobalPlugin().reportListBounds(firstFile)
+		check(listBounds.isInstalled() and saidBounds == ["beep"], 'Columns Review says no "List top", and still beeps when set to beep')
+		saidBounds.clear()
+		columnsReviewSaysWith[0] = "voice"
+		jawsMigrator.state.set(listBounds.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		columnsReview.GlobalPlugin().reportListBounds(firstFile)
+		check(
+			not listBounds.isRegistered() and vars(columnsReview.GlobalPlugin)["reportListBounds"] is reportListBounds and saidBounds == ["List top: "],
+			"turned off in the Settings panel, Columns Review says it as it does",
+		)
+		jawsMigrator.state.set(listBounds.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(vars(columnsReview.GlobalPlugin)["reportListBounds"].__wrapped__ is reportListBounds, "and on again, wrapped once")
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 
@@ -696,6 +784,12 @@ def main():
 		del sys.modules["UIAHandler"]
 		check(not fieldEdges.isRegistered() and plugin._fieldEdges is None, "and the arrow keys at the edges of a field")
 		check(not outlookRows.isRegistered() and plugin._outlookRows is None, "and the Outlook message you leave")
+		check(not outlookPages.isRegistered() and vars(WordText)["getTextWithFields"] is nvdasWordText, "and NVDA's text of a Word document")
+		check(
+			not listBounds.isRegistered() and vars(columnsReview.GlobalPlugin)["reportListBounds"] is reportListBounds,
+			"and Columns Review's own report of a list's ends",
+		)
+		del sys.modules[listBounds.MODULE]
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -729,6 +823,8 @@ def main():
 			"backspaceEcho",
 			"documentPolling",
 			"documentValues",
+			"outlookPages",
+			"listBounds",
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",

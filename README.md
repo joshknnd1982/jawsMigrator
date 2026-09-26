@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.24](#whats-new-in-124)
 - [What's new in 1.23](#whats-new-in-123)
 - [What's new in 1.22](#whats-new-in-122)
 - [What's new in 1.21](#whats-new-in-121)
@@ -75,10 +76,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.21.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.24.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.24
+
+From a tester's reports:
+
+- **NVDA no longer says "page 1, section 1" in an Outlook message.** Writing a message in Outlook, the tester pressed Control+Home and heard "page 1, section 1" before the first line. It came at the first line NVDA read in a message: Up Arrow into a reply said it too, and so did Enter after the first word of another reply. JAWS says no page or section in Outlook. Outlook's messages are Word documents, and NVDA says page and section numbers in Word, because "Page numbers" is checked in its Document Formatting settings when NVDA comes. NVDA's own Outlook support leaves them out of messages, but only when NVDA reads Word the older way, through Word's object model. With a recent Office, as the tester has, NVDA reads Word through UI Automation, and there it doesn't leave them out. Now NVDA leaves page, section and column numbers out of Outlook messages. The rest of the formatting is said as before, and so are page numbers in Word itself. To hear page and section numbers in Outlook again, uncheck "Don't say page and section numbers in Outlook messages" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA no longer says "List top" when File Explorer opens a folder.** The tester heard "Items View list, List top:" each time File Explorer opened a folder, and "List top" on the desktop and when Home went back to the first file. JAWS says the first file alone. NVDA itself never says "List top": the words come from the Columns Review add-on, which the tester has. Its "Announce list bounds (top, mono-item, bottom)" is on as it comes, and says "List top" when you come to the first item of a list, "List bottom" at the last, and "Mono-item list" when a list has only one item. JAWS has messages for the top and bottom of a list, but none of its scripts uses them. Now Columns Review says nothing at the ends of a list, in File Explorer, on the desktop and in other programs' lists. If you'd rather have a beep there, choose "beep" under "Announce with" in Columns Review's own settings: the assistant leaves its beeps alone, and the rest of Columns Review works as before. To hear "List top" again, uncheck 'Keep Columns Review from saying "List top" and "List bottom" at the ends of a list' in NVDA's Settings, JAWS Migration Assistant.
 
 ## What's new in 1.23
 
@@ -513,6 +521,8 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
 - staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
+- not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
+- keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 

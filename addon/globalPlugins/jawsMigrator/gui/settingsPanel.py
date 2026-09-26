@@ -25,9 +25,11 @@ from .. import (
 	labelRepeats,
 	layerSound,
 	linksList,
+	listBounds,
 	listCoordinates,
 	listPosition,
 	nvdaEnv,
+	outlookPages,
 	outlookRows,
 	quickNavHeadings,
 	startupFocus,
@@ -147,6 +149,16 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="When you move in Outlook's message list, say only the message you come to, not the one you leave"),
 		)
 		self.outlookLeftMessage.SetValue(outlookRows.wanted(state.load()))
+		# NVDA said "page 1, section 1" at the first line it read in an Outlook message (through UI Automation);
+		# JAWS says no page or section in Outlook.
+		self.outlookNoPages = helper.addItem(wx.CheckBox(self, label="Don't say page and section numbers in Outlook messages"))
+		self.outlookNoPages.SetValue(outlookPages.wanted(state.load()))
+		# The Columns Review add-on, as it comes, says "List top" at a list's first item, as File Explorer opens a folder,
+		# and "List bottom" at its last; JAWS says the item alone.
+		self.quietListBounds = helper.addItem(
+			wx.CheckBox(self, label='Keep Columns Review from saying "List top" and "List bottom" at the ends of a list'),
+		)
+		self.quietListBounds.SetValue(listBounds.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -236,6 +248,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
 		self._shownStayInFields = self.stayInFields.GetValue()
 		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
+		self._shownOutlookNoPages = self.outlookNoPages.GetValue()
+		self._shownQuietListBounds = self.quietListBounds.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -311,6 +325,10 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[fieldEdges.STATE_KEY] = self.stayInFields.GetValue()
 		if self.outlookLeftMessage.GetValue() != self._shownOutlookLeftMessage:
 			updates[outlookRows.STATE_KEY] = self.outlookLeftMessage.GetValue()
+		if self.outlookNoPages.GetValue() != self._shownOutlookNoPages:
+			updates[outlookPages.STATE_KEY] = self.outlookNoPages.GetValue()
+		if self.quietListBounds.GetValue() != self._shownQuietListBounds:
+			updates[listBounds.STATE_KEY] = self.quietListBounds.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}
