@@ -95,6 +95,12 @@ DEFAULTS = {
 	"linksLikeJaws": True,
 	#: An alert with nothing in it, which NVDA said as "alert" alone, isn't said, as JAWS says nothing for it (see emptyAlerts).
 	"quietEmptyAlerts": True,
+	#: An arrow key at the start or end of an edit field on a web page stays in the field, in focus mode, as in JAWS's Auto
+	#: Forms Mode; only Up or Down Arrow in a field of one line goes on in browse mode (see fieldEdges).
+	"stayInFieldsAtTheirEdges": True,
+	#: In Outlook's message list, the message you leave isn't said again, with the status of the one you move to; JAWS
+	#: says only the message you move to (see outlookRows).
+	"quietLeftOutlookMessage": True,
 }
 
 _lock = threading.RLock()

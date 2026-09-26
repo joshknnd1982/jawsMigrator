@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.20
+- Version: 1.22
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.22](#whats-new-in-122)
 - [What's new in 1.21](#whats-new-in-121)
 - [What's new in 1.20](#whats-new-in-120)
 - [What's new in 1.19](#whats-new-in-119)
@@ -77,6 +78,13 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.22
+
+From a tester's reports on version 1.21:
+
+- **The arrow keys stay in an edit field on a web page at its start and end.** Writing a comment on GitHub, the tester pressed Control+Right Arrow at the end of the text. NVDA said "out of edit, button" and was in browse mode on the "Paste, drop, or click to add files" button after the comment box. Right Arrow and Down Arrow at the end did the same. JAWS stays in the comment box. JAWS's Auto Forms Mode is on in the tester's JAWS, so the migration turned on NVDA's nearest option, "Automatic focus mode for caret movement" (NVDA's Settings, Browse Mode). That option does more than JAWS: whenever a caret key can't move any further in a field, NVDA leaves focus mode and runs the key again in browse mode, past the field. JAWS leaves forms mode only when you arrow past a field of one line with Up or Down Arrow. Now, in a field of more than one line, such as GitHub's comment box, and with Left and Right Arrow, Page Up, Page Down and Control with an arrow key in any field, the caret stays in the field, in focus mode. Up or Down Arrow in a field of one line, such as a search box, still goes on in browse mode, as in JAWS, and arrowing into a field still switches to focus mode. To have NVDA leave fields at their edges again, uncheck "Stay in an edit field on a web page when the arrow keys reach its start or end; only Up and Down Arrow leave a field of one line" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA says the Outlook message you move to, not the one you leave.** A tester pressed End in Outlook's Inbox to go to the newest message and heard "unread From joshknnd1982, Subject Re: ...", the message the tester was leaving, which had already been read, and only then the newest message. The tester pressed Enter while NVDA was still saying the first one, and opened the newest message, not the one NVDA had just said. Down Arrow did the same when the next message was unread and the one left wasn't. When the selection moves, Outlook tells NVDA that the name of the message you left changed, and NVDA's focus is still on that message until Outlook's focus event for the new one comes, so NVDA said it again. NVDA's Outlook support takes a message's status, such as unread, from Outlook's selection, which is already the new message, so the message you left was said with the new message's status. JAWS says only the message you move to. Now, when Outlook's focus has left a message, NVDA doesn't say that message again, and says the one you moved to as before. A change of the message you are on is still said. To hear the message you leave again, uncheck "When you move in Outlook's message list, say only the message you come to, not the one you leave" in NVDA's Settings, JAWS Migration Assistant.
 
 ## What's new in 1.21
 
@@ -494,6 +502,8 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
 - showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119) and [What's new in 1.20](#whats-new-in-120));
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
+- staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
+- saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 

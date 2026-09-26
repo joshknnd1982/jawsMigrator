@@ -203,7 +203,7 @@ def installSpeech():
 	)
 	controlTypes.State = Labelled(
 		"State",
-		{"CHECKED": "checked", "EDITABLE": "editable", "VISITED": "visited", "INTERNAL_LINK": "same page", "FOCUSABLE": "focusable"},
+		{"CHECKED": "checked", "EDITABLE": "editable", "VISITED": "visited", "INTERNAL_LINK": "same page", "FOCUSABLE": "focusable", "MULTILINE": "multi line"},
 	)
 	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS QUICKNAV CARET QUERY")
 	browseMode = types.ModuleType("browseMode")
@@ -531,6 +531,53 @@ def main():
 		check(not emptyAlerts.isRegistered() and alerts[-1] is empty, "turned off in the Settings panel, NVDA says it as it does")
 		jawsMigrator.state.set(emptyAlerts.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
+		# An arrow key at the end of a comment box on a web page stays in it, in focus mode, as JAWS's Auto Forms Mode does;
+		# Up Arrow alone in a field of one line goes on in browse mode, as in JAWS. Turned off, NVDA does as it does.
+		from jawsMigrator import fieldEdges
+
+		states = sys.modules["controlTypes"].State
+		document = types.SimpleNamespace(passThrough=True)
+		comment = types.SimpleNamespace(name="Add a comment", states={states.EDITABLE, states.MULTILINE}, treeInterceptor=document)
+		search = types.SimpleNamespace(name="Search", states={states.EDITABLE}, treeInterceptor=document)
+
+		def key(name, *modifiers):
+			return types.SimpleNamespace(mainKeyName=name, modifiers=set(modifiers), modifierNames=list(modifiers))
+
+		# NVDA's "Automatic focus mode for caret movement", which the migration turns on for JAWS's Auto Forms Mode.
+		sys.modules["config"] = types.SimpleNamespace(conf={"virtualBuffers": {"autoPassThroughOnCaretMove": True}})
+		left = []
+		for obj, gesture in ((comment, key("rightArrow", "control")), (comment, key("downArrow")), (search, key("upArrow"))):
+			plugin.event_caretMovementFailed(obj, lambda obj=obj, gesture=gesture: left.append((obj.name, gesture.mainKeyName)), gesture=gesture)
+		check(
+			fieldEdges.isRegistered() and plugin._fieldEdges is fieldEdges and left == [("Search", "upArrow")],
+			f"the arrow keys stay in a comment box at its end; Up Arrow leaves a field of one line: {left}",
+		)
+		jawsMigrator.state.set(fieldEdges.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		plugin.event_caretMovementFailed(comment, lambda: left.append(("Add a comment", "rightArrow")), gesture=key("rightArrow", "control"))
+		check(not fieldEdges.isRegistered() and left[-1] == ("Add a comment", "rightArrow"), "turned off in the Settings panel, browse mode leaves the field as NVDA does")
+		jawsMigrator.state.set(fieldEdges.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		del sys.modules["config"]
+		# In Outlook's message list, End left NVDA's focus on the message the tester left, and Outlook named it anew:
+		# it isn't said, as UI Automation's focus is on the message moved to. Turned off, NVDA says it as it does.
+		from jawsMigrator import outlookRows
+
+		outlook = types.SimpleNamespace(appName="outlook")
+		reply = types.SimpleNamespace(appModule=outlook, UIAElement=types.SimpleNamespace(cachedClassName="LeafRow"), _speakObjectPropertiesCache={})
+		newest = types.SimpleNamespace(cachedClassName="LeafRow")
+		uia = types.SimpleNamespace(GetFocusedElement=lambda: newest, CompareElements=lambda first, second: first is second)
+		fakeUia = {"api": types.SimpleNamespace(getFocusObject=lambda: reply), "UIAHandler": types.SimpleNamespace(handler=types.SimpleNamespace(clientObject=uia))}
+		renamed = []
+		with mock.patch.dict(sys.modules, fakeUia):
+			plugin.event_nameChange(reply, lambda: renamed.append(reply))
+			check(outlookRows.isRegistered() and plugin._outlookRows is outlookRows and renamed == [], "the Outlook message you leave isn't said")
+			jawsMigrator.state.set(outlookRows.STATE_KEY, False)
+			plugin.applyRuntimeSettings()
+			plugin.event_nameChange(reply, lambda: renamed.append(reply))
+			check(not outlookRows.isRegistered() and renamed == [reply], "turned off in the Settings panel, NVDA says it as it does")
+			jawsMigrator.state.set(outlookRows.STATE_KEY, True)
+			plugin.applyRuntimeSettings()
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 
@@ -620,6 +667,8 @@ def main():
 			"and NVDA's labels, script and activation in its Elements List",
 		)
 		check(not typingWatch.isRegistered(), "and the keys a program types")
+		check(not fieldEdges.isRegistered() and plugin._fieldEdges is None, "and the arrow keys at the edges of a field")
+		check(not outlookRows.isRegistered() and plugin._outlookRows is None, "and the Outlook message you leave")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.

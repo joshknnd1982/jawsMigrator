@@ -20,12 +20,14 @@ from .. import (
 	documentPolling,
 	driveLetters,
 	emptyAlerts,
+	fieldEdges,
 	labelRepeats,
 	layerSound,
 	linksList,
 	listCoordinates,
 	listPosition,
 	nvdaEnv,
+	outlookRows,
 	quickNavHeadings,
 	startupFocus,
 	state,
@@ -121,6 +123,21 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label='Don\'t say "alert" for an alert with nothing in it, as on GitHub pages'),
 		)
 		self.quietEmptyAlerts.SetValue(emptyAlerts.wanted(state.load()))
+		# NVDA's automatic focus mode for caret movement goes on past a field at its start or end with any caret key;
+		# JAWS's Auto Forms Mode stays in it, but for Up or Down Arrow in a field of one line.
+		self.stayInFields = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Stay in an edit field on a web page when the arrow keys reach its start or end; only Up and Down Arrow leave a field of one line",
+			),
+		)
+		self.stayInFields.SetValue(fieldEdges.wanted(state.load()))
+		# End or Down Arrow in Outlook's message list made NVDA say the message left, as unread, before the one moved to;
+		# JAWS says only the message you move to.
+		self.outlookLeftMessage = helper.addItem(
+			wx.CheckBox(self, label="When you move in Outlook's message list, say only the message you come to, not the one you leave"),
+		)
+		self.outlookLeftMessage.SetValue(outlookRows.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -207,6 +224,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownLinksJaws = self.linksJaws.GetValue()
 		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
+		self._shownStayInFields = self.stayInFields.GetValue()
+		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -276,6 +295,10 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[linksList.STATE_KEY] = self.linksJaws.GetValue()
 		if self.quietEmptyAlerts.GetValue() != self._shownQuietEmptyAlerts:
 			updates[emptyAlerts.STATE_KEY] = self.quietEmptyAlerts.GetValue()
+		if self.stayInFields.GetValue() != self._shownStayInFields:
+			updates[fieldEdges.STATE_KEY] = self.stayInFields.GetValue()
+		if self.outlookLeftMessage.GetValue() != self._shownOutlookLeftMessage:
+			updates[outlookRows.STATE_KEY] = self.outlookLeftMessage.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

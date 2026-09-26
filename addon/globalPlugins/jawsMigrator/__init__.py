@@ -30,6 +30,10 @@ when it fills the list again (see elementsList), and shows links as JAWS's
 Links List does, without "level 0", says "no links" on a page without links
 and moves to the link it activates (see linksList);
 an alert with nothing in it isn't said as "alert" alone (see emptyAlerts);
+the arrow keys stay in an edit field on a web page when they reach its start or
+end, as in JAWS's Auto Forms Mode (see fieldEdges);
+in Outlook's message list, NVDA says the message you move to, not the one you
+leave (see outlookRows);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
@@ -149,6 +153,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._elementsList = None
 		#: The emptyAlerts module, once loaded: an alert event goes through it before NVDA says the alert.
 		self._emptyAlerts = None
+		#: The fieldEdges module, once loaded: a caret key that can't move in an edit field goes through it before browse mode.
+		self._fieldEdges = None
+		#: The outlookRows module, once loaded: a change of name of an Outlook message goes through it before NVDA.
+		self._outlookRows = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -356,6 +364,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			emptyAlerts.unregister()
 		except Exception:
 			pass
+		self._fieldEdges = None
+		try:
+			from . import fieldEdges
+
+			fieldEdges.unregister()
+		except Exception:
+			pass
+		self._outlookRows = None
+		try:
+			from . import outlookRows
+
+			outlookRows.unregister()
+		except Exception:
+			pass
 		try:
 			from . import typingWatch
 
@@ -542,6 +564,31 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._emptyAlerts = emptyAlerts
 		except Exception:
 			debugLog.error("could not apply leaving out alerts with nothing in them")
+		try:
+			from . import fieldEdges
+
+			# Not a JAWS setting: JAWS's Auto Forms Mode leaves an edit field only with Up or Down Arrow in a field of one
+			# line; NVDA's automatic focus mode for caret movement, which the migration turns on for it, left any field
+			# with any caret key at its edge (Control+Right Arrow at the end of a GitHub comment).
+			if fieldEdges.wanted(data):
+				fieldEdges.register()
+			else:
+				fieldEdges.unregister()
+			self._fieldEdges = fieldEdges
+		except Exception:
+			debugLog.error("could not apply keeping the arrow keys in an edit field at its edges")
+		try:
+			from . import outlookRows
+
+			# Not a JAWS setting: JAWS says the Outlook message you move to, and nothing for the one you leave, which NVDA
+			# said again with the other message's status ("unread") when End or Down Arrow moved to an unread message.
+			if outlookRows.wanted(data):
+				outlookRows.register()
+			else:
+				outlookRows.unregister()
+			self._outlookRows = outlookRows
+		except Exception:
+			debugLog.error("could not apply saying only the Outlook message you move to")
 		try:
 			from . import layerSound
 
@@ -1062,12 +1109,24 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		trayChanges = getattr(self, "_trayChanges", None)
 		if trayChanges is not None:
 			trayChanges.beforeNameChange(obj)
+		# The Outlook message you left isn't said again, with the status of the one you moved to (see outlookRows).
+		outlookRows = getattr(self, "_outlookRows", None)
+		if outlookRows is not None and outlookRows.leftBehind(obj):
+			return
 		nextHandler()
 
 	def event_alert(self, obj, nextHandler):
 		# An alert with nothing in it isn't said: NVDA would say "alert" alone, and JAWS says nothing (see emptyAlerts).
 		emptyAlerts = getattr(self, "_emptyAlerts", None)
 		if emptyAlerts is not None and emptyAlerts.nothingToSay(obj):
+			return
+		nextHandler()
+
+	def event_caretMovementFailed(self, obj, nextHandler, gesture=None):
+		# A caret key couldn't move the caret in an edit field: the caret and focus mode stay there, as in JAWS, where
+		# browse mode would go on past the field (see fieldEdges).
+		fieldEdges = getattr(self, "_fieldEdges", None)
+		if fieldEdges is not None and fieldEdges.keepsFocusMode(obj, gesture):
 			return
 		nextHandler()
 

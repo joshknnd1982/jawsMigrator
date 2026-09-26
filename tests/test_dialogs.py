@@ -621,6 +621,26 @@ class SettingsPanelTests(unittest.TestCase):
 			'NVDA says "alert" for an alert with nothing in it again, at once',
 		)
 
+	def test_stayInFieldsAtTheirEdgesIsSavedAndApplied(self):
+		from jawsMigrator import fieldEdges
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.stayInFields,
+			"Stay in an edit field on a web page when the arrow keys reach its start or end; only Up and Down Arrow leave a field of one line",
+			fieldEdges.STATE_KEY,
+			"the arrow keys leave a field at its edges as NVDA's do again, at once",
+		)
+
+	def test_quietLeftOutlookMessageIsSavedAndApplied(self):
+		from jawsMigrator import outlookRows
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.outlookLeftMessage,
+			"When you move in Outlook's message list, say only the message you come to, not the one you leave",
+			outlookRows.STATE_KEY,
+			"NVDA says the Outlook message you leave again, at once",
+		)
+
 	def test_version112sLevelFirstSettingIsGone(self):
 		from jawsMigrator import state
 
