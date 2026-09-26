@@ -114,9 +114,17 @@ DEFAULTS = {
 	#: address), without the title NVDA says as its description, and, when quick navigation moves to a heading, "link"
 	#: after the heading and its level (see linkSpeech).
 	"sayLinksAsJaws": True,
-	#: An Outlook message you open is read from the top, as JAWS reads it, with "send mail link" for a link to an e-mail
-	#: address, and without "heading level 1" for the From line of a message it quotes (see outlookMessages).
+	#: An edit field on a web page is said as JAWS says it: an empty one as "edit, blank, placeholder" and its
+	#: placeholder, no "multi line" for any edit field, and nothing again of what browse mode's cursor was in when the
+	#: focus moves there (see formFields).
+	"sayFormFieldsAsJaws": True,
+	#: An Outlook message you read is said as JAWS says it: "send mail link" for a link to an e-mail address, a list
+	#: where it starts and after it, and no "heading level 1" for the From line of a message it quotes (see
+	#: outlookMessages).
 	"outlookMessagesAsJaws": True,
+	#: An Outlook message you open isn't read from the top: the tester's JAWS reads it only with the arrow keys (issue
+	#: 23). Turned on, it is, as JAWS's "Messages automatically read" does (see outlookMessages).
+	"readOutlookMessagesOnOpen": False,
 }
 
 _lock = threading.RLock()

@@ -29,6 +29,8 @@
 # textInfos.ControlField.getPresentationCategory, controlTypes' silentRolesOnFocus and silentValuesForRoles) and braille
 # (braille.getPropertiesBraille), with the Document Formatting defaults of NVDA's configSpec and the tester's changes to
 # them. The assistant's code is the real one.
+# Since 1.26, reading a message from the top when it opens is a setting of its own, off unless turned on (issue 23: the
+# tester's JAWS reads a message only with the arrow keys), so these tests turn it on: register(reading=True).
 # Run: python -m unittest tests.test_v125_outlookMessages -v
 
 import enum
@@ -2402,6 +2404,8 @@ class Isolated(unittest.TestCase):
 		patches = [
 			mock.patch.dict(sys.modules, self.modules),
 			mock.patch.object(outlookMessages, "_enabled", False),
+			mock.patch.object(outlookMessages, "_saying", False),
+			mock.patch.object(outlookMessages, "_reading", False),
 			mock.patch.object(outlookMessages, "_failed", False),
 			mock.patch.object(outlookMessages, "_replaced", []),
 			mock.patch.object(outlookMessages, "_notedStyles", set()),
@@ -2417,7 +2421,7 @@ class Isolated(unittest.TestCase):
 		self.nvda = NVDA()
 
 	def turnOn(self):
-		outlookMessages.register()
+		outlookMessages.register(reading=True)
 		self.addCleanup(outlookMessages.unregister)
 
 	def open(self, message=None, **kwargs):
@@ -2519,7 +2523,7 @@ class OpeningAMessageTest(Isolated):
 				self.tree.event_treeInterceptor_gainFocus = self.nvdasGainFocus
 				if addonFirst:
 					wrap(self.tree)
-				outlookMessages.register()
+				outlookMessages.register(reading=True)
 				if not addonFirst:
 					theirs = wrap(self.tree)
 				try:
@@ -2533,7 +2537,7 @@ class OpeningAMessageTest(Isolated):
 					self.speech.said.clear()
 					self.open()
 					self.assertIn(("text", "caret", "line", OutputReason.CARET), self.speech.said, "and the assistant's does nothing")
-					outlookMessages.register()
+					outlookMessages.register(reading=True)
 					self.speech.readings.clear()
 					self.open()
 					self.assertEqual(self.speech.readings, [self.speech.sayAll.CURSOR.CARET], "turned on again, read once")
@@ -2683,13 +2687,13 @@ class IsHeadingStyleTest(unittest.TestCase):
 
 class RegisterTest(Isolated):
 	def test_register_and_unregister(self):
-		outlookMessages.register()
+		outlookMessages.register(reading=True)
 		self.assertTrue(outlookMessages.isRegistered())
 		installed = {name: vars(owner)[name] for owner, name in ((self.tree, "event_treeInterceptor_gainFocus"), (WordDocumentTextInfo, "_getControlFieldForUIAObject"), (WordDocumentTextInfo, "_getFormatFieldAtRange"))}
 		self.assertIs(getattr(installed["event_treeInterceptor_gainFocus"], outlookMessages.ORIGINAL), self.nvdasGainFocus)
 		self.assertIs(getattr(installed["_getControlFieldForUIAObject"], outlookMessages.ORIGINAL), NVDAS_CONTROL_FIELD)
 		self.assertIs(getattr(installed["_getFormatFieldAtRange"], outlookMessages.ORIGINAL), NVDAS_FORMAT_AT_RANGE)
-		outlookMessages.register()
+		outlookMessages.register(reading=True)
 		self.assertIs(vars(self.tree)["event_treeInterceptor_gainFocus"], installed["event_treeInterceptor_gainFocus"], "registered twice, wrapped once")
 		outlookMessages.unregister()
 		self.assertFalse(outlookMessages.isRegistered())
@@ -2700,10 +2704,10 @@ class RegisterTest(Isolated):
 	def test_without_nvdas_uia_support_for_word_messages_are_still_read(self):
 		with mock.patch.dict(sys.modules, {"NVDAObjects.UIA.wordDocument": None}):
 			with self.assertLogs("nvda", level="DEBUG") as logged:
-				outlookMessages.register()
+				outlookMessages.register(reading=True)
 		self.addCleanup(outlookMessages.unregister)
 		self.assertTrue(outlookMessages.isRegistered())
-		self.assertTrue(any("can't change how NVDA says links and headings in Outlook messages" in line for line in logged.output), logged.output)
+		self.assertTrue(any("can't change how NVDA says links, lists and headings in Outlook messages" in line for line in logged.output), logged.output)
 		self.open()
 		self.assertEqual(self.speech.readings, [self.speech.sayAll.CURSOR.CARET])
 
@@ -2713,7 +2717,7 @@ class RegisterTest(Isolated):
 		browseMode.BrowseModeDocumentTreeInterceptor = bare
 		with mock.patch.dict(sys.modules, {"browseMode": browseMode}):
 			with self.assertLogs("nvda", level="DEBUG") as logged:
-				outlookMessages.register()
+				outlookMessages.register(reading=True)
 		self.addCleanup(outlookMessages.unregister)
 		self.assertNotIn("event_treeInterceptor_gainFocus", vars(bare))
 		self.assertTrue(any("NVDA has no BrowseModeDocumentTreeInterceptor.event_treeInterceptor_gainFocus" in line for line in logged.output), logged.output)
@@ -2723,17 +2727,17 @@ class RegisterTest(Isolated):
 	def test_what_couldnt_be_put_in_place_is_put_in_place_later(self):
 		# NVDA's UI Automation support for Word wasn't there the first time: turned on again, it is.
 		with mock.patch.dict(sys.modules, {"NVDAObjects.UIA.wordDocument": None}):
-			outlookMessages.register()
+			outlookMessages.register(reading=True)
 		self.addCleanup(outlookMessages.unregister)
 		self.assertIs(vars(WordDocumentTextInfo)["_getFormatFieldAtRange"], NVDAS_FORMAT_AT_RANGE)
-		outlookMessages.register()
+		outlookMessages.register(reading=True)
 		self.assertIs(getattr(vars(WordDocumentTextInfo)["_getFormatFieldAtRange"], outlookMessages.ORIGINAL), NVDAS_FORMAT_AT_RANGE)
 		self.assertEqual(NVDA().speakLine(Document(), fromLine()), AS_JAWS)
 
 	def test_an_nvda_without_its_text_and_roles_changes_nothing(self):
 		with mock.patch.dict(sys.modules, {"textInfos": None}):
 			with self.assertLogs("nvda", level="DEBUG") as logged:
-				outlookMessages.register()
+				outlookMessages.register(reading=True)
 		self.assertFalse(outlookMessages.isRegistered())
 		self.assertIs(vars(self.tree)["event_treeInterceptor_gainFocus"], self.nvdasGainFocus)
 		self.assertIs(vars(WordDocumentTextInfo)["_getFormatFieldAtRange"], NVDAS_FORMAT_AT_RANGE)

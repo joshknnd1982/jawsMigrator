@@ -36,14 +36,18 @@ the arrow keys stay in an edit field on a web page when they reach its start or
 end, as in JAWS's Auto Forms Mode (see fieldEdges);
 in Outlook's message list, NVDA says the message you move to, not the one you
 leave (see outlookRows), and an Outlook message without page and section
-numbers (see outlookPages); an Outlook message you open is read from the top,
-with "send mail link" for an e-mail address and no heading for the From line
-of a message it quotes, as JAWS reads it (see outlookMessages);
+numbers (see outlookPages); an Outlook message you read is said with "send
+mail link" for an e-mail address, a list where it starts and ends, and no
+heading for the From line of a message it quotes, as JAWS says it, and read
+from the top when it opens only when turned on (see outlookMessages);
 the Columns Review add-on doesn't say "List top" or "List bottom" at the ends
 of a list, which JAWS never says (see listBounds);
 a link on a web page is said as JAWS says it: "same page" only for a link to
 a place on the page, without its title, and "link" after the heading it is in
 when quick navigation moves to the heading (see linkSpeech);
+an empty edit field on a web page is said as JAWS says it, "edit, blank,
+placeholder" and its placeholder, without "multi line" and without the
+landmark browse mode's cursor was already in (see formFields);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
@@ -167,6 +171,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._fieldEdges = None
 		#: The outlookRows module, once loaded: a change of name of an Outlook message goes through it before NVDA.
 		self._outlookRows = None
+		#: The formFields module, once loaded: it notes what browse mode's cursor is in before NVDA handles a focus event.
+		self._formFields = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -418,6 +424,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			linkSpeech.unregister()
 		except Exception:
 			pass
+		self._formFields = None
+		try:
+			from . import formFields
+
+			formFields.unregister()
+		except Exception:
+			pass
 		try:
 			from . import typingWatch
 
@@ -654,11 +667,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			from . import outlookMessages
 
-			# JAWS's Outlook settings, as JAWS comes: a message is read from the top when it opens ("Messages
-			# automatically read"), a link to an e-mail address is a "Send Mail Link" (IdentifyLinkType), and headings are
-			# Word's heading styles, not the outline level Word gives the From line of a quoted message.
-			if outlookMessages.wanted(data):
-				outlookMessages.register()
+			# JAWS's Outlook settings, as JAWS comes: a link to an e-mail address is a "Send Mail Link"
+			# (IdentifyLinkType), a list is said where it starts and ends, and headings are Word's heading styles, not the
+			# outline level Word gives the From line of a quoted message. A message is read from the top when it opens
+			# only when turned on: the tester's JAWS reads it with the arrow keys alone (issue 23).
+			saying, reading = outlookMessages.wanted(data), outlookMessages.readWanted(data)
+			if saying or reading:
+				outlookMessages.register(saying=saying, reading=reading)
 			else:
 				outlookMessages.unregister()
 		except Exception:
@@ -685,6 +700,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				linkSpeech.unregister()
 		except Exception:
 			debugLog.error("could not have NVDA say links as JAWS says them")
+		try:
+			from . import formFields
+
+			# Not a JAWS setting as such: JAWS's scripts for web pages (IA2Browser.jss) say an empty edit field as "edit,
+			# blank, placeholder" and its placeholder, JAWS says no "multi-line" as it comes (AnnounceMultilineEdit), and
+			# its virtual cursor takes the focus with it, so the focus enters nothing it was already in.
+			if formFields.wanted(data):
+				formFields.register()
+			else:
+				formFields.unregister()
+			self._formFields = formFields
+		except Exception:
+			debugLog.error("could not have NVDA say edit fields on web pages as JAWS says them")
 		try:
 			from . import layerSound
 
@@ -1181,7 +1209,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		# of the same change, which follow, aren't said again (see changeRepeats).
 		changeRepeats = self._changeRepeats
 		activation = changeRepeats.beforeFocus(obj) if changeRepeats is not None else None
-		nextHandler()
+		# What browse mode's cursor is in isn't said again when the focus moves into it (see formFields).
+		formFields = getattr(self, "_formFields", None)
+		heard = formFields.beforeFocus(obj) if formFields is not None else None
+		try:
+			nextHandler()
+		finally:
+			if formFields is not None:
+				formFields.afterFocus(heard)
 		if changeRepeats is not None:
 			changeRepeats.afterFocus(obj, activation)
 

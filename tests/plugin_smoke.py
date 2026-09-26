@@ -84,6 +84,31 @@ def _objectSpeech_calculateAllowedProps(reason, shouldReportTextContent, objRole
 	return {"includeTableCellCoords": True, "cellCoordsText": True}
 
 
+def getPropertiesSpeech(reason=None, **values):
+	"""NVDA's speech for properties (speech.speech.getPropertiesSpeech), as far as the smoke test goes."""
+	return ["1 of 2"]
+
+
+def getObjectSpeech(obj, reason=None, _prefixSpeechCommand=None):
+	"""NVDA's speech for an object (speech.speech.getObjectSpeech), as far as the smoke test goes."""
+	return []
+
+
+def _getPlaceholderSpeechIfTextEmpty(obj, reason):
+	"""NVDA's speech for an empty field's placeholder (speech.speech._getPlaceholderSpeechIfTextEmpty)."""
+	return False, []
+
+
+def formFieldsNvdasOwn():
+	"""Whether NVDA's own object speech, property speech and placeholder speech are in place."""
+	speechModule = sys.modules["speech.speech"]
+	return (
+		speechModule.getObjectSpeech is getObjectSpeech
+		and speechModule.getPropertiesSpeech is getPropertiesSpeech
+		and speechModule._getPlaceholderSpeechIfTextEmpty is _getPlaceholderSpeechIfTextEmpty
+	)
+
+
 def processText(locale, text, symbolLevel, normalize=False):
 	"""NVDA's speech dictionaries, then its symbols (speech.speech.processText), as far as the smoke test goes."""
 	return text.replace(":)", " smiley ")
@@ -227,21 +252,33 @@ def installSpeech():
 	speech.extensions = types.ModuleType("speech.extensions")
 	speech.extensions.filter_speechSequence = SpeechFilter()
 	speech.speech = types.ModuleType("speech.speech")
-	speech.speech.getPropertiesSpeech = lambda reason=None, **values: ["1 of 2"]
+	speech.speech.getPropertiesSpeech = getPropertiesSpeech
+	speech.speech.getObjectSpeech = getObjectSpeech
+	speech.speech._getPlaceholderSpeechIfTextEmpty = _getPlaceholderSpeechIfTextEmpty
 	speech.speech._objectSpeech_calculateAllowedProps = _objectSpeech_calculateAllowedProps
 	speech.speech.processText = processText
 	speech.getControlFieldSpeech = getControlFieldSpeech
 	controlTypes = types.ModuleType("controlTypes")
 	controlTypes.Role = Labelled(
 		"Role",
-		{"RADIOBUTTON": "radio button", "BUTTON": "button", "HEADING": "heading", "LIST": "list", "LISTITEM": "list item", "TAB": "tab", "ALERT": "alert", "LINK": "link"},
+		{
+			"RADIOBUTTON": "radio button",
+			"BUTTON": "button",
+			"HEADING": "heading",
+			"LIST": "list",
+			"LISTITEM": "list item",
+			"TAB": "tab",
+			"ALERT": "alert",
+			"LINK": "link",
+			"EDITABLETEXT": "edit",
+		},
 	)
 	controlTypes.DescriptionFrom = enum.Enum("DescriptionFrom", {"UNKNOWN": "unknown", "ARIA_DESCRIPTION": "aria-description", "TOOLTIP": "tooltip"})
 	controlTypes.State = Labelled(
 		"State",
 		{"CHECKED": "checked", "EDITABLE": "editable", "VISITED": "visited", "INTERNAL_LINK": "same page", "FOCUSABLE": "focusable", "MULTILINE": "multi line"},
 	)
-	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS QUICKNAV CARET QUERY")
+	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS FOCUSENTERED QUICKNAV CARET QUERY")
 	browseMode = types.ModuleType("browseMode")
 	browseMode.TextInfoQuickNavItem = TextInfoQuickNavItem
 	browseMode.BrowseModeTreeInterceptor = BrowseModeTreeInterceptor
@@ -708,8 +745,9 @@ def main():
 			jawsMigrator.state.set(outlookPages.STATE_KEY, True)
 			plugin.applyRuntimeSettings()
 			check(outlookPages.isRegistered(), "and on again")
-			# JAWS read an Outlook message from the top as it opened, where NVDA said its first line; NVDA's UI Automation
-			# text of Word has the assistant's links ("send mail link") and headings too.
+			# NVDA's UI Automation text of Word has the assistant's links ("send mail link"), lists and headings. An
+			# Outlook message is read from the top as it opens only when that is turned on: the tester's JAWS reads a
+			# message with the arrow keys alone (issue 23).
 			from jawsMigrator import outlookMessages
 
 			heard = []
@@ -730,22 +768,42 @@ def main():
 					message.event_treeInterceptor_gainFocus()
 				return list(heard)
 
-			def wrapsNvdas():
+			def wrapsNvdasText():
 				return (
-					getattr(vars(BrowseModeDocumentTreeInterceptor)["event_treeInterceptor_gainFocus"], "__wrapped__", None) is NVDA_DOCUMENT_GAIN_FOCUS
-					and getattr(vars(WordText)["_getControlFieldForUIAObject"], "__wrapped__", None) is nvdasControlField
+					getattr(vars(WordText)["_getControlFieldForUIAObject"], "__wrapped__", None) is nvdasControlField
 					and getattr(vars(WordText)["_getFormatFieldAtRange"], "__wrapped__", None) is nvdasFormatAtRange
 				)
 
+			def wrapsNvdasOpening():
+				return getattr(vars(BrowseModeDocumentTreeInterceptor)["event_treeInterceptor_gainFocus"], "__wrapped__", None) is NVDA_DOCUMENT_GAIN_FOCUS
+
+			def nvdasOwnOpening():
+				return vars(BrowseModeDocumentTreeInterceptor)["event_treeInterceptor_gainFocus"] is NVDA_DOCUMENT_GAIN_FOCUS
+
 			def outlookMessagesNvdasOwn():
 				return (
-					vars(BrowseModeDocumentTreeInterceptor)["event_treeInterceptor_gainFocus"] is NVDA_DOCUMENT_GAIN_FOCUS
+					nvdasOwnOpening()
 					and vars(WordText)["_getControlFieldForUIAObject"] is nvdasControlField
 					and vars(WordText)["_getFormatFieldAtRange"] is nvdasFormatAtRange
 				)
 
-			check(outlookMessages.isRegistered() and wrapsNvdas(), "Outlook messages are read as JAWS reads them")
-			check(openMessage() == [("say all", "caret")], "an Outlook message you open is read from the top, not its first line alone")
+			check(outlookMessages.isRegistered() and wrapsNvdasText(), "Outlook messages are said as JAWS says them")
+			check(
+				nvdasOwnOpening() and not outlookMessages.readsOnOpen() and openMessage() == [("line", "line")],
+				"an Outlook message you open isn't read from the top as the assistant comes, as the tester's JAWS doesn't read it: NVDA's own",
+			)
+			jawsMigrator.state.set(outlookMessages.READ_KEY, True)
+			plugin.applyRuntimeSettings()
+			check(
+				wrapsNvdasOpening() and wrapsNvdasText() and openMessage() == [("say all", "caret")],
+				"turned on in the Settings panel, an Outlook message you open is read from the top, not its first line alone",
+			)
+			jawsMigrator.state.set(outlookMessages.READ_KEY, False)
+			plugin.applyRuntimeSettings()
+			check(
+				outlookMessages.isRegistered() and nvdasOwnOpening() and wrapsNvdasText() and openMessage() == [("line", "line")],
+				"and off again: NVDA's own opening, the rest still as JAWS says it",
+			)
 			jawsMigrator.state.set(outlookMessages.STATE_KEY, False)
 			plugin.applyRuntimeSettings()
 			check(
@@ -754,7 +812,7 @@ def main():
 			)
 			jawsMigrator.state.set(outlookMessages.STATE_KEY, True)
 			plugin.applyRuntimeSettings()
-			check(outlookMessages.isRegistered() and wrapsNvdas() and openMessage() == [("say all", "caret")], "and on again")
+			check(outlookMessages.isRegistered() and wrapsNvdasText() and nvdasOwnOpening(), "and on again")
 		# The Columns Review add-on said "List top: " as File Explorer opened a folder; JAWS says the item alone. Its beeps stay.
 		from jawsMigrator import listBounds
 
@@ -815,6 +873,29 @@ def main():
 		plugin.applyRuntimeSettings()
 		check(
 			linkSpeech.isRegistered() and vars(BrowseModeTreeInterceptor)["getLinkTypeInDocument"].__wrapped__ is NVDA_LINK_TYPE,
+			"and on again, wrapped once",
+		)
+		# An empty edit field on a web page is said as JAWS says it: "blank", then "placeholder" and its placeholder, no
+		# "multi line", and nothing again of what browse mode's cursor was in (see formFields).
+		from jawsMigrator import formFields
+
+		check(
+			formFields.isRegistered()
+			and plugin._formFields is formFields
+			and speechModule.getObjectSpeech.__wrapped__ is getObjectSpeech
+			and speechModule.getPropertiesSpeech.__wrapped__ is getPropertiesSpeech
+			and speechModule._getPlaceholderSpeechIfTextEmpty.__wrapped__ is _getPlaceholderSpeechIfTextEmpty,
+			"edit fields on web pages are said as JAWS says them",
+		)
+		jawsMigrator.state.set(formFields.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not formFields.isRegistered() and formFieldsNvdasOwn(), "turned off in the Settings panel, NVDA's own are back")
+		jawsMigrator.state.set(formFields.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(
+			formFields.isRegistered()
+			and speechModule.getObjectSpeech.__wrapped__ is getObjectSpeech
+			and speechModule.getPropertiesSpeech.__wrapped__ is getPropertiesSpeech,
 			"and on again, wrapped once",
 		)
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
@@ -918,6 +999,10 @@ def main():
 		)
 		del sys.modules[listBounds.MODULE]
 		check(not linkSpeech.isRegistered() and linkSpeechNvdasOwn(), "and NVDA's link types, a document's field speech and a web page's quick navigation report")
+		check(
+			not formFields.isRegistered() and plugin._formFields is None and formFieldsNvdasOwn(),
+			"and NVDA's object speech, property speech and an empty field's placeholder",
+		)
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -955,6 +1040,7 @@ def main():
 			"outlookMessages",
 			"listBounds",
 			"linkSpeech",
+			"formFields",
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",

@@ -22,6 +22,7 @@ from .. import (
 	driveLetters,
 	emptyAlerts,
 	fieldEdges,
+	formFields,
 	labelRepeats,
 	layerSound,
 	linkSpeech,
@@ -155,15 +156,21 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# JAWS says no page or section in Outlook.
 		self.outlookNoPages = helper.addItem(wx.CheckBox(self, label="Don't say page and section numbers in Outlook messages"))
 		self.outlookNoPages.SetValue(outlookPages.wanted(state.load()))
-		# JAWS read a message from the top when it opened, with "Send Mail Link" for an address and no heading for the
-		# From line of the message it quoted; NVDA said nothing, then "heading level 1, From:" and "link".
+		# JAWS said "Send Mail Link" for an address, "list of 3 items" and "list end" around a list, and no heading for
+		# the From line of the message it quoted; NVDA said "link", no list, and "heading level 1, From:".
 		self.outlookAsJaws = helper.addItem(
 			wx.CheckBox(
 				self,
-				label='Read an Outlook message from the top when it opens, as JAWS does, with "send mail link" for an e-mail address and no heading for the From line of a quoted message',
+				label='Say Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message',
 			),
 		)
 		self.outlookAsJaws.SetValue(outlookMessages.wanted(state.load()))
+		# JAWS's "Messages automatically read": the tester's JAWS reads a message only with the arrow keys (issue 23),
+		# so this is off unless turned on.
+		self.outlookReadOnOpen = helper.addItem(
+			wx.CheckBox(self, label="Read an Outlook message from the top when it opens, as JAWS's \"Messages automatically read\" does"),
+		)
+		self.outlookReadOnOpen.SetValue(outlookMessages.readWanted(state.load()))
 		# The Columns Review add-on, as it comes, says "List top" at a list's first item, as File Explorer opens a folder,
 		# and "List bottom" at its last; JAWS says the item alone.
 		self.quietListBounds = helper.addItem(
@@ -179,6 +186,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.linksAsJaws.SetValue(linkSpeech.wanted(state.load()))
+		# NVDA said "main landmark", then "Join the conversation, edit, multi line, blank" for reddit's reply box; JAWS
+		# said "edit, blank, placeholder, Join the conversation".
+		self.formFieldsAsJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label='Say edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder, no "multi line", and no landmark you were already in',
+			),
+		)
+		self.formFieldsAsJaws.SetValue(formFields.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -270,8 +286,10 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
 		self._shownOutlookNoPages = self.outlookNoPages.GetValue()
 		self._shownOutlookAsJaws = self.outlookAsJaws.GetValue()
+		self._shownOutlookReadOnOpen = self.outlookReadOnOpen.GetValue()
 		self._shownQuietListBounds = self.quietListBounds.GetValue()
 		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
+		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -351,10 +369,14 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[outlookPages.STATE_KEY] = self.outlookNoPages.GetValue()
 		if self.outlookAsJaws.GetValue() != self._shownOutlookAsJaws:
 			updates[outlookMessages.STATE_KEY] = self.outlookAsJaws.GetValue()
+		if self.outlookReadOnOpen.GetValue() != self._shownOutlookReadOnOpen:
+			updates[outlookMessages.READ_KEY] = self.outlookReadOnOpen.GetValue()
 		if self.quietListBounds.GetValue() != self._shownQuietListBounds:
 			updates[listBounds.STATE_KEY] = self.quietListBounds.GetValue()
 		if self.linksAsJaws.GetValue() != self._shownLinksAsJaws:
 			updates[linkSpeech.STATE_KEY] = self.linksAsJaws.GetValue()
+		if self.formFieldsAsJaws.GetValue() != self._shownFormFieldsAsJaws:
+			updates[formFields.STATE_KEY] = self.formFieldsAsJaws.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

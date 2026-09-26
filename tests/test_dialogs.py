@@ -666,10 +666,28 @@ class SettingsPanelTests(unittest.TestCase):
 
 		self._checkBoxIsSavedAndApplied(
 			self.dialog.panel.outlookAsJaws,
-			'Read an Outlook message from the top when it opens, as JAWS does, with "send mail link" for an e-mail address and no heading for the From line of a quoted message',
+			'Say Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message',
 			outlookMessages.STATE_KEY,
-			"NVDA says the first line of an Outlook message it opens, \"link\" and \"heading level 1\" again, at once",
+			"NVDA says \"link\", no list and \"heading level 1\" in Outlook messages again, at once",
 		)
+
+	def test_readOutlookMessagesOnOpenIsOffUnlessTurnedOn(self):
+		# The tester's JAWS reads a message only with the arrow keys (issue 23), so this one is off as it comes.
+		from jawsMigrator import outlookMessages, state
+
+		checkBox = self.dialog.panel.outlookReadOnOpen
+		self.assertEqual(checkBox.GetLabel(), "Read an Outlook message from the top when it opens, as JAWS's \"Messages automatically read\" does")
+		self.assertFalse(checkBox.GetValue(), "off unless turned on")
+		checkBox.SetValue(True)
+		self.calls.clear()
+		self.dialog.panel.onSave()
+		state.forget()
+		self.assertIs(state.get(outlookMessages.READ_KEY), True)
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], "an Outlook message you open is read from the top, at once")
+		checkBox.SetValue(False)
+		self.dialog.panel.onSave()
+		state.forget()
+		self.assertIs(state.get(outlookMessages.READ_KEY), False)
 
 	def test_quietColumnsReviewListBoundsIsSavedAndApplied(self):
 		from jawsMigrator import listBounds
@@ -689,6 +707,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'Say links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading',
 			linkSpeech.STATE_KEY,
 			'NVDA says "same page", link titles and "link" before a heading again, at once',
+		)
+
+	def test_sayFormFieldsAsJawsIsSavedAndApplied(self):
+		from jawsMigrator import formFields
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.formFieldsAsJaws,
+			'Say edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder, no "multi line", and no landmark you were already in',
+			formFields.STATE_KEY,
+			'NVDA says an edit field\'s placeholder first, "multi line" and the landmark again, at once',
 		)
 
 	def test_version112sLevelFirstSettingIsGone(self):
