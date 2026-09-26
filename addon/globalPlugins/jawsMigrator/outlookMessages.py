@@ -69,6 +69,12 @@ So now:
 
 Both work while the assistant runs: the first when it is turned on, the rest unless turned off, in NVDA's Settings,
 JAWS Migration Assistant.
+
+The tester then found the JAWS setting (issue 23): Insert+V in Outlook, QuickSettings, Reading Options, "Messages
+Automatically Read", not checked. It is ``[NonJCFOptions] MessageSayAllVerbosity`` in Outlook.jcf (Outlook.qs), which
+JAWS 2026's own Outlook.jcf has on, so a JAWS as it comes reads a message you open, and the tester's own Outlook.jcf
+turns it off. A migration now takes it into the first setting, the user's Outlook.jcf over JAWS's own, as JAWS reads it
+(settingsMap.mapOutlookSettings), so NVDA reads a message as it opens where JAWS did, and not where it didn't.
 """
 
 from __future__ import annotations

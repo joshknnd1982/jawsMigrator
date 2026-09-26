@@ -112,6 +112,10 @@ def build(plan, result) -> tuple[str, str]:
 	if classicChanges:
 		b.heading(3, "ClassicSpeech settings")
 		b.items(change.label for change in classicChanges)
+	assistantChanges = [c for c in result.applied if c.target == settingsMap.ASSISTANT]
+	if assistantChanges:
+		b.heading(3, "The assistant's own settings (NVDA's Settings, JAWS Migration Assistant)")
+		b.items(f"{change.label} (from {change.source})" for change in assistantChanges)
 	if result.failed:
 		b.heading(3, "Settings NVDA did not accept")
 		b.items(f"{change.label}: {error}" for change, error in result.failed)

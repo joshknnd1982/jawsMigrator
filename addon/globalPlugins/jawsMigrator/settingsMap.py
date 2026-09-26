@@ -19,16 +19,23 @@ no longer reads its old Format and Text options.
 Options with no NVDA equivalent are returned as "not migrated" with the reason,
 for the report. When ClassicSpeech is installed, options it supports
 (verbosity levels, number and text processing) are mapped into its settings too.
+A few JAWS options NVDA has no setting for, but the assistant has one of its own,
+go into the assistant's settings (see ``mapOutlookSettings``).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import jawsFiles
+from . import jawsFiles, outlookMessages
 
 NVDA = "nvda"
 CLASSIC_SPEECH = "classicSpeech"
+#: The assistant's own settings (state.json), which it applies while NVDA runs.
+ASSISTANT = "jawsMigrator"
+
+#: JAWS's settings for classic Outlook: ConfigNames.ini has outlook=Outlook. (New Outlook, olk.exe, has "Outlook Modern".)
+OUTLOOK_JCF = "Outlook.jcf"
 
 #: JAWS verbosity levels, which are also ClassicSpeech's verbosity profile names.
 VERBOSITY_LEVELS = ("Beginner", "Intermediate", "Advanced")
@@ -661,6 +668,31 @@ def mapSettings(
 	# -- everything else ---------------------------------------------------------------------
 	_collectNotMigrated(source, result, isApplication)
 	return result
+
+
+def mapOutlookSettings(user: jawsFiles.IniFile | None, shared: jawsFiles.IniFile | None, result: MappingResult) -> None:
+	"""JAWS's options for classic Outlook that the assistant has a setting of its own for, from ``user``, the user's
+	Outlook.jcf, over ``shared``, JAWS's own (either is None when it isn't part of the migration).
+
+	"Messages Automatically Read" (Outlook.qs, QuickSettings, Insert+V in Outlook) is ``[NonJCFOptions]
+	MessageSayAllVerbosity``: with it, JAWS reads a message you open from the top (Outlook.jss, ShouldMessageSayAll);
+	JAWS 2026's Outlook.jcf has it on. A tester's JAWS has it off and reads a message only with the arrow keys (issue
+	23). NVDA has no setting for Outlook messages alone; the assistant's "Read an Outlook message from the top when it
+	opens" is it (outlookMessages.READ_KEY).
+	"""
+	for where, ini in (("your", user), ("JAWS's shared", shared)):
+		raw = ini.get("NonJCFOptions", "MessageSayAllVerbosity") if ini is not None else None
+		value = jawsFiles.parseInt(raw)
+		if value is None:
+			continue
+		result.add(
+			ASSISTANT,
+			(outlookMessages.READ_KEY,),
+			bool(value),
+			f"Read an Outlook message from the top when it opens: {'on' if value else 'off'}, as JAWS's \"Messages Automatically Read\"",
+			f"{where} {OUTLOOK_JCF}, [NonJCFOptions] MessageSayAllVerbosity={raw}",
+		)
+		return
 
 
 _BRAILLE_TABLES_ENGLISH = {

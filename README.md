@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.27](#whats-new-in-127)
 - [What's new in 1.26](#whats-new-in-126)
 - [What's new in 1.25](#whats-new-in-125)
 - [What's new in 1.24](#whats-new-in-124)
@@ -78,10 +79,16 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.26.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.27.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.27
+
+From a tester's answer:
+
+- **A migration takes JAWS's "Messages Automatically Read" for Outlook.** Asked whether their JAWS reads an Outlook message as it opens, the tester found the option in Outlook's Quick Settings (Insert+V in Outlook), under Reading Options: "Messages Automatically Read", not checked. That is why their JAWS says nothing when they press Enter on a message. JAWS keeps the option in its settings for Outlook, and JAWS 2026 has it checked as it comes, so a JAWS user who never changed it hears each message read from the top as it opens. Now a migration sets the check box 'Read an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does' to what your JAWS does: your own Outlook settings first, then JAWS's. The tester's JAWS has it off, so it stays off for them, as 1.26 already had it. It is listed with the Settings Center options when you migrate, where you can leave it out, and the report names the JAWS file it came from. With "your settings only", it comes over only if you changed it in JAWS. Nothing changes until you migrate again, and you can check or uncheck it in NVDA's Settings, JAWS Migration Assistant, at any time. A test also checks that the settings 1.25 left behind, when you update, don't turn reading on open back on.
 
 ## What's new in 1.26
 
@@ -356,6 +363,7 @@ Settings Center options in more detail:
 - With only your settings, NVDA changes only what you changed in JAWS. If you changed a verbosity level, everything that level decides comes over.
 - A few JAWS defaults would hide information NVDA gives, such as object descriptions, which JAWS gives through its tutor messages. Those only come over when you changed them in JAWS.
 - JAWS plays no sound when it starts or exits, so NVDA's "Play sounds when starting or exiting NVDA" is turned off.
+- JAWS's Outlook option "Messages Automatically Read" (Quick Settings, Insert+V in Outlook) has no NVDA setting, so it sets the assistant's own check box for reading an Outlook message from the top when it opens.
 
 Dictionary rules in more detail:
 
@@ -551,7 +559,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125) and [What's new in 1.26](#whats-new-in-126));
-- reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on; see [What's new in 1.26](#whats-new-in-126));
+- reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on, or a migration takes it from that JAWS option; see [What's new in 1.26](#whats-new-in-126) and [What's new in 1.27](#whats-new-in-127));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));

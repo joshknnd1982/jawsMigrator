@@ -480,6 +480,12 @@ def buildPlan(options: MigrationOptions, index: jawsIndex.JawsIndex, facts: syst
 		scheme=scheme,
 		schemeChosen=schemeChosen,
 	)
+	# JAWS's Outlook options the assistant has a setting for, the user's over JAWS's own as JAWS layers them.
+	settingsMap.mapOutlookSettings(
+		index.layered(settingsMap.OUTLOOK_JCF, jawsIndex.USER) if scope != jawsIndex.SHARED else None,
+		index.layered(settingsMap.OUTLOOK_JCF, jawsIndex.SHARED) if scope != jawsIndex.USER else None,
+		plan.settings,
+	)
 
 	# Settings for single applications: only the user's own, never JAWS's stock application files.
 	# NVDA turns profiles on for programs only, so settings for web sites and parts of Windows are listed, not migrated.
@@ -1155,8 +1161,14 @@ class Migration:
 			result.nvdaSounds = soundsResult
 			result.messages.extend(soundsResult.failed)
 
-		# The assistant's own settings: sleeping applications, sounds, the JAWS profile.
+		# The assistant's own settings: sleeping applications, sounds, the JAWS profile, and JAWS options it has one for.
 		updates = {}
+		if options.settings:
+			for change in plan.settings.changes:
+				if change.target == settingsMap.ASSISTANT:
+					updates[change.path[0]] = change.value
+					result.applied.append(change)
+					debugLog.note(f"{change.key} = {change.value!r} -> the assistant's settings ({change.label}; from {change.source})")
 		if options.sleepApps:
 			sleepApps = set(state.get("sleepApps") or [])
 			for configName in options.sleepApps:
