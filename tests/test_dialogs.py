@@ -601,6 +601,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"Enhanced Control Support checks documents again, at once",
 		)
 
+	def test_documentsWithoutValueEventsIsSavedAndApplied(self):
+		from jawsMigrator import documentValues
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.documentsNoValue,
+			"Keep NVDA from having a document build its whole text at every key, which slows typing in a large file",
+			documentValues.STATE_KEY,
+			"NVDA listens for a document's whole text again, at once",
+		)
+
 	def test_browseModeOnTabsAndToolbarsIsSavedAndApplied(self):
 		from jawsMigrator import autoFormsMode
 

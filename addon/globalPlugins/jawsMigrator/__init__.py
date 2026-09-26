@@ -21,7 +21,9 @@ without the ":)" after its letter, as in "Data (D:)" (see driveLetters), and wha
 deletes in a slow program (see backspaceEcho); a web page's tabs and toolbar
 buttons stay in browse mode, as in JAWS (see autoFormsMode); Enhanced Control
 Support, which the assistant offers to install, doesn't read a whole document
-20 times a second, which froze NVDA in a large file (see documentPolling);
+20 times a second, which froze NVDA in a large file (see documentPolling), and
+NVDA doesn't have a document build its whole text at every key, which slowed
+typing in a large file (see documentValues);
 NVDA+Shift+J plays JAWS's layered keystroke sound (see layerSound); opening
 Outlook puts the focus in Outlook, not in NVDA's own window (see outlookFocus);
 NVDA's Elements List opens while a web page is still changing, instead of
@@ -338,6 +340,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import documentValues
+
+			documentValues.unregister()
+		except Exception:
+			pass
+		try:
 			from . import outlookFocus
 
 			outlookFocus.unregister()
@@ -529,6 +537,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				documentPolling.unregister()
 		except Exception:
 			debugLog.error("could not keep Enhanced Control Support's timer off documents")
+		try:
+			from . import documentValues
+
+			# Not a JAWS setting: NVDA had Windows 11's Notepad build a large document's whole text at every key, for an
+			# event NVDA ignores, and typing lost more letters.
+			if documentValues.wanted(data):
+				documentValues.register()
+			else:
+				documentValues.unregister()
+		except Exception:
+			debugLog.error("could not keep NVDA from listening for a document's whole text")
 		try:
 			from . import autoFormsMode
 

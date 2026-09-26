@@ -497,6 +497,31 @@ def main():
 		typed = []
 		plugin.event_typedCharacter(types.SimpleNamespace(), lambda: typed.append("a"), ch="a")
 		check(typed == ["a"], "and NVDA says each typed character as before")
+		# NVDA registers a focused document's UI Automation events without its Value, the whole text, which Windows 11's
+		# Notepad built at every key. The imitation NVDA has no UI Automation until here.
+		from jawsMigrator import documentValues
+
+		check(not documentValues.isRegistered(), "without NVDA's UI Automation support there is nothing to change")
+		uiaMethods = (documentValues.CHOOSE, documentValues.ADD, documentValues.REMOVE)
+		uiaHandlerClass = type("UIAHandler", (), {name: (lambda self, *args, **kwargs: None) for name in uiaMethods})
+		nvdasUia = {name: uiaHandlerClass.__dict__[name] for name in uiaMethods}
+
+		def uiaIsNvdas():
+			return all(uiaHandlerClass.__dict__[name] is nvdasUia[name] for name in uiaMethods)
+
+		sys.modules["UIAHandler"] = types.SimpleNamespace(UIAHandler=uiaHandlerClass, handler=None)
+		plugin.applyRuntimeSettings()
+		check(
+			documentValues.isRegistered()
+			and all(getattr(uiaHandlerClass.__dict__[name], documentValues.ORIGINAL, None) is nvdasUia[name] for name in uiaMethods),
+			"with it, the assistant chooses a focused document's UI Automation events",
+		)
+		jawsMigrator.state.set(documentValues.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not documentValues.isRegistered() and uiaIsNvdas(), "turned off in the Settings panel, NVDA chooses them itself")
+		jawsMigrator.state.set(documentValues.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(documentValues.isRegistered(), "and on again")
 		# NVDA started with the focus on the taskbar goes back to the window you were in, unless that is turned off.
 		from unittest import mock
 
@@ -667,6 +692,8 @@ def main():
 			"and NVDA's labels, script and activation in its Elements List",
 		)
 		check(not typingWatch.isRegistered(), "and the keys a program types")
+		check(not documentValues.isRegistered() and uiaIsNvdas(), "and NVDA's choice of a focused document's UI Automation events")
+		del sys.modules["UIAHandler"]
 		check(not fieldEdges.isRegistered() and plugin._fieldEdges is None, "and the arrow keys at the edges of a field")
 		check(not outlookRows.isRegistered() and plugin._outlookRows is None, "and the Outlook message you leave")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
@@ -701,6 +728,7 @@ def main():
 			"autoFormsMode",
 			"backspaceEcho",
 			"documentPolling",
+			"documentValues",
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",

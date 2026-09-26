@@ -12,12 +12,13 @@ never types is never said. The tester's earlier logs show keys lost the same way
 stuck waiting for Notepad ("Potential freeze" from NVDA's watchdog, a second at a time): "message" came out "meg", and
 "a bug with" "abugwith". Those logs were from before version 1.15, while Enhanced Control Support read Notepad's whole
 document 20 times a second (see documentPolling). The typing this time came after the log the tester sent had been
-saved, so nothing shows what held NVDA or Notepad up.
+saved, so nothing shows what held NVDA or Notepad up. (Version 1.23 found that Notepad itself loses keys in a file
+that size, and that NVDA made it worse by listening for the document's whole text: see documentValues.)
 
 So that the next log shows it, while NVDA logs at its debug level:
 
-- A character key NVDA passes to a program's text field, which the program hasn't typed half a second later, is
-  logged when the next key comes ("jawsMigrator: notepad hasn't typed "s", pressed 612 ms ago"), with where NVDA's
+- A character key NVDA passes to a program's text field (not one NVDA runs a command for, such as L after
+  NVDA+Shift+J), which the program hasn't typed half a second later, is logged when the next key comes ("jawsMigrator: notepad hasn't typed "s", pressed 612 ms ago"), with where NVDA's
   main thread was at that moment when it was busy, once a second at most: a busy NVDA shows what held it up, an idle
   one that the program was slow.
 - One the program types late is logged with how late ("notepad typed "s" 1240 ms after the key").
@@ -171,6 +172,10 @@ def noteKey(gesture=None, **kwargs) -> bool:
 
 		focus = api.getFocusObject()
 		if focus is None or not _typesInto(focus):
+			return True
+		if getattr(gesture, "script", None) is not None:
+			# NVDA runs a command for the key instead, such as the assistant's after NVDA+Shift+J: the program never
+			# gets it. (NVDA looks the command up next anyway, and keeps what it found.)
 			return True
 		with _lock:
 			_waiting.append([now, character, _program(focus), False])

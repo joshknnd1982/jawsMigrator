@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.23](#whats-new-in-123)
 - [What's new in 1.22](#whats-new-in-122)
 - [What's new in 1.21](#whats-new-in-121)
 - [What's new in 1.20](#whats-new-in-120)
@@ -78,6 +79,13 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.23
+
+From a tester's answers about typing in a large document:
+
+- **Typing in a large document loses fewer letters.** The tester typed a note at the top of a saved NVDA log in Windows 11's Notepad, and letters and spaces went missing, some came out of order, and NVDA said little of what they typed. It doesn't happen in a new, empty document. On another computer, with NVDA 2026.2 and no other add-ons, the same kind of typing went into a copy of the tester's log, 21 million characters, as real key presses, one every 150 ms: "a outlook message about typing in a large document is here " lost 5 to 23 of its 59 characters each time. Most of that is Notepad's own. In a file that size Notepad takes a fifth to a third of a second to type each character, slower than the keys come, and with NVDA quit it still lost letters in two tries of three. NVDA made it worse. While you are in a document, NVDA listens for changes to its value, and the value of Notepad's document is its whole text: Notepad built all 42 MB of it at every key, which took a tenth of a second more for each character, and the build failed every time, so NVDA never even got the change. A test program that did nothing but listen for the value, with NVDA quit, had Notepad lose 4, 17 and 9 characters. NVDA doesn't use that change for a document anyway: it follows the caret and the text as you type. Now NVDA doesn't listen for the value of a document or a text field of more than one line that it reads that way, and everything else, such as the caret moving and the text changing, comes as before. Notepad is still slow with a file that size, and can still lose a letter. So type your notes in a new document or in GitHub's comment box, not in a saved log, and attach NVDA's log with NVDA+Shift+J, then L (see [What's new in 1.21](#whats-new-in-121)). To have NVDA listen for a document's value again, uncheck "Keep NVDA from having a document build its whole text at every key, which slows typing in a large file" in NVDA's Settings, JAWS Migration Assistant.
+- **Fixed: the log noted the L of NVDA+Shift+J, then L as a key the program never typed.** When NVDA logs at its debug level, the assistant notes a key a program types late or never (see [What's new in 1.19](#whats-new-in-119)). The L after NVDA+Shift+J goes to the assistant's command, never to the program, so waiting for it only filled the log with a false "never typed 'l'". Now a key NVDA runs a command for isn't waited for.
 
 ## What's new in 1.22
 
@@ -499,6 +507,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying a drive's name without the colon and parenthesis after its letter, as in Data (D:) (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - saying what Backspace deletes, even when the program is slow to delete it (on unless you turn it off);
 - keeping Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
+- keeping NVDA from having a document build its whole text at every key, which slows typing in a large file (on unless you turn it off; see [What's new in 1.23](#whats-new-in-123));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
 - showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119) and [What's new in 1.20](#whats-new-in-120));
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));

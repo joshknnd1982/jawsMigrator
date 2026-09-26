@@ -86,6 +86,9 @@ DEFAULTS = {
 	#: Enhanced Control Support leaves its 50 ms timer off documents NVDA follows itself, where it read the whole text
 	#: each time and a large file froze NVDA (see documentPolling).
 	"documentsWithoutControlSupportTimer": True,
+	#: NVDA registers a focused document's UI Automation events without its Value, the whole text, which Windows 11's
+	#: Notepad built at every key, slowing typing in a large file (see documentValues).
+	"documentsWithoutValueEvents": True,
 	#: NVDA started with the focus on the taskbar, as its desktop shortcut's key leaves it, gives the focus back to the
 	#: window you were in, or the desktop, as JAWS does (see startupFocus).
 	"backFromTaskbarAtStart": True,

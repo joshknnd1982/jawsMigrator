@@ -18,6 +18,7 @@ from .. import (
 	autoFormsMode,
 	backspaceEcho,
 	documentPolling,
+	documentValues,
 	driveLetters,
 	emptyAlerts,
 	fieldEdges,
@@ -102,6 +103,14 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.documentsUnpolled.SetValue(documentPolling.wanted(state.load()))
+		# NVDA listens for a focused document's Value, its whole text, which Windows 11's Notepad builds at every key.
+		self.documentsNoValue = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Keep NVDA from having a document build its whole text at every key, which slows typing in a large file",
+			),
+		)
+		self.documentsNoValue.SetValue(documentValues.wanted(state.load()))
 		# NVDA uses focus mode on a web page's tabs and toolbars, so letters go to the page; JAWS stays in its virtual cursor.
 		self.tabsBrowse = helper.addItem(wx.CheckBox(self, label="Stay in &browse mode when you Tab to a tab or a toolbar button on a web page"))
 		self.tabsBrowse.SetValue(autoFormsMode.wanted(state.load()))
@@ -221,6 +230,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownDriveLetter = self.driveLetter.GetValue()
 		self._shownBackspaceSlow = self.backspaceSlow.GetValue()
 		self._shownDocumentsUnpolled = self.documentsUnpolled.GetValue()
+		self._shownDocumentsNoValue = self.documentsNoValue.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownLinksJaws = self.linksJaws.GetValue()
 		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
@@ -289,6 +299,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[backspaceEcho.STATE_KEY] = self.backspaceSlow.GetValue()
 		if self.documentsUnpolled.GetValue() != self._shownDocumentsUnpolled:
 			updates[documentPolling.STATE_KEY] = self.documentsUnpolled.GetValue()
+		if self.documentsNoValue.GetValue() != self._shownDocumentsNoValue:
+			updates[documentValues.STATE_KEY] = self.documentsNoValue.GetValue()
 		if self.tabsBrowse.GetValue() != self._shownTabsBrowse:
 			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
 		if self.linksJaws.GetValue() != self._shownLinksJaws:
