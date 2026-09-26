@@ -19,6 +19,7 @@ from .. import (
 	backspaceEcho,
 	documentPolling,
 	driveLetters,
+	emptyAlerts,
 	labelRepeats,
 	layerSound,
 	linksList,
@@ -115,6 +116,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.linksJaws.SetValue(linksList.wanted(state.load()))
+		# GitHub adds an alert with nothing in it as its page loads; NVDA said "alert" alone, JAWS says nothing.
+		self.quietEmptyAlerts = helper.addItem(
+			wx.CheckBox(self, label='Don\'t say "alert" for an alert with nothing in it, as on GitHub pages'),
+		)
+		self.quietEmptyAlerts.SetValue(emptyAlerts.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -200,6 +206,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownDocumentsUnpolled = self.documentsUnpolled.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownLinksJaws = self.linksJaws.GetValue()
+		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -267,6 +274,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
 		if self.linksJaws.GetValue() != self._shownLinksJaws:
 			updates[linksList.STATE_KEY] = self.linksJaws.GetValue()
+		if self.quietEmptyAlerts.GetValue() != self._shownQuietEmptyAlerts:
+			updates[emptyAlerts.STATE_KEY] = self.quietEmptyAlerts.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

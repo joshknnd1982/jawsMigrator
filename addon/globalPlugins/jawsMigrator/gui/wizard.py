@@ -320,8 +320,8 @@ class ChoosePage(Page):
 		if plan.sleepCandidates and (self.sleepChoice or not options.selectionApplied):
 			names = ", ".join(self.sleepChoice or [name for name, _exes in plan.sleepCandidates])
 			entries.append(("sleepApps", f"Make NVDA sleep where JAWS slept: {names}", bool(self.sleepChoice)))
-		userRules = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.dictionaries if d.source.scope == jawsIndex.USER)
-		sharedRules = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.dictionaries if d.source.scope == jawsIndex.SHARED)
+		userRules = sum(d.ruleCount() for d in plan.dictionaries if d.source.scope == jawsIndex.USER)
+		sharedRules = sum(d.ruleCount() for d in plan.dictionaries if d.source.scope == jawsIndex.SHARED)
 		entries.append(("dictionaries", f"Dictionary Manager: {userRules} of your pronunciation rules", options.dictionaries))
 		if sharedRules:
 			entries.append(("sharedDictionaries", f"Also add {sharedRules} of Freedom Scientific's own pronunciation rules (more rules slow speech slightly)", plan.options.sharedDictionaries))
@@ -1132,7 +1132,7 @@ class MigrationWizard(wx.Dialog):
 		if options.sleepApps:
 			lines.append("NVDA sleeps in: " + ", ".join(options.sleepApps) + ".")
 		if options.dictionaries:
-			count = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.chosenDictionaries())
+			count = sum(d.ruleCount() for d in plan.chosenDictionaries())
 			lines.append(f"{count} dictionary rules are added.")
 		symbols = plan.chosenSymbols() if options.symbols else (plan.jawsSymbolDefaults if options.jawsSymbolNames else {})
 		if symbols:
@@ -1247,8 +1247,8 @@ class MigrationWizard(wx.Dialog):
 				lines.append(f"{len(result.applied)} settings were set.")
 			if result.gesturesAdded:
 				lines.append(f"{result.gesturesAdded} JAWS keystrokes are now NVDA input gestures.")
-			if result.dictionaryEntries or result.voiceDictionaryEntries:
-				lines.append(f"{result.dictionaryEntries + result.voiceDictionaryEntries} dictionary rules were added.")
+			if result.dictionaryEntries or result.voiceDictionaryEntries or result.appDictionaryEntries:
+				lines.append(f"{result.dictionaryEntries + result.voiceDictionaryEntries + result.appDictionaryEntries} dictionary rules were added.")
 			if result.schemesWritten:
 				lines.append(f"{len(result.schemesWritten)} schemes were copied into ClassicSpeech.")
 			if result.voiceProfilesWritten:

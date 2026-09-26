@@ -22,6 +22,7 @@ import threading
 from dataclasses import dataclass, field
 
 from . import (
+	appDicts,
 	backup,
 	classicSounds,
 	debugLog,
@@ -151,6 +152,14 @@ class DictionaryPlan:
 	#: Entries for the default dictionary, and for the voice dictionary of the migrated voice.
 	defaultEntries: list = field(default_factory=list)
 	voiceEntries: list = field(default_factory=list)
+	#: For a JAWS application dictionary (Theophilos.jdf): its configuration, the programs NVDA knows it by, and its
+	#: entries, which apply only in those programs (see appDicts).
+	configName: str = ""
+	programs: list = field(default_factory=list)
+	appEntries: list = field(default_factory=list)
+
+	def ruleCount(self) -> int:
+		return len(self.defaultEntries) + len(self.voiceEntries) + len(self.appEntries)
 
 
 @dataclass
@@ -566,14 +575,19 @@ def buildPlan(options: MigrationOptions, index: jawsIndex.JawsIndex, facts: syst
 		if aliasScheme.items:
 			plan.schemes.append(aliasScheme)
 
-	# Dictionaries.
-	existing = dictMap.readDicPatterns(os.path.join(facts.configDir or nvdaEnv.configDir(), "speechDicts", "default.dic"))
+	# Dictionaries. JAWS's default dictionary goes into NVDA's default and voice dictionaries. A dictionary for one
+	# application (Theophilos.jdf) goes into a file of its own, which applies only in that program, as in JAWS
+	# (see appDicts): in NVDA's default dictionary, Theophilos's "Job" -> "jobe" changed "job" everywhere.
+	configDir = facts.configDir or nvdaEnv.configDir()
+	existing = dictMap.readDicPatterns(os.path.join(configDir, "speechDicts", "default.dic"))
 	jdfFiles = []
 	for indexed in index.byExtension("jdf", jawsIndex.BOTH):
 		if indexed.scope == jawsIndex.USER and scope == jawsIndex.SHARED:
 			continue
 		jdfFiles.append(indexed)
 	seen = set(existing)
+	#: The rules of each application's file, by configuration: its own, not the default dictionary's.
+	seenByApplication: dict = {}
 	jawsSynthNames = {plan.jawsSynthName.lower()} | {s.longName.lower() for s in index.synths if s.shortName.lower() == plan.jawsSynthName.lower()}
 	for indexed in sorted(jdfFiles, key=lambda f: (f.scope != jawsIndex.USER, os.path.splitext(f.name)[0].lower() != "default")):
 		try:
@@ -581,16 +595,35 @@ def buildPlan(options: MigrationOptions, index: jawsIndex.JawsIndex, facts: syst
 		except OSError:
 			continue
 		label = ("your " if indexed.scope == jawsIndex.USER else "shared ") + indexed.name
-		conversion = dictMap.convertRules(rules, label, plan.languageLcid, seen)
-		dictionaryPlan = DictionaryPlan(label, indexed, conversion)
+		configName = os.path.splitext(indexed.name)[0]
+		if configName.lower() == "default":
+			conversion = dictMap.convertRules(rules, label, plan.languageLcid, seen)
+			dictionaryPlan = DictionaryPlan(label, indexed, conversion)
+			for entry in conversion.entries:
+				seen.add(entry.key() + (entry.jawsSynthesizer.lower(),))
+				if not entry.jawsSynthesizer:
+					dictionaryPlan.defaultEntries.append(entry)
+				elif entry.jawsSynthesizer.lower() in jawsSynthNames:
+					dictionaryPlan.voiceEntries.append(entry)
+				else:
+					conversion.skipped.append(dictMap.Skipped(entry.source, f"The rule is only for the JAWS synthesizer {entry.jawsSynthesizer}."))
+			plan.dictionaries.append(dictionaryPlan)
+			continue
+		programs, why = appExecutables(index, configName)
+		key = configName.lower()
+		if key not in seenByApplication:
+			seenByApplication[key] = dictMap.readDicPatterns(appDicts.path(configName, configDir))
+		applicationSeen = seenByApplication[key]
+		conversion = dictMap.convertRules(rules, label, plan.languageLcid, applicationSeen)
+		dictionaryPlan = DictionaryPlan(label, indexed, conversion, configName=configName, programs=programs)
 		for entry in conversion.entries:
-			seen.add(entry.key() + (entry.jawsSynthesizer.lower(),))
-			if not entry.jawsSynthesizer:
-				dictionaryPlan.defaultEntries.append(entry)
-			elif entry.jawsSynthesizer.lower() in jawsSynthNames:
-				dictionaryPlan.voiceEntries.append(entry)
-			else:
+			if not programs:
+				conversion.skipped.append(dictMap.Skipped(entry.source, f"The rule is for {configName} only, where NVDA can't use it: {why}."))
+			elif entry.jawsSynthesizer and entry.jawsSynthesizer.lower() not in jawsSynthNames:
 				conversion.skipped.append(dictMap.Skipped(entry.source, f"The rule is only for the JAWS synthesizer {entry.jawsSynthesizer}."))
+			else:
+				applicationSeen.add(entry.key() + (entry.jawsSynthesizer.lower(),))
+				dictionaryPlan.appEntries.append(entry)
 		plan.dictionaries.append(dictionaryPlan)
 
 	# Punctuation and symbols.
@@ -727,7 +760,8 @@ def describePlan(plan: MigrationPlan) -> None:
 	debugLog.note(f"{len(plan.keys.bindings)} keystrokes to add; skipped by kind: " + ", ".join(f"{kind} {plan.keys.countSkipped(kind)}" for kind in sorted({item.kind for item in plan.keys.skipped})))
 	debugLog.section("Dictionaries, symbols, applications")
 	for dictionaryPlan in plan.dictionaries:
-		debugLog.note(f"{dictionaryPlan.label}: {len(dictionaryPlan.defaultEntries)} default and {len(dictionaryPlan.voiceEntries)} voice entries, {len(dictionaryPlan.conversion.skipped)} skipped")
+		where = f"{len(dictionaryPlan.appEntries)} entries for {dictionaryPlan.programs} only" if dictionaryPlan.configName else f"{len(dictionaryPlan.defaultEntries)} default and {len(dictionaryPlan.voiceEntries)} voice entries"
+		debugLog.note(f"{dictionaryPlan.label}: {where}, {len(dictionaryPlan.conversion.skipped)} skipped")
 	debugLog.note(f"{len(plan.symbols)} symbols changed by the user; {len(plan.jawsSymbolDefaults)} JAWS symbol names")
 	for name, mapping in plan.appSettings.items():
 		debugLog.note(f"application {name} (NVDA knows it as {plan.appExecutables.get(name)}): {[(change.key, change.value) for change in mapping.changes]}")
@@ -750,6 +784,8 @@ class MigrationResult:
 	gesturesAdded: int = 0
 	dictionaryEntries: int = 0
 	voiceDictionaryEntries: int = 0
+	#: Rules added to the dictionaries of single programs (see appDicts).
+	appDictionaryEntries: int = 0
 	symbols: int = 0
 	schemesWritten: list = field(default_factory=list)
 	voiceProfilesWritten: list = field(default_factory=list)
@@ -1067,6 +1103,20 @@ class Migration:
 				result.dictionaryEntries += added
 				if error:
 					result.messages.append(error)
+			# Dictionaries for single programs, used only there, as JAWS uses them.
+			for dictionaryPlan in plan.chosenDictionaries():
+				if not dictionaryPlan.appEntries:
+					continue
+				try:
+					added = appDicts.writeRules(dictionaryPlan.configName, dictionaryPlan.programs, dictionaryPlan.appEntries)
+				except OSError as error:
+					message = f"JAWS's dictionary rules for {dictionaryPlan.configName} could not be written: {error}"
+					result.messages.append(message)
+					debugLog.note(message)
+					continue
+				result.appDictionaryEntries += added
+				debugLog.note(f"{added} rules from {dictionaryPlan.label} -> {appDicts.path(dictionaryPlan.configName)}, used only in {dictionaryPlan.programs}")
+			appDicts.reload()
 
 		# Punctuation and symbols.
 		chosenSymbols = plan.chosenSymbols()

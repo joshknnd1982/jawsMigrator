@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.21](#whats-new-in-121)
 - [What's new in 1.20](#whats-new-in-120)
 - [What's new in 1.19](#whats-new-in-119)
 - [What's new in 1.18](#whats-new-in-118)
@@ -72,10 +73,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.20.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.21.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.21
+
+From a tester's reports on version 1.20:
+
+- **A JAWS dictionary for one program changes speech only in that program.** Reading an article about the Chicago Bears in Edge, the tester heard a player's name and the word "job" said wrongly. JAWS keeps a dictionary for each program beside its default one, and uses it only in that program. Freedom Scientific's own dictionary for the Bible program Theophilos says "Job" as "jobe", for the Book of Job. Earlier versions put the rules of every JAWS program dictionary into NVDA's default dictionary, which NVDA uses in every program, so NVDA said "jobe" everywhere. In the same article, a rule from Excel's dictionary, meant for its columns, had NVDA say the word "a" as "eigh" three times ("he deals with eigh concussion"), and a rule from Outlook's said an ellipsis as "dot dot dot". Now the rules of each JAWS program dictionary are in a dictionary of their own (see [Where things are kept](#where-things-are-kept)), which NVDA uses only while you are in that program, before its default dictionary, as JAWS does. Shortly after NVDA starts with version 1.21, the rules an earlier migration put into NVDA's default and voice dictionaries move there, after a backup of NVDA's settings, and NVDA says how many. Your own rules, and the rules from JAWS's default dictionary, stay where they are. NVDA's log shows the text NVDA is given to say before its dictionaries change it, so the log couldn't show what changed the player's name. When NVDA logs at its debug level, the assistant now notes there each dictionary rule that changes what NVDA says, with the JAWS file and line it came from (see [Debug logs](#debug-logs)). There is nothing to set.
+- **NVDA no longer says "alert" alone when a GitHub page loads.** A tester who went straight to a repository's page on GitHub heard "Skip to content", then "alert" and nothing more, where JAWS says nothing. As the page finishes loading, GitHub adds an alert with nothing in it. NVDA says an alert in two parts: the text in it, as for any live region, and the alert itself, that is its name, the word "alert" and any control in it that can take the focus. NVDA leaves out an alert only when it has nothing at all under it. GitHub's alert has an empty part under it, so NVDA said "alert" alone. JAWS says an alert's text and nothing else. Now NVDA leaves out an alert with nothing in it: no name, description or text in it or in anything in it, and nothing in it that can take the focus. An alert with anything in it is said as before. To have NVDA say every alert again, uncheck "Don't say "alert" for an alert with nothing in it, as on GitHub pages" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA+Shift+J, then L saves NVDA's log for a GitHub issue.** The tester's log for "issue typing in a large document" never reached the issue. Neither did the logs for three more of their issues that night. GitHub attaches a file of 25 MB at most, and at NVDA's debug level the tester's logs run past 20 MB, so GitHub left only "Failed to upload" in each issue. The document the tester typed in was most likely such a log, open in Windows 11's Notepad with a note typed at its top. That is where their letters and spaces went missing before (see [What's new in 1.19](#whats-new-in-119)). Now NVDA+Shift+J, then L puts NVDA's log, the log of NVDA's run before and the assistant's debug log into one zip file in Documents. So does the NVDA menu: Tools, JAWS Migration Assistant, Save NVDA's log for a GitHub issue. Zipped, a 22 MB log came to a third of a megabyte. NVDA says the file's name and size, and puts its full name on the clipboard. On GitHub, press "Paste, drop, or click to add files", then Control+V and Enter. Type what happened in the comment box, not into the log. See [Debug logs](#debug-logs).
 
 ## What's new in 1.20
 
@@ -302,6 +311,7 @@ Dictionary rules in more detail:
 - JAWS root words such as `reposition*` keep matching every word that starts with the root.
 - Rules for another language are left out.
 - Rules for one synthesizer go into NVDA's voice dictionary for the voice you migrate to.
+- Rules from a JAWS dictionary for one program, such as Outlook.jdf or Theophilos.jdf, go into a dictionary for that program, which NVDA uses only while you are in it, before its default dictionary, as JAWS does (see [Where things are kept](#where-things-are-kept)). The programs are the ones JAWS's ConfigNames.ini names for it. Rules for parts of Windows JAWS has settings of its own for, such as Windows OS, and for web sites, are listed in the report instead, because NVDA can't tell when you are in them.
 - Rules that only play a sound are listed, because NVDA dictionaries cannot play sounds.
 - Freedom Scientific's own rules are only added if you ask.
 
@@ -461,6 +471,7 @@ Press NVDA+Shift+J, then:
 | U | Check for updates |
 | C | Install ClassicSpeech, or update it to its newest version |
 | I | Hear the JAWS, Windows and NVDA versions on this computer |
+| L | Save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue (see [Debug logs](#debug-logs)) |
 | H or F1 | List these commands |
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
@@ -482,6 +493,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - keeping Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
 - showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119) and [What's new in 1.20](#whats-new-in-120));
+- not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 
@@ -596,9 +608,13 @@ For finding problems, the assistant keeps detailed logs:
 
 Errors also go to NVDA's own log. When reporting a problem, attach the debug log and NVDA's log.
 
-To send NVDA's log, attach the file itself rather than copying it out of the Log Viewer. Press Windows+R, type `%temp%` and press Enter. NVDA's log is `nvda.log` in that folder. After NVDA has restarted or stopped unexpectedly, the log from before is `nvda-old.log`. NVDA starts a new log each time it starts, so restart NVDA just before you show the problem, and the log stays short. Selecting all of a very long log in the Log Viewer (NVDA menu, Tools, View log) can freeze NVDA for seconds at each key press, because NVDA reads the selection to announce it, and the Log Viewer is part of NVDA.
+To send NVDA's log, press NVDA+Shift+J, then L, right after the problem, or choose Save NVDA's log for a GitHub issue in the NVDA menu, Tools, JAWS Migration Assistant. The assistant puts NVDA's log (`nvda.log`), the log of NVDA's run before (`nvda-old.log`), and its own debug log into one zip file in Documents, named for the time, such as `NVDA log 2026-09-26 00.45.12.zip`. NVDA says the file's name and size, and puts its full name on the clipboard. On GitHub, press the button "Paste, drop, or click to add files" under the comment box, then Control+V and Enter. Type what happened in the comment box, not into the log. GitHub attaches a file of 25 MB at most, and NVDA's log at its debug level often grows past that: GitHub then leaves only `<!-- Failed to upload ... -->` in the issue. Zipped, a tester's 22 MB log came to a third of a megabyte. The logs themselves are left as they are, and nothing opens them. At its debug level, NVDA's log holds every key you pressed and everything NVDA said, passwords included, so attach it only where you would show those.
 
-When letters go missing as you type, or NVDA doesn't say them, attach `nvda.log` right after it happens, before you type anything about it. When NVDA logs at its debug level, the assistant notes there each key a program you type in was slow to type ("jawsMigrator: notepad typed 's' 1240 ms after the key"), each one it never typed ("jawsMigrator: notepad never typed 's'"), and what NVDA was doing meanwhile, which shows whether NVDA or the program held the typing up.
+To find the log yourself, press Windows+R, type `%temp%` and press Enter. NVDA's log is `nvda.log` in that folder. After NVDA has restarted or stopped unexpectedly, the log from before is `nvda-old.log`. Attach the file itself rather than copying it out of the Log Viewer: selecting all of a very long log in the Log Viewer (NVDA menu, Tools, View log) can freeze NVDA for seconds at each key press, because NVDA reads the selection to announce it, and the Log Viewer is part of NVDA. NVDA starts a new log each time it starts, so restart NVDA just before you show the problem, and the log stays short.
+
+When letters go missing as you type, or NVDA doesn't say them, save the log with NVDA+Shift+J, then L, right after it happens, before you type anything about it. Don't type into a log you saved, or into any very large document, to describe the problem: in Windows 11's Notepad, that is where a tester's letters went missing. When NVDA logs at its debug level, the assistant notes there each key a program you type in was slow to type ("jawsMigrator: notepad typed 's' 1240 ms after the key"), each one it never typed ("jawsMigrator: notepad never typed 's'"), and what NVDA was doing meanwhile, which shows whether NVDA or the program held the typing up.
+
+When NVDA says a word wrongly, save the log right after NVDA has said it. NVDA's log shows the text NVDA was given to say ("Speaking [...]") before its speech dictionaries changed it. When NVDA logs at its debug level, the assistant notes there each dictionary rule that changed it, with the rule's comment, which for a rule from JAWS names the file and line it came from: `jawsMigrator: speech dictionary rules change 'the word job': 'Job' -> 'jobe' (default dictionary: From JAWS shared Theophilos.jdf, line 40)`.
 
 A log can also grow quickly because of another add-on. With NVDA 2026.2, Emoticons 38.0.0 uses names NVDA has since replaced, and NVDA writes a warning with a full list of calls each time it does. It does that 176 times each time NVDA switches configuration profiles, which happens whenever you move to or from a program with a profile of its own. In one tester's log that was over 12,000 warnings in ten minutes. JAWS has no emoticons of its own: at the Most punctuation level it says ":)" as "colon right paren". If you don't use Emoticons, disabling it (NVDA menu, Tools, Add-on Store, Installed add-ons) keeps the log short. Emoticons 38.2.0 fixes the warnings but needs NVDA 2026.3.
 
@@ -616,6 +632,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 | `jawsMigrator\sounds\keyLayer.wav` | A copy of JAWS's layered keystroke sound, which NVDA+Shift+J plays unless you chose the beep |
 | `jawsMigrator\state.json` | The assistant's own settings, including your choice of JAWS items to import |
 | `profiles\JAWS - program.ini` (and `profiles\JAWS settings.ini` if you chose a separate profile) | Migrated NVDA configuration profiles |
+| `speechDicts\jawsApplications\<JAWS configuration>.dic` | Rules from JAWS's dictionaries for single programs, such as `Outlook.dic`, in the format of NVDA's own dictionaries. The line `#Programs:` at the top names the programs NVDA uses them in, by their file names without ".exe". NVDA's Speech dictionaries menu doesn't show them: to change one, open it in Notepad, then restart NVDA |
 | `ClassicSpeech\Schemes\<scheme> (from JAWS)` | Migrated ClassicSpeech schemes |
 | `ClassicSpeech\Schemes\JAWS Sounds (from JAWS)\Sounds` | Every JAWS sound, ready for ClassicSpeech |
 
@@ -632,7 +649,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - NVDA can't tell what changed a system tray icon. A change within a moment of a key you press on the icon is said, whatever made it. Any other change isn't said until you move to the icon again or press NVDA+Tab.
 - A control's type and state are only left out of a label when they are at its end, in NVDA's words (or "checkbox", "dropdown" and similar English spellings), right next to where NVDA says them. A page that puts them first, or in another language than NVDA's, is read as it is.
 - JAWS voices from synthesizers with no NVDA equivalent on the computer (for example old hardware synthesizers) cannot be used. The report says which ones.
-- NVDA speech dictionaries are not per application. Rules from JAWS application dictionaries go into the default dictionary; you can leave them out.
+- NVDA's own speech dictionaries are the same in every program, so the assistant uses JAWS's dictionaries for single programs itself, while it runs. NVDA uses them in the programs JAWS's ConfigNames.ini names for them. JAWS also has settings for parts of Windows, such as Windows OS or Windows Media Player, and for web sites; NVDA can't tell when you are in those, so their rules are left out.
 - Braille tables are chosen automatically for English only. For other languages, choose the table in NVDA's Braille settings.
 
 ## Building from source

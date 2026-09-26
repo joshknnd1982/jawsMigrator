@@ -29,9 +29,13 @@ being left half made and unseen with the focus in it, and says its item once
 when it fills the list again (see elementsList), and shows links as JAWS's
 Links List does, without "level 0", says "no links" on a page without links
 and moves to the link it activates (see linksList);
+an alert with nothing in it isn't said as "alert" alone (see emptyAlerts);
 NVDA started with its desktop shortcut's key comes up in the window you were
-in, not on the taskbar, as JAWS does (see startupFocus); and NVDA's debug log
-says when a program types a key late or not at all (see typingWatch).
+in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
+one application changes speech only in that application (see appDicts); and
+NVDA's debug log says when a program types a key late or not at all (see
+typingWatch). NVDA+Shift+J, then L saves NVDA's log as a zip file small enough
+to attach to a GitHub issue (see logZip).
 """
 
 from __future__ import annotations
@@ -76,6 +80,7 @@ LAYER_GESTURES = {
 	"kb:b": "restoreBackup",
 	"kb:u": "checkForUpdates",
 	"kb:i": "systemSummary",
+	"kb:l": "saveLogForIssue",
 	"kb:h": "layerHelp",
 	"kb:f1": "layerHelp",
 }
@@ -94,6 +99,7 @@ LAYER_HELP = (
 	"B, restore NVDA settings from a backup. "
 	"U, check for updates. "
 	"I, JAWS, Windows and NVDA versions on this computer. "
+	"L, save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue. "
 	"H, this help. Escape leaves the layer."
 )
 
@@ -141,6 +147,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._linksList = None
 		#: The elementsList module, once loaded: it gives an item the Elements List no longer has the assistant's class.
 		self._elementsList = None
+		#: The emptyAlerts module, once loaded: an alert event goes through it before NVDA says the alert.
+		self._emptyAlerts = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -259,6 +267,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import appDicts
+
+			appDicts.unregister()
+		except Exception:
+			pass
+		try:
 			from . import labelRepeats
 
 			labelRepeats.unregister()
@@ -335,6 +349,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			linksList.unregister()
 		except Exception:
 			pass
+		self._emptyAlerts = None
+		try:
+			from . import emptyAlerts
+
+			emptyAlerts.unregister()
+		except Exception:
+			pass
 		try:
 			from . import typingWatch
 
@@ -351,7 +372,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def applyRuntimeSettings(self):
 		"""Apply the assistant's own settings: the applications where NVDA sleeps, JAWS's Insert keystrokes,
-		JAWS's rule for a colon between digits, a drive said without the ":)" after its letter, a control's type
+		JAWS's rule for a colon between digits, a drive said without the ":)" after its letter, JAWS's dictionaries
+		for single applications, used only in their programs (read again from their files), a control's type
 		and state said once (and a change said once),
 		a system tray icon said when the focus moves to it, a heading said without what it is in when quick
 		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
@@ -393,6 +415,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				driveLetters.unregister()
 		except Exception:
 			debugLog.error("could not apply saying a drive without the colon and parenthesis after its letter")
+		try:
+			from . import appDicts
+
+			# As in JAWS, a JAWS dictionary for one application changes speech only there. Registering reads the
+			# files again, which a migration, a repair or a restore may have changed.
+			appDicts.register()
+		except Exception:
+			debugLog.error("could not apply JAWS's dictionaries for single applications")
 		try:
 			from . import labelRepeats
 
@@ -501,6 +531,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not apply showing links in the Elements List as JAWS's Links List does")
 		try:
+			from . import emptyAlerts
+
+			# Not a JAWS setting: JAWS says an alert's text and nothing else, so nothing for an alert with nothing in it,
+			# where NVDA said "alert" alone (GitHub adds one as its page loads).
+			if emptyAlerts.wanted(data):
+				emptyAlerts.register()
+			else:
+				emptyAlerts.unregister()
+			self._emptyAlerts = emptyAlerts
+		except Exception:
+			debugLog.error("could not apply leaving out alerts with nothing in them")
+		try:
 			from . import layerSound
 
 			# A migration or a restore can change which JAWS the layer's sound comes from; look again next time.
@@ -600,6 +642,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		else:
 			messageBox(f"There is no debug log yet. It will be at {path}. Each migration also writes debug.log in its own folder.", TITLE, wx.OK | wx.ICON_INFORMATION)
 
+	def saveLogForIssue(self):
+		# NVDA's log, zipped in Documents, where a log too big for GitHub fits (see logZip).
+		if self._secure:
+			return
+		try:
+			from . import logZip
+
+			logZip.saveAndSay()
+		except Exception:
+			debugLog.error("could not save NVDA's log for a GitHub issue")
+			ui.message("NVDA's log could not be saved. The assistant's debug log says why.")
+
 	def _activateProfileAtStartup(self):
 		try:
 			name = state.get("jawsProfileName")
@@ -633,6 +687,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				("What does a &JAWS keystroke do in NVDA?", lambda event: wx.CallLater(300, self._startKeystrokeHelp)),
 				("Check for &updates", lambda event: self.checkForUpdates()),
 				("Open the &debug log", lambda event: self.openDebugLog()),
+				# After the menu has closed, so that what NVDA says then doesn't cut off "Saving NVDA's log".
+				("Save NVDA's &log for a GitHub issue", lambda event: wx.CallLater(300, self.saveLogForIssue)),
 				("&Help", lambda event: self.openHelp()),
 			)
 			for label, handler in items:
@@ -1008,6 +1064,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			trayChanges.beforeNameChange(obj)
 		nextHandler()
 
+	def event_alert(self, obj, nextHandler):
+		# An alert with nothing in it isn't said: NVDA would say "alert" alone, and JAWS says nothing (see emptyAlerts).
+		emptyAlerts = getattr(self, "_emptyAlerts", None)
+		if emptyAlerts is not None and emptyAlerts.nothingToSay(obj):
+			return
+		nextHandler()
+
 	def event_typedCharacter(self, obj, nextHandler, ch=None, **kwargs):
 		# The program typed a key: NVDA's debug log notes one typed late, or one before it never typed (see typingWatch).
 		try:
@@ -1134,6 +1197,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		jaws = "; ".join(j.displayName + ("" if j.programInstalled else ", settings only") for j in installations) or "JAWS is not installed"
 		running = " JAWS is running." if jawsDetect.isJawsRunning() else ""
 		ui.message(f"{jaws}.{running} {jawsDetect.windowsVersionDescription()}. NVDA {nvdaEnv.nvdaVersion()}.")
+
+	@script(description="Saves NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue")
+	def script_saveLogForIssue(self, gesture):
+		self.saveLogForIssue()
 
 	@script(description="Lists the commands of the JAWS Migration Assistant layer")
 	def script_layerHelp(self, gesture):

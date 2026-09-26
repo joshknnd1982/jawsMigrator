@@ -199,9 +199,12 @@ def installSpeech():
 	controlTypes = types.ModuleType("controlTypes")
 	controlTypes.Role = Labelled(
 		"Role",
-		{"RADIOBUTTON": "radio button", "BUTTON": "button", "HEADING": "heading", "LIST": "list", "LISTITEM": "list item", "TAB": "tab"},
+		{"RADIOBUTTON": "radio button", "BUTTON": "button", "HEADING": "heading", "LIST": "list", "LISTITEM": "list item", "TAB": "tab", "ALERT": "alert"},
 	)
-	controlTypes.State = Labelled("State", {"CHECKED": "checked", "EDITABLE": "editable", "VISITED": "visited", "INTERNAL_LINK": "same page"})
+	controlTypes.State = Labelled(
+		"State",
+		{"CHECKED": "checked", "EDITABLE": "editable", "VISITED": "visited", "INTERNAL_LINK": "same page", "FOCUSABLE": "focusable"},
+	)
 	controlTypes.OutputReason = enum.Enum("OutputReason", "FOCUS QUICKNAV CARET QUERY")
 	browseMode = types.ModuleType("browseMode")
 	browseMode.TextInfoQuickNavItem = TextInfoQuickNavItem
@@ -512,6 +515,22 @@ def main():
 		for event in ("gainFocus", "stateChange", "IA2AttributeChange", "nameChange"):
 			getattr(plugin, f"event_{event}")(control, lambda event=event: handled.append(event))
 		check(handled == ["gainFocus", "stateChange", "IA2AttributeChange", "nameChange"], f"NVDA handles every notice: {handled}")
+		# An alert with nothing in it isn't said, as JAWS says nothing for it, unless that is turned off; any other alert is.
+		from jawsMigrator import emptyAlerts
+
+		alertRole = sys.modules["controlTypes"].Role.ALERT
+		empty = types.SimpleNamespace(role=alertRole, name="", states=set(), children=[types.SimpleNamespace(name="", states=set(), children=[])])
+		saved = types.SimpleNamespace(role=alertRole, name="", states=set(), children=[types.SimpleNamespace(name="Saved", states=set(), children=[])])
+		alerts = []
+		for alert in (empty, saved, control):
+			plugin.event_alert(alert, lambda alert=alert: alerts.append(alert))
+		check(emptyAlerts.isRegistered() and plugin._emptyAlerts is emptyAlerts and alerts == [saved, control], "an alert with nothing in it isn't said")
+		jawsMigrator.state.set(emptyAlerts.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		plugin.event_alert(empty, lambda: alerts.append(empty))
+		check(not emptyAlerts.isRegistered() and alerts[-1] is empty, "turned off in the Settings panel, NVDA says it as it does")
+		jawsMigrator.state.set(emptyAlerts.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 

@@ -93,6 +93,8 @@ DEFAULTS = {
 	#: without visited, same page or "level 0"; NVDA says "no links" on a page without links, and moves browse mode's
 	#: cursor to the link it activates from the list (see linksList).
 	"linksLikeJaws": True,
+	#: An alert with nothing in it, which NVDA said as "alert" alone, isn't said, as JAWS says nothing for it (see emptyAlerts).
+	"quietEmptyAlerts": True,
 }
 
 _lock = threading.RLock()

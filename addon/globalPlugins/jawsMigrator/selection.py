@@ -108,8 +108,8 @@ def buildItems(plan) -> list[ImportItem]:
 		inUse = layout.id == plan.jawsKeyboardLayout
 		items.append(ImportItem(f"keyboard:layout:{layout.id}", KEYBOARD, f"{layout.name} keyboard layout: " + layout.describe(inUse).split(": ", 1)[1], default=inUse))
 	items.append(ImportItem("keyboard:quickNav", KEYBOARD, "JAWS quick navigation letters in browse mode"))
-	userRules = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.dictionaries if d.source.scope == "user")
-	sharedRules = sum(len(d.defaultEntries) + len(d.voiceEntries) for d in plan.dictionaries if d.source.scope == "shared")
+	userRules = sum(d.ruleCount() for d in plan.dictionaries if d.source.scope == "user")
+	sharedRules = sum(d.ruleCount() for d in plan.dictionaries if d.source.scope == "shared")
 	others = [
 		("other:dictionaries", f"Your dictionary rules ({userRules})", True, True),
 		("other:sharedDictionaries", f"Freedom Scientific's own dictionary rules ({sharedRules})", False, sharedRules > 0),

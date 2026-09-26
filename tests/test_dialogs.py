@@ -611,6 +611,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"NVDA goes to focus mode on tabs and toolbars again, at once",
 		)
 
+	def test_quietEmptyAlertsIsSavedAndApplied(self):
+		from jawsMigrator import emptyAlerts
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.quietEmptyAlerts,
+			'Don\'t say "alert" for an alert with nothing in it, as on GitHub pages',
+			emptyAlerts.STATE_KEY,
+			'NVDA says "alert" for an alert with nothing in it again, at once',
+		)
+
 	def test_version112sLevelFirstSettingIsGone(self):
 		from jawsMigrator import state
 

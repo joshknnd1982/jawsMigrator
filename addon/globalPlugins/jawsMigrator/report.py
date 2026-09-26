@@ -195,10 +195,14 @@ def build(plan, result) -> tuple[str, str]:
 	# Dictionaries
 	if plan.dictionaries:
 		b.heading(2, "Dictionary Manager")
-		b.paragraph(f"{result.dictionaryEntries} rules added to NVDA's default dictionary, {result.voiceDictionaryEntries} to the voice dictionary." + then)
+		b.paragraph(
+			f"{result.dictionaryEntries} rules added to NVDA's default dictionary, {result.voiceDictionaryEntries} to the voice dictionary, "
+			f"{result.appDictionaryEntries} to dictionaries NVDA uses only in one program, as JAWS does." + then,
+		)
 		for dictionaryPlan in plan.dictionaries:
 			skipped = collections.Counter(item.reason for item in dictionaryPlan.conversion.skipped)
-			b.paragraph(f"{dictionaryPlan.label}: {len(dictionaryPlan.defaultEntries) + len(dictionaryPlan.voiceEntries)} rules converted.")
+			where = f", used only in {', '.join(dictionaryPlan.programs)}" if dictionaryPlan.appEntries else ""
+			b.paragraph(f"{dictionaryPlan.label}: {dictionaryPlan.ruleCount()} rules converted{where}.")
 			b.items(f"{count} skipped: {reason}" for reason, count in skipped.most_common())
 
 	# Symbols
