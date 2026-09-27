@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.22
+- Version: 1.30
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.30](#whats-new-in-130)
 - [What's new in 1.29](#whats-new-in-129)
 - [What's new in 1.28](#whats-new-in-128)
 - [What's new in 1.27](#whats-new-in-127)
@@ -81,10 +82,16 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.29.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.30.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.30
+
+From the tester's reports:
+
+- **Insert+Control+V says the name and version of the program you are in, and pressed twice shows the version details, as in JAWS.** The tester wrote: "It should work like Jaws. insert control V says the product version. Pressing it twice brings up the following. You can arrow and copy any or all of what you need." NVDA has no such command; its own NVDA+Control+V opens its speech settings. Now, once, NVDA says what JAWS says, from the version information in the program's file, or from a Store app's package: "Microsoft Edge Version 154.0.4258.37". As JAWS's scripts do, File Explorer and the desktop give the version of Windows, and Word, Outlook, PowerPoint and Access say how Office was bought: "Microsoft Outlook Subscription Version 16.0.20326.20158". Twice, NVDA opens a window called Version Details: the arrow keys read it, Shift with the arrow keys selects, Control+C copies what you selected, the Copy button copies it all, and Escape closes it. Its lines are JAWS's, with NVDA's facts: the program's version, NVDA's version, the assistant's version, the NVDA configuration profile in use, the program's executable, NVDA's support for the program, ClassicSpeech's speech and sounds scheme, and the version of Windows as JAWS words it, "Microsoft Windows 11 Professional Version 25H2 (OS Build 26200.9457), System Type x64". Control+Insert+Windows+V, JAWS's key for it, copies the version details without opening anything, and NVDA says "Version Details Copied To Clipboard". NVDA+Shift+J, then V, Shift+V and Control+V do the same, wherever you are. A migration gives JAWS's keys to these commands. Insert+Control+V is NVDA's key for its speech settings, so it gets the program's version only when you let JAWS's keys take NVDA's; Control+Insert+Windows+V isn't NVDA's, so it always does. If you migrated your keystrokes before, the assistant adds these keys once, a little after NVDA first starts with this version, as your migration added its own: NVDA's settings are backed up first, NVDA says which keys now work, and a key you gave a command of your own in NVDA's Input Gestures dialog stays yours. See [Program version](#program-version).
 
 ## What's new in 1.29
 
@@ -484,6 +491,7 @@ The assistant reads JAWS's default key map and turns keystrokes for commands NVD
 
 - Reading the current line, word or character, Say All, and reading sentences.
 - The window title, status line, focus, time and date.
+- The program's name and version, and the version details (Insert+Control+V), with the assistant's own commands.
 - The elements list and the Find commands.
 - Reading table rows and columns.
 - Speech rate and punctuation level.
@@ -520,6 +528,7 @@ Layouts of other JAWS versions and languages are found the same way. Freedom Sci
 - JAWS quick navigation letters can be used in browse mode, so R moves to regions and A to radio buttons, as in JAWS.
 - No JAWS keystroke gets an NVDA command that passes the keystroke on to the program. In edit fields, NVDA's sentence commands do that, so Caps Lock+Y would type a Y; those JAWS keystrokes only work in browse mode.
 - Versions 1.0 to 1.2 added some keystrokes that do such things. Version 1.3 removes them once, a little after NVDA starts, after backing up NVDA's settings; keystrokes you added yourself are left alone.
+- When a new version of the assistant can do a JAWS command it couldn't before, such as Insert+Control+V in version 1.30, it adds that command's keys once, a little after NVDA starts, if you migrated your keystrokes before. They are decided as your migration decided its own: the same JAWS keyboard layouts, and NVDA's keys taken only if you let it take them. A key you gave a command of your own in NVDA's Input Gestures dialog stays yours. NVDA's settings are backed up first, and NVDA says which keys it added.
 - Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own. JAWS's speech history keys, Insert+Space, then H, Control+H or Shift+H, are NVDA+Shift+J, then the same key (see [Speech history](#speech-history)).
 - Application key maps and JAWS-only commands are listed too.
 
@@ -548,6 +557,9 @@ Press NVDA+Shift+J, then:
 | C | Install ClassicSpeech, or update it to its newest version |
 | I | Hear the JAWS, Windows and NVDA versions on this computer |
 | L | Save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue (see [Debug logs](#debug-logs)) |
+| V | Say the name and version of the program you are in, as JAWS's Insert+Control+V (see [Program version](#program-version)) |
+| Shift+V | Show the version details, to read and copy |
+| Control+V | Copy the version details to the clipboard |
 | H | Speech history: what NVDA said, in a window, on the most recent line, as JAWS's Insert+Space, H (see [Speech history](#speech-history)) |
 | Control+H | Copy the speech history to the clipboard, one line for each time NVDA spoke |
 | Shift+H | Clear the speech history |
@@ -568,6 +580,32 @@ As JAWS does, the assistant keeps the last 500 things NVDA said, one line for ea
 To show what NVDA says in a GitHub issue: press NVDA+Shift+J, then Shift+H. Do what makes NVDA say it. Then press NVDA+Shift+J, then Control+H, and paste into the comment box with Control+V.
 
 What is kept is what NVDA sends to the synthesizer, after add-ons such as ClassicSpeech changed it and before speech dictionaries. So it is what you heard, with the parts of each thing two spaces apart, as NVDA's Speech Viewer shows them. While the Speech History window is in front, what NVDA says in it isn't kept, so reading the history doesn't change it. The history is kept in memory only, never on disk, and is gone when NVDA exits or restarts. The Speech History add-on, if you have it, keeps working as before; this doesn't need it. To stop keeping a speech history, uncheck "Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history" in NVDA's Settings, JAWS Migration Assistant; what was kept is forgotten at once. A migration takes this setting from JAWS's own option for its speech history (`SpeechHistory` in Default.jcf, on as JAWS comes).
+
+### Program version
+
+As JAWS's Insert+Control+V does:
+
+- **Once**, NVDA says the name and version of the program you are in, as JAWS says them: the name and version in the program's file, or a Store app's package, such as "Microsoft Edge Version 154.0.4258.37". In File Explorer and on the desktop, it is the version of Windows. Word, Outlook, PowerPoint and Access are named as JAWS names them, with "Retail" or "Subscription": "Microsoft Outlook Subscription Version 16.0.20326.20158".
+- **Twice**, NVDA shows the version details in a window called Version Details, which it reads in browse mode. The arrow keys read it, Shift with the arrow keys selects, Control+C copies what you selected, the Copy button copies it all, and Escape closes it.
+- **Control+Insert+Windows+V** copies the version details to the clipboard without opening anything, one line each, and NVDA says "Version Details Copied To Clipboard".
+
+The version details have JAWS's lines, with NVDA's facts. In Outlook they look like this:
+
+```
+Version Details Information:
+Microsoft Outlook Subscription Version 16.0.20326.20158
+NVDA version 2026.2 (2026.2.0.57664)
+JAWS Migration Assistant version 1.30
+Current settings: normal configuration.
+Current application: OUTLOOK.EXE.
+Active configuration: outlook.
+Current Speech and Sounds Scheme: Classic.
+Microsoft Windows 11 Professional Version 25H2 (OS Build 26200.9457), System Type x64
+```
+
+NVDA's version and the assistant's are where JAWS has its own version and its scripts' revision; NVDA has no serial number. Current settings is the NVDA configuration profile in use. Active configuration is NVDA's support for the program, as NVDA+Control+F1 names it, or Default where NVDA has none. The scheme is ClassicSpeech's, and is left out when ClassicSpeech isn't running or its schemes are off. The version of Windows is read from the registry as JAWS reads it.
+
+After NVDA+Shift+J, V says the version, Shift+V shows the version details, and Control+V copies them. A migration gives JAWS's keys to these commands, and Insert+Control+V, NVDA's key for its speech settings, only when you let JAWS's keys take NVDA's (see [Everything else about keystrokes](#everything-else-about-keystrokes)). To put them on other keys, find them under JAWS Migration Assistant in NVDA's Input Gestures dialog.
 
 The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open the debug log, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
 

@@ -416,6 +416,11 @@ def main():
 			== ("showSpeechHistory", "copySpeechHistory", "clearSpeechHistory", "layerHelp", "layerHelp"),
 			"NVDA+Shift+J then H, Control+H and Shift+H, as after JAWS's Insert+Space, and ? or F1 for the layer's help",
 		)
+		check(
+			tuple(layerKeys.get(key) for key in ("kb:v", "kb:shift+v", "kb:control+v")) == ("sayAppVersion", "showVersionDetails", "copyVersionDetails")
+			and all(callable(getattr(plugin, f"script_{name}", None)) for name in ("sayAppVersion", "showVersionDetails", "copyVersionDetails")),
+			"NVDA+Shift+J then V, Shift+V and Control+V: the program's version and the version details, as JAWS's Insert+Control+V",
+		)
 		plugin.showSpeechHistory()
 		viewer = speechHistory._viewer
 		check(viewer is not None and viewer.GetTitle() == "Speech History" and viewer.text.GetValue() == "Items View  list", "H shows it")

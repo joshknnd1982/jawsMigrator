@@ -33,6 +33,7 @@ from . import (
 	jawsIndex,
 	keyPlan,
 	managers,
+	newKeys,
 	nvdaEnv,
 	schemeMap,
 	settingsMap,
@@ -1187,6 +1188,8 @@ class Migration:
 			# After the gestures, so the entries remember the input gestures the migration left in place.
 			updates[insertKeys.STATE_KEY] = insertKeys.toState(plan.keys.insertKeys, insertKeys.userScripts)
 			updates[insertKeys.VERSION_KEY] = insertKeys.VERSION
+		# This migration planned the keystrokes of every JAWS command the assistant knows: none is left for newKeys.
+		updates[newKeys.STATE_KEY] = sorted(newKeys.NEW_SCRIPTS)
 		updates["lastMigration"] = {
 			"when": datetime.datetime.now().isoformat(timespec="seconds"),
 			"jaws": plan.index.jaws.displayName,

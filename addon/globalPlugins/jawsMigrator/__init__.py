@@ -58,7 +58,12 @@ NVDA's debug log says when a program types a key late or not at all (see
 typingWatch). NVDA+Shift+J, then L saves NVDA's log as a zip file small enough
 to attach to a GitHub issue (see logZip), and NVDA+Shift+J, then H shows what
 NVDA said, as JAWS's speech history does, where Control+H copies it and Shift+H
-clears it (see speechHistory).
+clears it (see speechHistory). JAWS's Insert+Control+V says the name and version
+of the program you are in, and pressed twice shows the version details to read
+and copy, with a migration's keystrokes or NVDA+Shift+J, then V (see appVersion);
+the keystrokes of such JAWS commands, which the assistant learned after a
+migration, are added once after an update, as that migration added its own (see
+newKeys).
 """
 
 from __future__ import annotations
@@ -104,6 +109,10 @@ LAYER_GESTURES = {
 	"kb:u": "checkForUpdates",
 	"kb:i": "systemSummary",
 	"kb:l": "saveLogForIssue",
+	# JAWS's Insert+Control+V, once and twice, and Control+Insert+Windows+V.
+	"kb:v": "sayAppVersion",
+	"kb:shift+v": "showVersionDetails",
+	"kb:control+v": "copyVersionDetails",
 	# JAWS's own keys after Insert+Space (Default.JKM): H, Control+H and Shift+H for the speech history, and ? for help.
 	"kb:h": "showSpeechHistory",
 	"kb:control+h": "copySpeechHistory",
@@ -127,6 +136,9 @@ LAYER_HELP = (
 	"U, check for updates. "
 	"I, JAWS, Windows and NVDA versions on this computer. "
 	"L, save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue. "
+	"V, the name and version of the program you are in, as JAWS's Insert+Control+V. "
+	"Shift+V, the version details, to read and copy. "
+	"Control+V, copy the version details to the clipboard. "
 	"H, what NVDA said, the most recent last, as JAWS's speech history. "
 	"Control+H, copy the speech history to the clipboard. "
 	"Shift+H, clear the speech history. "
@@ -803,7 +815,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._busy:
 			self._repairTimer = wx.CallLater(60000, self._repairVoices)
 			return
-		from . import dictRepair, gestureRepair, migrator, rateRepair, symbolRepair
+		from . import dictRepair, gestureRepair, migrator, newKeys, rateRepair, symbolRepair
 
 		def insertKeysRepair(announce, done=None):
 			def reload():
@@ -818,6 +830,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("the repair of dictionary rules", dictRepair.repairOnce),
 			("the repair of keystrokes", gestureRepair.repairOnce),
 			("the Insert keystrokes of the JAWS Laptop layout", insertKeysRepair),
+			# JAWS commands the assistant learned since the last migration, such as Insert+Control+V (see newKeys).
+			("the keystrokes of JAWS commands new since the last migration", lambda announce, done=None: newKeys.addOnce(self._jawsKeymapFiles, announce, done)),
 			("the repair of the Eloquence rate", lambda announce, done=None: rateRepair.repairOnce(announce, migrator._backupFirst, done)),
 			("the repair of punctuation symbols for spaces and line breaks", symbolRepair.repairOnce),
 		]
@@ -917,6 +931,36 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			speechHistory.clearAndSay()
 		except Exception:
 			debugLog.error("could not clear the speech history")
+
+	def sayAppVersion(self, repeatCount: int = 0):
+		# JAWS's Insert+Control+V: once, the program's name and version; twice, the version details (see appVersion).
+		try:
+			from . import appVersion
+
+			appVersion.sayOrShow(repeatCount)
+		except Exception:
+			debugLog.error("could not say the program's version")
+
+	def showVersionDetails(self):
+		if self._secure:
+			return
+		try:
+			from . import appVersion
+
+			appVersion.showDetails()
+		except Exception:
+			debugLog.error("could not show the version details")
+
+	def copyVersionDetails(self):
+		# JAWS's Control+Insert+Windows+V.
+		if self._secure:
+			return
+		try:
+			from . import appVersion
+
+			appVersion.copyDetails()
+		except Exception:
+			debugLog.error("could not copy the version details")
 
 	def _activateProfileAtStartup(self):
 		try:
@@ -1500,6 +1544,25 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	@script(description="Clears the speech history, as JAWS's Insert+Space, Shift+H does")
 	def script_clearSpeechHistory(self, gesture):
 		self.clearSpeechHistory()
+
+	@script(
+		description=(
+			"Says the name and version of the program you are in; pressed twice, shows the version details, to read and copy, "
+			"as JAWS's Insert+Control+V does"
+		),
+	)
+	def script_sayAppVersion(self, gesture):
+		# On a secure screen NVDA can show no window, so twice says the version again.
+		repeatCount = scriptHandler.getLastScriptRepeatCount()
+		self.sayAppVersion(0 if self._secure else repeatCount)
+
+	@script(description="Shows the version details of the program you are in, NVDA and Windows, to read and copy, as JAWS does")
+	def script_showVersionDetails(self, gesture):
+		self.showVersionDetails()
+
+	@script(description="Copies the version details of the program you are in, NVDA and Windows to the clipboard, as JAWS's Control+Insert+Windows+V does")
+	def script_copyVersionDetails(self, gesture):
+		self.copyVersionDetails()
 
 	@script(description="Lists the commands of the JAWS Migration Assistant layer")
 	def script_layerHelp(self, gesture):

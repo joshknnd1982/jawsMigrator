@@ -53,6 +53,9 @@ DEFAULTS = {
 	"insertKeys": {},
 	#: 1 once the Insert keystrokes of a migration were worked out (see insertKeys.repairOnce).
 	"insertKeysVersion": 0,
+	#: The JAWS commands learned since the first migrations whose keystrokes were added after an update, or needed none,
+	#: such as SayAppVersion (see newKeys).
+	"newKeysAdded": [],
 	#: The version of the one-time repair of Eloquence rates from versions 1.0 to 1.3 (see rateRepair).
 	"eloquenceRateRepaired": 0,
 	#: The version of the one-time repair of symbols for spaces and line breaks from versions 1.0 to 1.9 (see symbolRepair).
