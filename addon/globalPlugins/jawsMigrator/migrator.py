@@ -1190,6 +1190,7 @@ class Migration:
 			updates[insertKeys.VERSION_KEY] = insertKeys.VERSION
 		# This migration planned the keystrokes of every JAWS command the assistant knows: none is left for newKeys.
 		updates[newKeys.STATE_KEY] = sorted(newKeys.NEW_SCRIPTS)
+		updates[newKeys.RECHECK_KEY] = True
 		updates["lastMigration"] = {
 			"when": datetime.datetime.now().isoformat(timespec="seconds"),
 			"jaws": plan.index.jaws.displayName,

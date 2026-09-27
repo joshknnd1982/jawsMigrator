@@ -454,6 +454,9 @@ def _takenCommands(binding: tuple, boundScripts, assistant: set) -> dict:
 		source = entry[4] if len(entry) > 4 else "class"
 		if source == "user" and (normalizeGesture(identifier), entry[0], entry[1], entry[2]) in assistant:
 			continue
+		if source == keyPlan.INACTIVE:
+			# NVDA passes over it: its add-on is off.
+			continue
 		others.append((entry[0], entry[1], entry[2], keyPlan._identifierLayout(identifier), source))
 	for layout in _gestureLayouts(gesture):
 		here = [entry for entry in others if entry[3] in (None, layout)]

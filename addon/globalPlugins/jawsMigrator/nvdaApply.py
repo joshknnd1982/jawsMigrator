@@ -654,6 +654,7 @@ def gestureBoundScripts(gesture: str) -> list:
 	identifier of that binding (a ``kb(laptop):`` one only works in NVDA's laptop keyboard layout);
 	``source`` is ``"user"`` (gestures.ini), ``"locale"``, ``"class"`` (the class binds it itself,
 	named after the class that does) or ``"addon"`` (another add-on's global plugin binds it).
+	A gestures.ini binding NVDA passes over is ``"inactive"`` (see ``_inactiveBinding``).
 	``script`` is None where a gesture map unbinds the keystroke for that class; keyPlan leaves out
 	what is unbound.
 	"""
@@ -664,7 +665,9 @@ def gestureBoundScripts(gesture: str) -> list:
 		try:
 			for identifier, scripts in getattr(gestureMap, "_map", {}).items():
 				if _sameKeys(identifier, gesture):
-					results.extend((module, className, script, identifier, source) for module, className, script in scripts)
+					for module, className, script in scripts:
+						kind = "inactive" if source == "user" and _inactiveBinding(module, className, script) else source
+						results.append((module, className, script, identifier, kind))
 		except Exception:
 			pass
 	seen = set()
@@ -688,6 +691,39 @@ def gestureBoundScripts(gesture: str) -> list:
 			seen.add(entry)
 			results.append(entry)
 	return results
+
+
+def _inactiveBinding(module: str, className: str, script) -> bool:
+	"""Whether NVDA passes over a gestures.ini binding for another add-on's global plugin.
+
+	NVDA looks a binding's class up only among the modules it has loaded (GlobalGestureMap.getScriptsForGesture), asks
+	a global plugin's class only of the running plugins, and goes on when the class has no such script
+	(scriptHandler._getObjScript). So a binding for the global plugin of an add-on that is off or gone never runs:
+	NVDA+Control+V bound to Say Product Name and Version, turned off, opens NVDA's speech settings again (issue 29).
+	Other classes, such as app modules, load later; their bindings count as they are.
+	"""
+	import sys
+
+	from . import jawsKeyMap
+
+	module = str(module or "")
+	if module != "globalPlugins" and not module.startswith("globalPlugins.") or module in (__package__, jawsKeyMap.ASSISTANT_MODULE):
+		return False
+	try:
+		import globalPluginHandler
+
+		plugins = list(globalPluginHandler.runningPlugins)
+	except Exception:
+		return False
+	cls = getattr(sys.modules.get(module), str(className or ""), None)
+	if not isinstance(cls, type):
+		return True
+	running = [plugin for plugin in plugins if isinstance(plugin, cls)]
+	if not running:
+		return True
+	if script is None or str(script).startswith("kb:"):
+		return False
+	return not any(callable(getattr(plugin, f"script_{script}", None)) for plugin in running)
 
 
 def _addonPluginGestures(gesture: str) -> list:

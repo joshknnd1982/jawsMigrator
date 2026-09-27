@@ -56,6 +56,9 @@ DEFAULTS = {
 	#: The JAWS commands learned since the first migrations whose keystrokes were added after an update, or needed none,
 	#: such as SayAppVersion (see newKeys).
 	"newKeysAdded": [],
+	#: True once version 1.32 or later planned those commands again, for a keystroke gestures.ini gives to an add-on that
+	#: is off (see newKeys).
+	"newKeysRechecked": False,
 	#: The version of the one-time repair of Eloquence rates from versions 1.0 to 1.3 (see rateRepair).
 	"eloquenceRateRepaired": 0,
 	#: The version of the one-time repair of symbols for spaces and line breaks from versions 1.0 to 1.9 (see symbolRepair).

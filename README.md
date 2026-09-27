@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.31
+- Version: 1.32
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.32](#whats-new-in-132)
 - [What's new in 1.31](#whats-new-in-131)
 - [What's new in 1.30](#whats-new-in-130)
 - [What's new in 1.29](#whats-new-in-129)
@@ -83,10 +84,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.31.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.32.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.32
+
+From the tester's report:
+
+- **Insert+Control+V says the program's version where an add-on that is turned off had the key.** After updating to 1.30, the tester wrote: "It has been more then a minute and insert control V still brings up NVDA speech settings." Their log showed why. The tester's NVDA input gestures give Insert+Control+V to the add-on Say Product Name and Version, which is turned off. NVDA passes over a key given to an add-on that is off, so the key opened NVDA's speech settings. But 1.30 took it for a key the tester had chosen for something else, left it alone, and added only Control+Insert+Windows+V. Now a key given to an add-on that is off or removed doesn't count as taken, in a migration or when keys are added after an update. While that add-on was on, the key didn't run NVDA's own command, so the JAWS command takes it even if you chose to keep NVDA's keys. Where 1.30 or 1.31 left a key out this way, the assistant adds it once, a little after NVDA starts, after backing up NVDA's settings, and NVDA says: "1 more JAWS keystroke works in NVDA. NVDA+control+v, the name and version of the program you are in; twice, the version details." Keys added before, and keys you have changed since, stay as they are. The add-on's own line in gestures.ini is left alone; if you turn that add-on on again, NVDA runs whichever of the two commands it asks first.
+- **Tested with NVDA's own code for keys.** NVDA 2026.2's own code that finds the command a key runs (scriptHandler and its gesture map) ran with the tester's gestures.ini line and NVDA's laptop keyboard layout, as in the tester's log. Before the change, Insert+Control+V opened NVDA's speech settings, and the assistant left the key out in the very words of the tester's log. After it, the key was added once, one press said "Microsoft Outlook Subscription Version 16.0.20326.20158", and two opened Version Details, whether or not the migration let JAWS's keys take NVDA's. With the add-on turned on, its key still runs, and the assistant leaves it alone.
 
 ## What's new in 1.31
 
@@ -531,13 +539,14 @@ Layouts of other JAWS versions and languages are found the same way. Freedom Sci
 - On the Laptop layout, where Caps Lock is the JAWS key, Caps Lock keystrokes decide what NVDA+key does in gestures.ini, because NVDA calls both keys NVDA+key there. For example, Caps Lock+H and Caps Lock+J don't open NVDA's Input Gestures dialog or menu.
 - Where JAWS's Laptop layout gives the Insert keystroke another command, the assistant runs it itself when you hold Insert, as NVDA can tell which key you hold. With JAWS 2026: Insert+J opens the NVDA menu, and Insert+H and Insert+8 open NVDA's Input Gestures dialog. The report lists them. Assign the keystroke to something else in NVDA's Input Gestures dialog and Insert runs your choice.
 - Keystrokes that other add-ons use count as taken: NVDA asks add-ons first, so a gesture on the same keystroke would never run. Choosing to use the JAWS command anyway also takes the keystroke from the add-on.
+- A keystroke your input gestures give to an add-on that is turned off or removed doesn't count as taken, since NVDA passes over it. While that add-on was on, the keystroke didn't run NVDA's own command, so the JAWS command takes it even if NVDA's keystrokes stay NVDA's. The add-on's line stays in gestures.ini.
 - The report and the wizard say when a keystroke only works in one of NVDA's keyboard layouts, such as "NVDA+j, only in NVDA's desktop keyboard layout".
 - Keystrokes NVDA already uses for the same command are left alone.
 - Keystrokes NVDA uses for something else stay NVDA's, unless you choose otherwise. That includes JAWS's browse mode keystrokes such as Control+Insert+R: NVDA+Control+R still reloads NVDA's settings.
 - JAWS quick navigation letters can be used in browse mode, so R moves to regions and A to radio buttons, as in JAWS.
 - No JAWS keystroke gets an NVDA command that passes the keystroke on to the program. In edit fields, NVDA's sentence commands do that, so Caps Lock+Y would type a Y; those JAWS keystrokes only work in browse mode.
 - Versions 1.0 to 1.2 added some keystrokes that do such things. Version 1.3 removes them once, a little after NVDA starts, after backing up NVDA's settings; keystrokes you added yourself are left alone.
-- When a new version of the assistant can do a JAWS command it couldn't before, such as Insert+Control+V in version 1.30, it adds that command's keys once, a little after NVDA starts, if you migrated your keystrokes before. They are decided as your migration decided its own: the same JAWS keyboard layouts, and NVDA's keys taken only if you let it take them. A key you gave a command of your own in NVDA's Input Gestures dialog stays yours. NVDA's settings are backed up first, and NVDA says which keys it added.
+- When a new version of the assistant can do a JAWS command it couldn't before, such as Insert+Control+V in version 1.30, it adds that command's keys once, a little after NVDA starts, if you migrated your keystrokes before. They are decided as your migration decided its own: the same JAWS keyboard layouts, and NVDA's keys taken only if you let it take them. A key you gave a command of your own in NVDA's Input Gestures dialog stays yours, unless that command belongs to an add-on that is turned off. NVDA's settings are backed up first, and NVDA says which keys it added.
 - Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own. JAWS's speech history keys, Insert+Space, then H, Control+H or Shift+H, are NVDA+Shift+J, then the same key (see [Speech history](#speech-history)).
 - Application key maps and JAWS-only commands are listed too.
 
@@ -604,7 +613,7 @@ The version details have JAWS's lines, with NVDA's facts. In Outlook they look l
 Version Details Information:
 Microsoft Outlook Subscription Version 16.0.20326.20158
 NVDA version 2026.2 (2026.2.0.57664)
-JAWS Migration Assistant version 1.31
+JAWS Migration Assistant version 1.32
 Current settings: normal configuration.
 Current application: OUTLOOK.EXE.
 Active configuration: outlook.

@@ -239,6 +239,11 @@ def _sectionsInOrder(jkm: jawsFiles.IniFile, current: str) -> list:
 NVDA_LAYOUTS = ("desktop", "laptop")
 #: The class NVDA asks last for a script, after browse mode documents and the focused control.
 _GLOBAL_COMMANDS = ("globalCommands", "GlobalCommands")
+#: The source of a gestures.ini binding NVDA passes over: for the global plugin of an add-on that is off or gone (see
+#: ``nvdaApply._inactiveBinding``). It never runs, so it doesn't keep a keystroke. While it ran, NVDA asked it before
+#: anything else, so the keystroke wasn't NVDA's own command for this user: a JAWS command may take it back from NVDA's
+#: even where NVDA's keystrokes are kept (issue 29: NVDA+Control+V, given to Say Product Name and Version, turned off).
+INACTIVE = "inactive"
 
 
 @dataclass
@@ -298,8 +303,8 @@ class _Bound:
 	script: str | None
 	#: The NVDA keyboard layout of the binding's gesture, None for both.
 	layout: str | None
-	#: ``class`` (the class binds it itself), ``user`` (gestures.ini), ``locale``, or ``addon`` (another
-	#: add-on's global plugin binds it; NVDA asks those before anything else).
+	#: ``class`` (the class binds it itself), ``user`` (gestures.ini), ``locale``, ``addon`` (another
+	#: add-on's global plugin binds it; NVDA asks those before anything else), or ``inactive`` (see INACTIVE).
 	source: str
 
 	@property
@@ -363,6 +368,9 @@ def _userEntryWins(entry: _Bound, target: tuple) -> bool:
 def _decide(target: tuple, entries: list, layout: str, overrideAllowed: bool) -> _Decision:
 	"""What to do with ``target`` in one NVDA keyboard layout, given what is bound there already."""
 	here = [entry for entry in entries if entry.layout in (None, layout)]
+	# An inactive unbinding took the keystroke from an add-on, not from NVDA.
+	inactive = [entry for entry in here if entry.source == INACTIVE and entry.script is not None]
+	here = [entry for entry in here if entry.source != INACTIVE]
 	unbound = {entry.location for entry in here if entry.script is None}
 	current = [entry for entry in here if entry.script is not None and entry.location not in unbound]
 	if any((entry.module, entry.className, entry.script) == tuple(target[:3]) for entry in current):
@@ -372,7 +380,8 @@ def _decide(target: tuple, entries: list, layout: str, overrideAllowed: bool) ->
 		return _Decision("blocked", winners)
 	if not current:
 		return _Decision("bind")
-	if not overrideAllowed:
+	# A running add-on's keystroke is still its own; NVDA's own under an inactive binding was taken from NVDA before.
+	if not overrideAllowed and not (inactive and all(entry.source != "addon" for entry in current)):
 		return _Decision("conflict", current)
 	unbind = []
 	if tuple(target[:2]) == _GLOBAL_COMMANDS:
@@ -608,7 +617,7 @@ def _planInsertKey(plan, line, name, winner, boundScripts, scriptExists, overrid
 		skip(f"this NVDA version has no {line.targets[0][2]} command", SKIP_NO_EQUIVALENT)
 		return
 	gesture = line.gesture if line.prefix == f"kb({name})" else f"kb({name}):{line.main}"
-	entries = [entry for entry in _boundEntries(boundScripts, gesture) if entry.layout in (None, name)]
+	entries = [entry for entry in _boundEntries(boundScripts, gesture) if entry.layout in (None, name) and entry.source != INACTIVE]
 	unbound = {entry.location for entry in entries if entry.script is None}
 	current = [entry for entry in entries if entry.script is not None and entry.location not in unbound]
 	winnerTargets = {tuple(winnerTarget[:3]) for winnerTarget in winner.targets}

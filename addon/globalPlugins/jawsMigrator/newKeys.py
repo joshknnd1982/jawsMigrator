@@ -19,6 +19,12 @@ backed up first, the debug log lists what was added and what wasn't, and NVDA sa
 
 Without a migration of keystrokes, nothing is added: a migration adds them with the others. A migration made by this
 version counts them as done (see migrator).
+
+A binding in gestures.ini for an add-on that is off never runs: NVDA passes over it (see keyPlan.INACTIVE). Versions 1.30
+and 1.31 kept such a keystroke as yours all the same. The tester had given Insert+Control+V to Say Product Name and
+Version and turned that add-on off, so the key still opened NVDA's speech settings (issue 29). So once after the update to
+1.32, the commands those versions planned (RECHECKED) are planned again, and a keystroke is added only where such a
+binding still holds it. What else they left out stays as they decided, and may since be yours.
 """
 
 from __future__ import annotations
@@ -36,6 +42,10 @@ NEW_SCRIPTS = {
 }
 #: The JAWS commands of NEW_SCRIPTS that are done: their keystrokes added, or none to add (state.json).
 STATE_KEY = "newKeysAdded"
+#: The commands versions 1.30 and 1.31 planned while an inactive binding still kept a keystroke (see the module's help).
+RECHECKED = frozenset({"sayappversion", "showversiondetails", "putversiondetailsonclipboard"})
+#: True once RECHECKED were planned by this version, after an update or in a migration (state.json).
+RECHECK_KEY = "newKeysRechecked"
 
 
 def doneScripts(stateData) -> set:
@@ -49,15 +59,39 @@ def pending(stateData) -> list:
 	return sorted(name for name in NEW_SCRIPTS if name not in finished)
 
 
+def toRecheck(stateData) -> list:
+	"""The commands 1.30 or 1.31 planned that are still to be planned again (see the module's help)."""
+	if isinstance(stateData, dict) and stateData.get(RECHECK_KEY):
+		return []
+	return sorted(RECHECKED & doneScripts(stateData))
+
+
 def _markDone(scripts) -> None:
 	from . import state
 
 	state.set(STATE_KEY, sorted(doneScripts(state.load()) | set(scripts)))
+	state.set(RECHECK_KEY, True)
 
 
-def planNewKeys(jkm, jawsLayout: str, migration: dict, scripts, boundScripts=None, scriptExists=None, nvdaLayout=None) -> keyPlan.KeyPlan:
+def passedOver(boundScripts, gesture: str) -> list:
+	"""``module.class.script`` of the gestures.ini bindings of ``gesture``'s keys that NVDA passes over (keyPlan.INACTIVE)."""
+	layout = keyPlan._identifierLayout(gesture)
+	found = []
+	for entry in (boundScripts(gesture) or ()) if boundScripts is not None else ():
+		entry = tuple(entry)
+		if len(entry) > 4 and entry[4] == keyPlan.INACTIVE and entry[2] and keyPlan._identifierLayout(entry[3]) in (None, layout):
+			name = f"{entry[0]}.{entry[1]}.{entry[2]}"
+			if name not in found:
+				found.append(name)
+	return found
+
+
+def planNewKeys(jkm, jawsLayout: str, migration: dict, scripts, boundScripts=None, scriptExists=None, nvdaLayout=None, again=()) -> keyPlan.KeyPlan:
 	"""The keystrokes of the JAWS commands ``scripts``, planned as the last migration (``migration``, as state.json has
-	it) planned its own: its JAWS keyboard layouts and its choice about NVDA's own keystrokes."""
+	it) planned its own: its JAWS keyboard layouts and its choice about NVDA's own keystrokes.
+
+	The commands in ``again`` were planned before, by 1.30 or 1.31: only a keystroke an inactive binding holds is added
+	for them, and nothing else is listed as left out, as it was then (see the module's help)."""
 	plan = keyPlan.planKeys(
 		jkm,
 		jawsLayout,
@@ -74,6 +108,14 @@ def planNewKeys(jkm, jawsLayout: str, migration: dict, scripts, boundScripts=Non
 
 	plan.bindings = [binding for binding in plan.bindings if isWanted(binding)]
 	plan.skipped = [item for item in plan.skipped if isWanted(item)]
+	again = {str(name).lower() for name in again}
+	if again:
+
+		def isAgain(item) -> bool:
+			return jawsKeyMap.normalizeScriptName(item.jawsScript) in again
+
+		plan.bindings = [binding for binding in plan.bindings if not isAgain(binding) or passedOver(boundScripts, binding.gesture)]
+		plan.skipped = [item for item in plan.skipped if not isAgain(item)]
 	if boundScripts is not None:
 		# A migration may take a keystroke from a command of your own, when you let it take NVDA's; you gave this one yours
 		# after that migration, so it stays yours.
@@ -126,8 +168,10 @@ def _start(keymapFiles, announce, finished) -> bool:
 	"""Start adding; True when a backup started in the background, which calls ``finished`` at its end."""
 	from . import state
 
-	todo = pending(state.load())
-	if not todo or not nvdaEnv.shouldWriteToDisk():
+	stateData = state.load()
+	todo = pending(stateData)
+	again = toRecheck(stateData)
+	if not (todo or again) or not nvdaEnv.shouldWriteToDisk():
 		return False
 	migration = state.get("lastMigration")
 	if not isinstance(migration, dict) or not migration.get("keyboardLayouts"):
@@ -144,13 +188,17 @@ def _start(keymapFiles, announce, finished) -> bool:
 
 	from . import nvdaApply
 
-	plan = planNewKeys(jkm, jawsLayout, migration, todo, nvdaApply.gestureBoundScripts, nvdaApply.scriptExists, config.conf["keyboard"]["keyboardLayout"])
+	boundScripts = nvdaApply.gestureBoundScripts
+	plan = planNewKeys(jkm, jawsLayout, migration, todo + again, boundScripts, nvdaApply.scriptExists, config.conf["keyboard"]["keyboardLayout"], again)
 	debugLog.section("Keystrokes of JAWS commands new since the last migration")
+	if again:
+		debugLog.note(f"planned again, for a keystroke gestures.ini gives to an add-on that is off: {', '.join(again)}")
 	for item in plan.skipped:
 		debugLog.note(f"not added: {item.jawsKey}={item.jawsScript} [{item.section}]: {item.reason}")
 	if not plan.bindings:
 		_markDone(todo)
 		return False
+	passed = {id(binding): passedOver(boundScripts, binding.gesture) for binding in plan.bindings}
 
 	def finish(outcome):
 		try:
@@ -164,7 +212,10 @@ def _start(keymapFiles, announce, finished) -> bool:
 			return
 		added, failed = nvdaApply.addGestures(plan.bindings)
 		for binding in plan.bindings:
-			debugLog.note(f"{binding.gesture} -> {binding.module}.{binding.className}.{binding.script} (JAWS {binding.jawsKey}={binding.jawsScript}, [{binding.section}])")
+			text = f"{binding.gesture} -> {binding.module}.{binding.className}.{binding.script} (JAWS {binding.jawsKey}={binding.jawsScript}, [{binding.section}])"
+			if passed.get(id(binding)):
+				text += f"; gestures.ini also gives it to {', '.join(passed[id(binding)])}, which NVDA passes over: its add-on is off or removed"
+			debugLog.note(text)
 		for binding, error in failed:
 			debugLog.note(f"not added: {binding.gesture}: {error}")
 		if failed:
