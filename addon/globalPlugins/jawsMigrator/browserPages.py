@@ -31,12 +31,29 @@ it, by its title, without "document" or its address; and Edge's frame around the
 says with them (a state, or a description) is said as NVDA says it. A page without a title, NVDA+Tab and every other
 program are as before. Braille is unchanged. It works while the assistant runs, unless it is turned off in NVDA's
 Settings, JAWS Migration Assistant.
+
+With 1.31 the tester switched to Edge with Alt+Tab (issue 30 again), and NVDA still said "document" after a GitHub
+page's title. The focus was in the page's comment box, so NVDA said the page as a place the focus is in (reason
+FOCUSENTERED, from NVDAObject.event_focusEntered), not as the focus, which is all 1.31 looked at. JAWS said the title
+alone, then "MainRegion", "new Comment group" and the focused button. Now a page is said by its title for either
+reason, when it is the page itself (its tree interceptor's root), not a frame in it.
+
+When the tester chose their reddit tab in Alt+Tab, Edge first put the focus back where it was in the tab it was
+leaving, the GitHub comment box, then moved it to the reddit page. NVDA said the window, the GitHub page, "main
+landmark", "new Comment grouping" and the comment box, all of it twice, then the reddit page's title twice. JAWS said
+only the reddit page's title. NVDA's speech manager drops what NVDA says for the focus once the focus has moved on
+(eventHandler.FocusLossCancellableSpeechCommand), but not what it says for the places the focus is in: those stay
+worth saying unless they had the focus themselves. So in Edge and Chrome, what NVDA says for a place the focus is in
+now comes with a command of the assistant's own that drops it, if NVDA hasn't said it yet, once the focus isn't in
+that place any more. And a window's name or a page's title isn't said again while NVDA is still saying it.
 """
 
 from __future__ import annotations
 
 import functools
 import threading
+
+from . import speechQueue
 
 #: The assistant's setting (state.json) that turns this on or off.
 STATE_KEY = "sayBrowserPagesAsJaws"
@@ -73,6 +90,12 @@ _documentRole = None
 _focus = None
 _focusEntered = None
 _query = None
+#: The window's name and the page's title NVDA was last asked to say, with the commands NVDA's speech manager keeps
+#: with them until they are said: {WINDOW or PAGE: (name, commands)}.
+_lastSaid: dict = {}
+#: The assistant's command that drops what NVDA says for a place the focus is in, once the focus has left it: a class
+#: made the first time it is needed, from NVDA's speech.commands._CancellableSpeechCommand.
+_whileInItClass = None
 
 
 def _log():
@@ -138,6 +161,7 @@ def unregister() -> None:
 			except Exception:
 				pass
 		_replaced.clear()
+	_lastSaid.clear()
 
 
 def isRegistered() -> bool:
@@ -189,11 +213,22 @@ def _uiaClassName(obj) -> str | None:
 		return None
 
 
+def inBrowser(obj) -> bool:
+	"""Whether ``obj`` is in Edge or Chrome."""
+	return getattr(getattr(obj, "appModule", None), "appName", None) in BROWSERS
+
+
+def _isPageItself(obj) -> bool:
+	"""Whether ``obj``, a document, is the page itself (its tree interceptor's root), not a frame in the page."""
+	treeInterceptor = getattr(obj, "treeInterceptor", None)
+	root = getattr(treeInterceptor, "rootNVDAObject", None)
+	return root is not None and (root is obj or root == obj)
+
+
 def kindOf(obj, reason) -> str | None:
 	"""What NVDA is about to say for ``reason``: an Edge or Chrome window (WINDOW), Edge's frame around a page (FRAME),
 	a page (PAGE), or None for anything else, which NVDA says as it does."""
-	appModule = getattr(obj, "appModule", None)
-	if getattr(appModule, "appName", None) not in BROWSERS:
+	if not inBrowser(obj):
 		return None
 	role = obj.role
 	if role == _windowRole:
@@ -204,8 +239,11 @@ def kindOf(obj, reason) -> str | None:
 		if reason == _focusEntered and _uiaClassName(obj) == FRAME_CLASS:
 			return FRAME
 		return None
-	if role == _documentRole and reason == _focus and obj.name:
-		return PAGE
+	if role == _documentRole and obj.name:
+		# The page as the focus (it opened, or you came back to it in browse mode), or as a place the focus is in (you
+		# came back to a field in it).
+		if reason == _focus or (reason == _focusEntered and _isPageItself(obj)):
+			return PAGE
 	return None
 
 
@@ -240,6 +278,84 @@ def _words(sequence) -> str:
 	return ", ".join(item for item in sequence if isinstance(item, str) and item.strip())
 
 
+# -- what NVDA says for a place the focus is in -------------------------------------------------------------------
+
+
+def isAroundFocus(obj) -> bool:
+	"""Whether the focus is ``obj`` or in it, or ``obj`` is the window in front: what NVDA says for it is still worth
+	saying. True when it can't be told, so nothing is dropped by mistake."""
+	try:
+		import api
+
+		focus = api.getFocusObject()
+		if obj is focus or obj == focus:
+			return True
+		for ancestor in api.getFocusAncestors():
+			if obj is ancestor or obj == ancestor:
+				return True
+		foreground = api.getForegroundObject()
+		return obj is foreground or obj == foreground
+	except Exception:
+		return True
+
+
+def whileInItClass():
+	"""The assistant's command for what NVDA says for a place the focus is in, made from NVDA's own command."""
+	global _whileInItClass
+	from speech.commands import _CancellableSpeechCommand
+
+	# Made again if NVDA's own command isn't the one it was made from, or NVDA's speech manager wouldn't know it.
+	if _whileInItClass is None or not issubclass(_whileInItClass, _CancellableSpeechCommand):
+
+		class WhileInIt(_CancellableSpeechCommand):
+			"""NVDA's speech manager drops the speech this is in, if it hasn't said it yet, once the focus has left the
+			place it is about (FocusLossCancellableSpeechCommand does that only for the focus itself)."""
+
+			def __init__(self, obj, words: str = ""):
+				self._obj = obj
+				self._words = words
+				self._noted = False
+				super().__init__()
+
+			def _checkIfValid(self) -> bool:
+				valid = isAroundFocus(self._obj)
+				if not valid and not self._noted:
+					self._noted = True
+					_debug(f"jawsMigrator: the focus has left {self._words!r}, so NVDA doesn't say it if it hasn't yet, as JAWS doesn't")
+				return valid
+
+			def _getDevInfo(self) -> str:
+				return f"jawsMigrator: the focus is in it: {isAroundFocus(self._obj)}"
+
+			def __repr__(self):
+				return f"CancellableSpeech ({'cancelled' if self._checkIfCancelled() else 'still valid'}, jawsMigrator: while the focus is in it)"
+
+		_whileInItClass = WhileInIt
+	return _whileInItClass
+
+
+def withWhileInIt(sequence: list, obj) -> list:
+	"""``sequence``, what NVDA says for a place the focus is in, with the assistant's command that drops it once the
+	focus has left. Only where NVDA's speech manager drops speech for the focus (NVDA's own command is in it), and
+	while the focus is there."""
+	if not speechQueue.cancellables(sequence) or not isAroundFocus(obj):
+		return sequence
+	return [*sequence, whileInItClass()(obj, _words(sequence))]
+
+
+# -- a name NVDA is still saying ------------------------------------------------------------------------------------
+
+
+def stillSaying(kind: str, name: str) -> bool:
+	"""Whether NVDA is still saying, or has yet to say, the same window's name or page's title."""
+	last = _lastSaid.get(kind)
+	return bool(last) and last[0] == name and speechQueue.stillToSay(last[1])
+
+
+def _remember(kind: str, name: str, sequence) -> None:
+	_lastSaid[kind] = (name, speechQueue.cancellables(sequence))
+
+
 def _guarded(original):
 	"""NVDA's speakObject: Edge's and Chrome's windows and pages as JAWS says them, anything else as NVDA says it."""
 
@@ -250,10 +366,11 @@ def _guarded(original):
 		reason = _argument(args, kwargs, "reason", 0, _query)
 		try:
 			kind = kindOf(obj, reason)
+			entered = reason == _focusEntered and inBrowser(obj)
 		except Exception:
 			_failure("could not tell whether NVDA is saying an Edge or Chrome window or page")
-			kind = None
-		if kind is None:
+			kind, entered = None, False
+		if kind is None and not entered:
 			return original(obj, *args, **kwargs)
 		if kind == FRAME:
 			_debug(f"jawsMigrator: NVDA doesn't say the browser's frame around the page, as JAWS doesn't: {obj.name!r} region")
@@ -262,15 +379,27 @@ def _guarded(original):
 		from speech import speech
 
 		sequence = speech.getObjectSpeech(obj, reason, _argument(args, kwargs, "_prefixSpeechCommand", 1))
+		said = list(sequence)
 		try:
-			said = withoutWords(sequence, obj, kind)
+			if kind is not None:
+				said = withoutWords(sequence, obj, kind)
+				if said != list(sequence):
+					_debug(f"jawsMigrator: the browser's {kind} is said as JAWS says it: {_words(said)} (NVDA's: {_words(sequence)})")
+			if entered:
+				said = withWhileInIt(said, obj)
+			if kind in (WINDOW, PAGE) and said and stillSaying(kind, obj.name):
+				_debug(f"jawsMigrator: NVDA is still saying the browser's {kind}, so it isn't said again, as JAWS says it once: {_words(said)}")
+				return None
 		except Exception:
 			_failure("could not say an Edge or Chrome window or page as JAWS says it")
-			said = sequence
-		if said != list(sequence):
-			_debug(f"jawsMigrator: the browser's {kind} is said as JAWS says it: {_words(said)} (NVDA's: {_words(sequence)})")
+			said = list(sequence)
 		if said:
 			speech.speak(said, priority=_argument(args, kwargs, "priority", 2))
+			if kind in (WINDOW, PAGE):
+				try:
+					_remember(kind, obj.name, said)
+				except Exception:
+					pass
 		return None
 
 	setattr(speakObject, MARK, _TOKEN)

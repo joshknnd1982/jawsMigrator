@@ -33,13 +33,20 @@ you want from it, or fill what you copy next.
 JAWS's option for it is [Options] SpeechHistory in Default.jcf, on as JAWS comes (with it off, JAWS says "Speech
 history disabled"). The migration brings it over as this setting (settingsMap), which NVDA's Settings, JAWS
 Migration Assistant can turn off; turned off, the history is forgotten.
+
+JAWS's history holds what JAWS sent to the synthesizer. pre_speech tells what NVDA is about to say, and NVDA's speech
+manager can still drop it before the synthesizer says a word: what NVDA says for the focus once the focus has moved
+on, and all it hasn't said yet when NVDA cuts speech short (issue 30: the tester's pasted history had a whole page
+NVDA never said, from a tab Edge was leaving). So the history leaves out what NVDA dropped that way, as far as the
+speech manager tells it (speechQueue.neverSaid): speech for the focus, and for the places the focus is in in Edge and
+Chrome (browserPages). What is still to be said, or was cut short after the synthesizer started it, stays.
 """
 
 from __future__ import annotations
 
 import collections
 
-from . import debugLog
+from . import debugLog, speechQueue
 
 #: The assistant's setting (state.json) that turns this on or off; JAWS's [Options] SpeechHistory.
 STATE_KEY = "keepSpeechHistory"
@@ -59,6 +66,7 @@ UNAVAILABLE = "The speech history can't be kept. The assistant's debug log says 
 EMPTY = "No speech history"
 NOT_COPIED = "The speech history could not be copied to the clipboard"
 
+#: What NVDA said: (the line, the commands by which NVDA's speech manager could drop it), the oldest first.
 _history: collections.deque = collections.deque(maxlen=MOST)
 _registered = False
 #: Whether the assistant was asked to keep it (register), even if NVDA wouldn't let it.
@@ -109,7 +117,7 @@ def _onSpeech(speechSequence=None, **kwargs) -> None:
 			return
 		line = lineOf(speechSequence)
 		if line:
-			_history.append(line)
+			_history.append((line, speechQueue.cancellables(speechSequence)))
 	except Exception:
 		_failure("could not add what NVDA said to the speech history")
 
@@ -152,8 +160,9 @@ def isRegistered() -> bool:
 
 
 def entries() -> list:
-	"""What NVDA said, the oldest first."""
-	return list(_history)
+	"""What NVDA said, the oldest first, without what NVDA's speech manager dropped before saying any of it."""
+	queued = speechQueue.pending()
+	return [line for line, commands in list(_history) if not speechQueue.neverSaid(commands, queued)]
 
 
 def clear() -> None:
@@ -161,7 +170,7 @@ def clear() -> None:
 
 
 def text(lineBreak: str = "\n") -> str:
-	return lineBreak.join(_history)
+	return lineBreak.join(entries())
 
 
 # -- the commands -------------------------------------------------------------------------------------------------
@@ -196,7 +205,7 @@ def copyAndSay() -> bool:
 	if not _registered:
 		_sayWhyNot()
 		return False
-	if not _history:
+	if not entries():
 		_say(EMPTY)
 		return False
 	# Windows programs take \r\n as a line break; api.copyToClip checks the clipboard holds just that.
@@ -224,7 +233,7 @@ def showAndSay() -> bool:
 	if not _registered:
 		_sayWhyNot()
 		return False
-	if not _history:
+	if not entries():
 		_say(EMPTY)
 		return False
 	try:

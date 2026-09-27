@@ -54,7 +54,7 @@ placeholder" and its placeholder, without "multi line" and without the
 landmark browse mode's cursor was already in (see formFields);
 Edge's and Chrome's windows and pages are said as JAWS says them, by their
 titles, without "window", "document", the page's address or Edge's frame
-around the page (see browserPages);
+around the page, and not the page of a tab you are leaving (see browserPages);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and

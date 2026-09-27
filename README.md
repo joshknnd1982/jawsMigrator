@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.32
+- Version: 1.33
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.33](#whats-new-in-133)
 - [What's new in 1.32](#whats-new-in-132)
 - [What's new in 1.31](#whats-new-in-131)
 - [What's new in 1.30](#whats-new-in-130)
@@ -84,10 +85,22 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.32.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.33.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.33
+
+From the tester's comments on 1.31, with what NVDA and JAWS said as they switched with Alt+Tab from an Outlook message to Edge, where a GitHub page had the focus in its comment box, and from there to their reddit tab:
+
+- **Coming back to Edge or Chrome, a page is said by its title without "document", also when the focus is in a field on it.** Switching to the GitHub tab, NVDA said "issue with how NVDA reads certain things on Reddit · Issue #30 · joshknnd1982/jawsMigrator, document". JAWS said the title alone, then "main region", "new Comment group" and the button that had the focus. 1.31 left "document" out only when the page itself gets the focus, as when it opens or you come back to it in browse mode. Here the focus was in the comment box, so NVDA said the page as a place the focus is in, as it says the landmark and the group. Now NVDA says the page by its title either way. A frame's own page, inside a page, is said as before.
+- **Choosing another tab, NVDA no longer says the page of the tab you are leaving.** The tester chose their reddit tab in Alt+Tab. Edge first put the focus back in the GitHub comment box, where it had been, then moved it to the reddit page. So NVDA said the window, the GitHub page's title, "main landmark", "new Comment grouping" and the comment box, then the reddit page. JAWS said only the reddit page's title. NVDA drops what it hasn't said yet about the focus once the focus has moved on, but it keeps what it says about the places the focus is in: the page, a landmark, a group. Now, in Edge and Chrome, what NVDA hasn't said yet about such a place is dropped once the focus has left it. A place the focus is still in is said as before, for example when you Tab to the next field in the same group, and NVDA never cuts short what it has started saying. NVDA's debug log says what was dropped.
+- **A page's title or a window's name isn't said twice at once.** Coming to the reddit page, NVDA said its title twice in a row. Now it says it once, and again whenever you come back to it.
+- **The speech history leaves out what NVDA dropped before saying any of it.** JAWS's speech history holds what went to the synthesizer. The history the tester pasted (NVDA+Shift+J, then Control+H) had the whole GitHub part twice, but NVDA had dropped most of the first, and the second one's comment box, before saying a word of them. Now NVDA+Shift+J, then H and Control+H leave out what NVDA's speech manager dropped without saying a word of it: what NVDA had for a focus that moved on, and what it hadn't started when it cut speech short, as when another window comes to the front. What you paste is what you heard. Anything NVDA started to say stays in, even if it was cut short.
+- **Tested with NVDA 2026.2's own speech manager and focus code.** The tests run NVDA's own speech manager, its speech commands, speak, cancelSpeech, the focus handling of its event handler and api, and its object speech, with the tester's windows, pages and settings, and a synthesizer that says what the speech manager gives it. Before the change, NVDA was asked to say the lines of the tester's log word for word. After it, choosing the reddit tab, the synthesizer said the window, the reddit page's title and its first line, and the speech history held just those three.
+
+This is part of 'Say Edge and Chrome windows and pages as JAWS does' and of 'Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history', in NVDA's Settings, JAWS Migration Assistant; unchecking them gives NVDA's own back.
 
 ## What's new in 1.32
 
@@ -613,7 +626,7 @@ The version details have JAWS's lines, with NVDA's facts. In Outlook they look l
 Version Details Information:
 Microsoft Outlook Subscription Version 16.0.20326.20158
 NVDA version 2026.2 (2026.2.0.57664)
-JAWS Migration Assistant version 1.32
+JAWS Migration Assistant version 1.33
 Current settings: normal configuration.
 Current application: OUTLOOK.EXE.
 Active configuration: outlook.
@@ -652,8 +665,8 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));
-- saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region" (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131));
-- keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129));
+- saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region", and not the page of a tab you are leaving (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131) and [What's new in 1.33](#whats-new-in-133));
+- keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history, without what NVDA dropped before saying it (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129) and [What's new in 1.33](#whats-new-in-133));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 
