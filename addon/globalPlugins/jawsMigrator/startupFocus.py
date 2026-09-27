@@ -21,11 +21,26 @@ as after Alt+Tab. When there is no such window, because none is open or all are 
 focus, as that is where you were. It happens once, as NVDA starts: when NVDA reloads its plugins, or at any other
 time, the focus stays on the taskbar when you put it there. It works unless it is turned off in NVDA's Settings,
 JAWS Migration Assistant.
+
+NVDA then reads the focus there as it reads that program. A tester's NVDA said nothing he typed in a message box in
+Edge after it started this way. NVDA reads Edge's web pages through IAccessible2, but it can tell whether it reads a
+program through UI Automation only once its helper is in that program (UIAHandler._isUIAWindowHelper). Windows puts the
+helper in a program as the program comes to the front, and NVDA takes the helper in on its main thread, which starts
+NVDA's plugins first. Edge's UI Automation focus event came while they still started, so NVDA took Edge's focus through
+UI Automation, and later, while he typed in the box, it had the page itself as the focus. NVDA echoes typed characters
+"only in edit controls" (speech.isFocusEditable), and a page is read only. In the tester's logs, NVDA took Edge through
+UI Automation at four of the five starts that went back to Edge, and through IAccessible2 at every other time. So while
+NVDA starts, a UI Automation focus event of the program the focus went back to is left out, and NVDA finds the focus
+itself once it has started (core._setInitialFocus), as for a window that was in front when it started. Whenever NVDA
+takes the focus there through UI Automation, it asks again how it reads that window, and takes the focus as it reads
+it. When NVDA's helper comes into the program only after that, NVDA takes the focus there again once it has.
 """
 
 from __future__ import annotations
 
 import ctypes
+import threading
+import time
 from ctypes import wintypes
 
 #: The assistant's setting (state.json) that turns this on or off.
@@ -59,8 +74,21 @@ WS_EX_NOACTIVATE = 0x08000000
 DWMWA_CLOAKED = 14
 #: No more windows than this are looked at: Windows can hand back a window twice while windows close.
 _MOST_WINDOWS = 4096
+#: For how long after it went back to a window NVDA checks how it reads the focus there, in seconds: NVDA takes a few
+#: seconds more to start, and its helper can come into the program after that.
+SETTLE_SECONDS = 30
+#: How often it checks once NVDA has started, in milliseconds.
+CHECK_MS = 250
 
 _failed = False
+#: The process of the window NVDA went back to as it started, until NVDA reads the focus there as it reads that
+#: program; 0 otherwise.
+_process = 0
+_until = 0.0
+_redirecting = False
+_heldLogged = False
+_overlay = None
+_timer = None
 
 
 def _log():
@@ -286,7 +314,213 @@ def atStart(windows=None) -> int:
 			f"jawsMigrator: NVDA started with the focus on the taskbar ({taskbar}), as its desktop shortcut's key leaves it, "
 			f"so it goes back to {where} ({windows.className(target)}), as JAWS does"
 		)
+		_follow(windows.processId(target))
 		return target
 	except Exception:
 		_failure("could not give the focus back to the window you were in, as NVDA started with it on the taskbar")
 		return 0
+
+
+# -- NVDA reads the focus there as it reads that program --------------------------------------------------------------
+
+
+def _follow(process: int) -> None:
+	"""From now on, NVDA's focus in ``process``, the program NVDA went back to, is checked (see heldBack and redirect)."""
+	global _process, _until, _heldLogged
+	_process = process
+	_until = time.monotonic() + SETTLE_SECONDS
+	_heldLogged = False
+
+
+def isFollowing() -> bool:
+	return bool(_process)
+
+
+def _isUIA(obj) -> bool:
+	from NVDAObjects.UIA import UIA
+
+	return isinstance(obj, UIA)
+
+
+def heldBack(obj) -> bool:
+	"""Whether NVDA leaves out this UI Automation focus event: one of the program NVDA went back to, while NVDA starts.
+
+	NVDA can't tell yet whether it reads that program through UI Automation, and would take the focus through it from any
+	program that has it, such as Edge, whose web pages NVDA reads through IAccessible2. NVDA finds the focus itself once
+	it has started (core._setInitialFocus), as for a window that was in front when it started.
+	"""
+	global _heldLogged
+	if not _process or not nvdaIsStarting():
+		return False
+	try:
+		if obj.processID != _process:
+			return False
+	except Exception:
+		return False
+	if not _heldLogged:
+		_heldLogged = True
+		try:
+			_log().debug(
+				"jawsMigrator: NVDA doesn't take the focus in the window it went back to from UI Automation while it starts, "
+				"before it can tell how it reads that program; it finds the focus there once it has started"
+			)
+		except Exception:
+			pass
+	return True
+
+
+def redirect(obj):
+	"""The focus as NVDA reads the program it went back to, when NVDA takes ``obj``, a UI Automation object there.
+
+	NVDA asks again whether it reads obj's window through UI Automation: its answer from before its helper was in the
+	program is forgotten (NVDA keeps an answer for half a second, UIAHandler.isUIAWindow). When NVDA doesn't read the
+	window through UI Automation, the focus as NVDA gets it from Windows now (api.getDesktopObject().objectWithFocus()).
+	None when NVDA reads the window through UI Automation, or obj isn't in that program.
+	"""
+	global _process, _redirecting
+	if not _process or _redirecting or threading.current_thread() is not threading.main_thread():
+		return None
+	_redirecting = True
+	try:
+		if obj.processID != _process:
+			return None
+		import api
+		import UIAHandler
+
+		handler = UIAHandler.handler
+		window = obj.windowHandle
+		if handler is None or not window:
+			return None
+		handler.UIAWindowHandleCache.pop(window, None)
+		if handler.isUIAWindow(window):
+			return None
+		focus = api.getDesktopObject().objectWithFocus()
+		if focus is None or _isUIA(focus):
+			return None
+		_process = 0
+		try:
+			program = obj.appModule.appName
+		except Exception:
+			program = "the program"
+		_log().info(
+			f"jawsMigrator: NVDA takes the focus in {program}, where it went back to as it started, as it reads {program} "
+			f"({getattr(focus, 'APIClass', type(focus)).__name__}), not through UI Automation as before its helper was in {program}"
+		)
+		return focus
+	except Exception:
+		_failure("could not check how NVDA reads the focus in the window it went back to")
+		return None
+	finally:
+		_redirecting = False
+
+
+def overlayClass():
+	"""The class of a UI Automation object of the program NVDA went back to, while NVDA settles on the focus there."""
+	global _overlay
+	if _overlay is None:
+		from NVDAObjects.UIA import UIA
+
+		class BackFromTaskbarUIA(UIA):
+			"""NVDA takes the focus here as it reads this program, not as it could before its helper was in it."""
+
+			_cache_shouldAllowUIAFocusEvent = False
+			_cache_focusRedirect = False
+			#: The focus as NVDA reads the program, once taken for this object: NVDA asks for focusRedirect twice.
+			_takenAs = None
+
+			def _get_shouldAllowUIAFocusEvent(self):
+				if heldBack(self):
+					return False
+				return super().shouldAllowUIAFocusEvent
+
+			def _get_focusRedirect(self):
+				other = super().focusRedirect
+				if other:
+					return other
+				if self._takenAs is None:
+					self._takenAs = redirect(self)
+				return self._takenAs
+
+		_overlay = BackFromTaskbarUIA
+	return _overlay
+
+
+def chooseOverlay(obj, clsList) -> None:
+	"""NVDA's chooseNVDAObjectOverlayClasses: a UI Automation object of the program NVDA went back to gets the class
+	above, until NVDA reads the focus there as it reads that program."""
+	if not _process:
+		return
+	try:
+		if _isUIA(obj) and obj.processID == _process:
+			clsList.insert(0, overlayClass())
+	except Exception:
+		_failure("could not check the focus NVDA takes in the window it went back to")
+
+
+def followUp() -> bool:
+	"""Once NVDA has started: the focus it took through UI Automation in the program it went back to, taken again.
+
+	For when NVDA's helper came into the program only after NVDA had taken the focus there. True once there is nothing
+	more to do: NVDA reads the focus there as it reads the program, NVDA reads the program through UI Automation itself,
+	or the time is up.
+	"""
+	global _process
+	if not _process:
+		return True
+	if nvdaIsStarting():
+		return False
+	try:
+		if time.monotonic() > _until:
+			_process = 0
+			return True
+		import api
+
+		focus = api.getFocusObject()
+		if focus is None or getattr(focus, "processID", None) != _process:
+			return False
+		if not _isUIA(focus):
+			_process = 0
+			return True
+		taken = redirect(focus)
+		if taken is not None:
+			import eventHandler
+
+			eventHandler.queueEvent("gainFocus", taken)
+			return True
+		appModule = focus.appModule
+		if appModule is not None and appModule.helperLocalBindingHandle:
+			# NVDA's helper is in the program, and NVDA reads it through UI Automation: NVDA's own choice.
+			_process = 0
+			return True
+		return False
+	except Exception:
+		_process = 0
+		_failure("could not check how NVDA reads the focus in the window it went back to")
+		return True
+
+
+def followUntilSettled() -> None:
+	"""Checks followUp a few times a second, from when NVDA has started until there is nothing more to do."""
+	global _timer
+	import wx
+
+	def check():
+		global _timer
+		_timer = None
+		if not followUp():
+			_timer = wx.CallLater(CHECK_MS, check)
+
+	stop(keepFollowing=True)
+	_timer = wx.CallLater(CHECK_MS, check)
+
+
+def stop(keepFollowing: bool = False) -> None:
+	global _timer, _process
+	if not keepFollowing:
+		_process = 0
+	timer, _timer = _timer, None
+	if timer is not None:
+		try:
+			timer.Stop()
+		except Exception:
+			pass

@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.28](#whats-new-in-128)
 - [What's new in 1.27](#whats-new-in-127)
 - [What's new in 1.26](#whats-new-in-126)
 - [What's new in 1.25](#whats-new-in-125)
@@ -79,10 +80,16 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.27.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.28.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.28
+
+From a tester's report:
+
+- **NVDA says what you type in Edge after it starts on the taskbar and goes back to your window.** A tester started NVDA with Control+Alt+N while writing a message in Reddit's chat in Edge. NVDA went back to Edge, as it has since 1.18, and then said nothing the tester typed in the message box but a capital I. NVDA reads Edge's web pages through IAccessible2, as it reads Chrome's, but it can tell whether it reads a program through UI Automation only once its helper is in that program, and it takes the helper in only after all its add-ons have started. The assistant brings Edge back to the front while they start, so Edge's UI Automation focus came first, and NVDA took the message box through UI Automation, which it doesn't otherwise do in Edge. A few keys later NVDA had the page itself as the focus, while the tester typed in the box. NVDA says typed characters "only in edit controls" as set, and a page isn't one, so it was silent. It happened at four of the five starts in the tester's logs that went back to Edge. Now, while NVDA starts, it leaves out the UI Automation focus event of the program you go back to, finds the focus itself once it has started, as for a window that was in front when it started, and asks again how it reads that window. On another computer, with a page like the tester's, NVDA started with its desktop shortcut's key took the message box through UI Automation at each of four starts with 1.27, and through IAccessible2 at each of four starts with 1.28, and said it once. Programs NVDA reads through UI Automation, such as Notepad, are as before, and so is Edge with "Use UI Automation to access Chromium based browser controls" set to Yes. When NVDA logs at its debug level, its log says when this happens. There is nothing to set: it is part of "When NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, go back to the window you were in".
 
 ## What's new in 1.27
 
@@ -544,7 +551,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - turning on the JAWS settings profile when NVDA starts;
 - saying a control's type and state once, even when its label repeats them, and a change once when you activate a control in browse mode (on unless you turn it off; see [What's new in 1.5](#whats-new-in-15) and [What's new in 1.8](#whats-new-in-18));
 - saying a system tray icon when you move to it, not each time its program changes it (on unless you turn it off; see [What's new in 1.9](#whats-new-in-19));
-- going back to the window you were in when NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it (on unless you turn it off; see [What's new in 1.18](#whats-new-in-118));
+- going back to the window you were in when NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, where NVDA then reads the focus as it reads that program (on unless you turn it off; see [What's new in 1.18](#whats-new-in-118) and [What's new in 1.28](#whats-new-in-128));
 - saying a heading without the landmark, region or list it is in when quick navigation moves to it (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113));
 - leaving out the row and column numbers of items in lists, such as drives, files and messages (on unless you turn it off);
 - leaving out the position, such as 3 of 3, in Alt+Tab and when you come to a list in File Explorer (on unless you turn it off; see [What's new in 1.14](#whats-new-in-114));

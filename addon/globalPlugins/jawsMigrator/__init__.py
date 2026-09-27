@@ -173,6 +173,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._outlookRows = None
 		#: The formFields module, once loaded: it notes what browse mode's cursor is in before NVDA handles a focus event.
 		self._formFields = None
+		#: The startupFocus module, once NVDA went back from the taskbar to a window: NVDA's focus objects there go through it.
+		self._startupFocus = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -210,6 +212,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		# Not a JAWS setting: NVDA's desktop shortcut's key leaves the focus on the taskbar; JAWS goes back to your window.
 		if startupFocus.wanted(state.load()):
 			startupFocus.atStart()
+		if startupFocus.isFollowing():
+			# NVDA reads the focus in that window as it reads the program, not through UI Automation before it can tell.
+			self._startupFocus = startupFocus
+			startupFocus.followUntilSettled()
 
 	def _keepOutlookFocus(self):
 		from . import outlookFocus
@@ -296,6 +302,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			appDicts.unregister()
 		except Exception:
 			pass
+		startupFocus, self._startupFocus = self._startupFocus, None
+		if startupFocus is not None:
+			try:
+				startupFocus.stop()
+			except Exception:
+				pass
 		try:
 			from . import labelRepeats
 
@@ -1280,6 +1292,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		elementsList = getattr(self, "_elementsList", None)
 		if elementsList is not None:
 			elementsList.chooseOverlay(obj, clsList)
+		# A UI Automation object of the program NVDA went back to from the taskbar as it started (see startupFocus).
+		startupFocus = getattr(self, "_startupFocus", None)
+		if startupFocus is not None:
+			startupFocus.chooseOverlay(obj, clsList)
 
 	# -- the command layer ------------------------------------------------------------------
 
