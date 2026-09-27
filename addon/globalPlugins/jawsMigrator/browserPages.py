@@ -46,11 +46,23 @@ only the reddit page's title. NVDA's speech manager drops what NVDA says for the
 worth saying unless they had the focus themselves. So in Edge and Chrome, what NVDA says for a place the focus is in
 now comes with a command of the assistant's own that drops it, if NVDA hasn't said it yet, once the focus isn't in
 that place any more. And a window's name or a page's title isn't said again while NVDA is still saying it.
+
+With 1.33 the tester Alt+Tabbed to a reddit window NVDA hadn't read yet (issue 30 again), and NVDA said its name,
+the page's title, then "same page link Skip to main content", the page's first line. JAWS 2026, on a copy of the page,
+said the window's name and the title and no line. Coming back to a page, JAWS does say the line at its cursor ("same
+page link Skip to main content", when it was left there), as NVDA does. But JAWS's cursor starts on the page's title,
+which is what JAWS says as the top line (Control+Home says the title), where NVDA's caret starts on the page's first
+line. So the first time NVDA comes into an Edge or Chrome page in browse mode, with the focus on the page itself and
+its caret on the first line, NVDA says the title and not that line, which it says as you come into a page
+(browseMode.BrowseModeDocumentTreeInterceptor.event_treeInterceptor_gainFocus). A page whose caret starts further
+down, coming back to a page, focus mode, "Automatic Say All on page load" and every other program are as before.
 """
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import importlib
 import threading
 
 from . import speechQueue
@@ -75,13 +87,22 @@ WINDOW_CLASS = "Chrome_WidgetWin_"
 FRAME_CLASS = "BrowserRootView"
 #: What is said: a browser's window, its frame, a page in it.
 WINDOW, FRAME, PAGE = "window", "frame", "page"
+#: NVDA's browse mode event for a page it comes into (browseMode.BrowseModeDocumentTreeInterceptor), which the
+#: classes of Edge's and Chrome's pages take from it: through IAccessible2, and through UI Automation. The assistant
+#: puts its own on those classes (outlookMessages has the one of browseMode's class).
+GAIN_FOCUS = "event_treeInterceptor_gainFocus"
+PAGE_CLASSES = (
+	("NVDAObjects.IAccessible.chromium", "ChromeVBuf"),
+	("NVDAObjects.UIA.chromium", "ChromiumUIATreeInterceptor"),
+)
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
 _enabled = False
 _failed = False
 _lock = threading.RLock()
-#: What the assistant put in the place of NVDA's own: [(owner, attribute name, the assistant's, NVDA's)].
+#: What the assistant put in the place of NVDA's own: [(owner, attribute name, the assistant's, NVDA's)]. NVDA's is None
+#: where the class had none of its own and took it from the class it comes from.
 _replaced: list = []
 #: NVDA's roles and output reasons used here, once known.
 _windowRole = None
@@ -90,6 +111,10 @@ _documentRole = None
 _focus = None
 _focusEntered = None
 _query = None
+#: NVDA's OutputReason.CARET, textInfos.UNIT_LINE and textInfos.POSITION_FIRST, once known.
+_caret = None
+_line = None
+_first = None
 #: The window's name and the page's title NVDA was last asked to say, with the commands NVDA's speech manager keeps
 #: with them until they are said: {WINDOW or PAGE: (name, commands)}.
 _lastSaid: dict = {}
@@ -129,18 +154,28 @@ def wanted(stateData: dict) -> bool:
 
 def register() -> None:
 	"""Have NVDA say Edge's and Chrome's windows and pages as JAWS says them, from now on."""
-	global _enabled, _windowRole, _regionRole, _documentRole, _focus, _focusEntered, _query
+	global _enabled, _windowRole, _regionRole, _documentRole, _focus, _focusEntered, _query, _caret, _line, _first
 	if _enabled:
 		return
 	try:
 		import speech
+		import textInfos
 		from controlTypes import OutputReason, Role
 
 		_windowRole, _regionRole, _documentRole = Role.WINDOW, Role.REGION, Role.DOCUMENT
 		_focus, _focusEntered, _query = OutputReason.FOCUS, OutputReason.FOCUSENTERED, OutputReason.QUERY
+		_caret, _line = getattr(OutputReason, "CARET", None), getattr(textInfos, "UNIT_LINE", None)
+		_first = getattr(textInfos, "POSITION_FIRST", None)
 		with _lock:
 			if not _replace(speech):
 				return
+			for moduleName, className in PAGE_CLASSES if None not in (_caret, _line, _first) else ():
+				try:
+					owner = getattr(importlib.import_module(moduleName), className)
+				except Exception:
+					# Not in this NVDA: its pages are said as before.
+					continue
+				_addGainFocus(owner)
 	except Exception:
 		_failure("can't say Edge's and Chrome's windows and pages as JAWS says them, so NVDA says them as it does")
 		return
@@ -156,7 +191,12 @@ def unregister() -> None:
 	with _lock:
 		for owner, name, installed, original in reversed(_replaced):
 			try:
-				if vars(owner).get(name) is installed:
+				if vars(owner).get(name) is not installed:
+					continue
+				if original is None:
+					# The class had none of its own: it takes the one of the class it comes from again.
+					delattr(owner, name)
+				else:
 					setattr(owner, name, original)
 			except Exception:
 				pass
@@ -405,3 +445,94 @@ def _guarded(original):
 	setattr(speakObject, MARK, _TOKEN)
 	setattr(speakObject, ORIGINAL, original)
 	return speakObject
+
+
+# -- a page's first line --------------------------------------------------------------------------------------------
+
+
+def _addGainFocus(owner) -> None:
+	"""Give ``owner``, the class of Edge's and Chrome's pages, the assistant's event for a page NVDA comes into, which
+	does what the one it comes from does, and holds back the page's first line the first time."""
+	current = vars(owner).get(GAIN_FOCUS)
+	if _isOurs(current):
+		return
+	if current is not None:
+		# The class has one of its own (another add-on's): the page's first line is said as it says it.
+		_debug(f"jawsMigrator: {getattr(owner, '__name__', owner)} has its own {GAIN_FOCUS}, so a page's first line is said as before")
+		return
+	installed = _gainFocusGuarded(owner)
+	setattr(owner, GAIN_FOCUS, installed)
+	_replaced.append((owner, GAIN_FOCUS, installed, None))
+
+
+def isFirstLine(page, info, args: tuple, kwargs: dict) -> bool:
+	"""Whether NVDA is saying ``info`` as the line at the caret of ``page``, an Edge or Chrome page in browse mode with
+	the focus on the page itself and the caret on its first line."""
+	if getattr(info, "obj", None) is not page:
+		return False
+	if _argument(args, kwargs, "reason", 3) != _caret or _argument(args, kwargs, "unit", 2) != _line:
+		return False
+	if getattr(page, "passThrough", False):
+		return False
+	root = getattr(page, "rootNVDAObject", None)
+	if root is None or not inBrowser(root):
+		return False
+	import api
+
+	focus = api.getFocusObject()
+	if not (focus is root or focus == root):
+		return False
+	return info.compareEndPoints(page.makeTextInfo(_first), "startToStart") == 0
+
+
+@contextlib.contextmanager
+def _firstLineHeldBack(page, held: list):
+	"""While NVDA comes into ``page``, the page's first line isn't said; ``held`` gets it instead."""
+	import speech
+
+	current = speech.speakTextInfo
+
+	def speakTextInfo(info, *args, **kwargs):
+		if not held:
+			try:
+				first = isFirstLine(page, info, args, kwargs)
+			except Exception:
+				_failure("could not tell whether NVDA was saying a page's first line, so NVDA says it")
+				first = False
+			if first:
+				held.append(info)
+				return False
+		return current(info, *args, **kwargs)
+
+	speech.speakTextInfo = speakTextInfo
+	try:
+		yield
+	finally:
+		if speech.speakTextInfo is speakTextInfo:
+			speech.speakTextInfo = current
+
+
+def _gainFocusGuarded(owner):
+	"""NVDA's browse mode coming into an Edge or Chrome page: the first time, the page's title without its first line."""
+
+	def event_treeInterceptor_gainFocus(self, *args, **kwargs):
+		base = getattr(super(owner, self), GAIN_FOCUS)
+		if not _enabled or getattr(self, "_hadFirstGainFocus", True):
+			return base(*args, **kwargs)
+		held = []
+		try:
+			with _firstLineHeldBack(self, held):
+				return base(*args, **kwargs)
+		finally:
+			if held:
+				try:
+					text = held[0].text
+				except Exception:
+					text = ""
+				_debug(
+					f"jawsMigrator: NVDA came into the page for the first time with its caret on the first line, so it says the page's title without that line, as JAWS, whose cursor starts on the title: {text[:80]!r}",
+				)
+
+	event_treeInterceptor_gainFocus.__name__ = GAIN_FOCUS
+	setattr(event_treeInterceptor_gainFocus, MARK, _TOKEN)
+	return event_treeInterceptor_gainFocus

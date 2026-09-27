@@ -121,6 +121,10 @@ DEFAULTS = {
 	#: The Columns Review add-on says nothing at the ends of a list where it would say "List top", "List bottom" or
 	#: "Mono-item list" with the voice; JAWS says the item alone. Its beeps stay (see listBounds).
 	"quietColumnsReviewListBounds": True,
+	#: Columns Review and Emoticons don't hold NVDA up each time it switches configuration profiles, as switching
+	#: programs or browse mode does: Columns Review keeps the keys of NVDA's own commands until they change, and Emoticons
+	#: reads NVDA's dictionaries once for each change (see profileSwitches).
+	"quickProfileSwitches": True,
 	#: A link on a web page is said as JAWS says it: "same page" only for a link to a place on the page (a "#" in its
 	#: address), without the title NVDA says as its description, and, when quick navigation moves to a heading, "link"
 	#: after the heading and its level (see linkSpeech).
@@ -132,6 +136,10 @@ DEFAULTS = {
 	#: Edge's and Chrome's windows and pages are said as JAWS says them: the window by its name and a page that opens by
 	#: its title, without "window", "document", the page's address or Edge's frame around the page (see browserPages).
 	"sayBrowserPagesAsJaws": True,
+	#: Regions, groups, lists and articles on web pages are said with JAWS's words: "main region", "group", "list of 2
+	#: items", "main region end", and, as you read, no banner, search, form, complementary or content info region
+	#: (see webRegions).
+	"sayWebRegionsAsJaws": True,
 	#: An Outlook message you read is said as JAWS says it: "send mail link" for a link to an e-mail address, a list
 	#: where it starts and after it, and no "heading level 1" for the From line of a message it quotes (see
 	#: outlookMessages).

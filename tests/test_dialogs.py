@@ -720,6 +720,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'Columns Review says "List top" again, at once',
 		)
 
+	def test_quickProfileSwitchesIsSavedAndApplied(self):
+		from jawsMigrator import profileSwitches
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.quickProfileSwitches,
+			"Keep Columns Review and Emoticons from holding NVDA up each time you switch programs or browse mode turns on or off",
+			profileSwitches.STATE_KEY,
+			"Columns Review asks NVDA for all its commands, and Emoticons writes its warnings, at each profile switch again, at once",
+		)
+
 	def test_sayLinksAsJawsIsSavedAndApplied(self):
 		from jawsMigrator import linkSpeech
 
@@ -748,6 +758,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'Say Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the address or Edge\'s "region"',
 			browserPages.STATE_KEY,
 			'NVDA says "window", "document" and a page\'s address again, at once',
+		)
+
+	def test_sayWebRegionsAsJawsIsSavedAndApplied(self):
+		from jawsMigrator import webRegions
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.webRegionsAsJaws,
+			'Say regions, groups and lists on web pages with JAWS\'s words: "main region", "group", "list of 2 items", "main region end"',
+			webRegions.STATE_KEY,
+			'NVDA says "main landmark", "grouping" and "list with 2 items" again, at once',
 		)
 
 	def test_keepSpeechHistoryIsSavedAndApplied(self):

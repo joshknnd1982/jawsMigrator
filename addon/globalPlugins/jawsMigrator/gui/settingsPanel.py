@@ -36,11 +36,13 @@ from .. import (
 	outlookPages,
 	outlookRows,
 	outlookStatusBar,
+	profileSwitches,
 	quickNavHeadings,
 	speechHistory,
 	startupFocus,
 	state,
 	trayChanges,
+	webRegions,
 )
 from .common import checkListClass, openFile
 
@@ -202,6 +204,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label='Keep Columns Review from saying "List top" and "List bottom" at the ends of a list'),
 		)
 		self.quietListBounds.SetValue(listBounds.wanted(state.load()))
+		# Each Alt+Tab into or out of Edge held NVDA up for two seconds or more (issue 31): Columns Review and Emoticons, as
+		# they come, took about a second at each of NVDA's configuration profile switches.
+		self.quickProfileSwitches = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Keep Columns Review and Emoticons from holding NVDA up each time you switch programs or browse mode turns on or off",
+			),
+		)
+		self.quickProfileSwitches.SetValue(profileSwitches.wanted(state.load()))
 		# NVDA said "HEADLINES, same page, link, Homepage, heading, level 3" for a heading on a web page; JAWS said
 		# "HEADLINES, heading level 3, Link": no "same page" for a link to the page itself, no title, the heading first.
 		self.linksAsJaws = helper.addItem(
@@ -229,6 +240,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.browserPagesAsJaws.SetValue(browserPages.wanted(state.load()))
+		# JAWS said "MainRegion" and "new Comment group" where NVDA said "main landmark" and "new Comment grouping"
+		# (issue 30), and, reading, "list of 2 items", "list end" and "main region end", and no banner or search region.
+		self.webRegionsAsJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label='Say regions, groups and lists on web pages with JAWS\'s words: "main region", "group", "list of 2 items", "main region end"',
+			),
+		)
+		self.webRegionsAsJaws.SetValue(webRegions.wanted(state.load()))
 		# JAWS keeps the last 500 things it said for Insert+Space, then H; the assistant's layer has the same keys.
 		self.keepSpeechHistory = helper.addItem(
 			wx.CheckBox(self, label="Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history"),
@@ -329,9 +349,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownOutlookReadOnOpen = self.outlookReadOnOpen.GetValue()
 		self._shownOutlookStatusBar = self.outlookStatusBar.GetValue()
 		self._shownQuietListBounds = self.quietListBounds.GetValue()
+		self._shownQuickProfileSwitches = self.quickProfileSwitches.GetValue()
 		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
 		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
 		self._shownBrowserPagesAsJaws = self.browserPagesAsJaws.GetValue()
+		self._shownWebRegionsAsJaws = self.webRegionsAsJaws.GetValue()
 		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
@@ -420,12 +442,16 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[outlookStatusBar.STATE_KEY] = self.outlookStatusBar.GetValue()
 		if self.quietListBounds.GetValue() != self._shownQuietListBounds:
 			updates[listBounds.STATE_KEY] = self.quietListBounds.GetValue()
+		if self.quickProfileSwitches.GetValue() != self._shownQuickProfileSwitches:
+			updates[profileSwitches.STATE_KEY] = self.quickProfileSwitches.GetValue()
 		if self.linksAsJaws.GetValue() != self._shownLinksAsJaws:
 			updates[linkSpeech.STATE_KEY] = self.linksAsJaws.GetValue()
 		if self.formFieldsAsJaws.GetValue() != self._shownFormFieldsAsJaws:
 			updates[formFields.STATE_KEY] = self.formFieldsAsJaws.GetValue()
 		if self.browserPagesAsJaws.GetValue() != self._shownBrowserPagesAsJaws:
 			updates[browserPages.STATE_KEY] = self.browserPagesAsJaws.GetValue()
+		if self.webRegionsAsJaws.GetValue() != self._shownWebRegionsAsJaws:
+			updates[webRegions.STATE_KEY] = self.webRegionsAsJaws.GetValue()
 		if self.keepSpeechHistory.GetValue() != self._shownKeepSpeechHistory:
 			updates[speechHistory.STATE_KEY] = self.keepSpeechHistory.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:

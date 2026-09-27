@@ -45,7 +45,10 @@ from the top when it opens only when turned on (see outlookMessages), and
 Outlook's status bar is read as JAWS reads it, its items and zoom without the
 view and zoom buttons (see outlookStatusBar);
 the Columns Review add-on doesn't say "List top" or "List bottom" at the ends
-of a list, which JAWS never says (see listBounds);
+of a list, which JAWS never says (see listBounds), and neither it nor the
+Emoticons add-on holds NVDA up each time NVDA switches configuration profiles,
+as Alt+Tab into or out of a program with its own profile does, which had keys
+such as Insert+F7 go through to the program (see profileSwitches);
 a link on a web page is said as JAWS says it: "same page" only for a link to
 a place on the page, without its title, and "link" after the heading it is in
 when quick navigation moves to the heading (see linkSpeech);
@@ -54,7 +57,10 @@ placeholder" and its placeholder, without "multi line" and without the
 landmark browse mode's cursor was already in (see formFields);
 Edge's and Chrome's windows and pages are said as JAWS says them, by their
 titles, without "window", "document", the page's address or Edge's frame
-around the page, and not the page of a tab you are leaving (see browserPages);
+around the page, and not the page of a tab you are leaving, nor a page's first
+line the first time you come to it (see browserPages); regions, groups, lists
+and articles on web pages are said with JAWS's words, "main region", "group",
+"list of 2 items" and "main region end" (see webRegions);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
@@ -465,6 +471,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import profileSwitches
+
+			profileSwitches.unregister()
+		except Exception:
+			pass
+		try:
 			from . import linkSpeech
 
 			linkSpeech.unregister()
@@ -481,6 +493,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import browserPages
 
 			browserPages.unregister()
+		except Exception:
+			pass
+		try:
+			from . import webRegions
+
+			webRegions.unregister()
 		except Exception:
 			pass
 		try:
@@ -762,6 +780,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not keep Columns Review from saying the ends of a list")
 		try:
+			from . import profileSwitches
+
+			# Not a JAWS setting: JAWS switches a program's settings at once. Columns Review and Emoticons, as they come,
+			# took about a second at each of NVDA's profile switches, two of them for each Alt+Tab into or out of Edge
+			# with the migration's profile for it and Custom Browse Mode's (issue 31).
+			if profileSwitches.wanted(data):
+				profileSwitches.register()
+			else:
+				profileSwitches.unregister()
+		except Exception:
+			debugLog.error("could not keep Columns Review and Emoticons from holding NVDA up at a profile switch")
+		try:
 			from . import linkSpeech
 
 			# Not a JAWS setting as such: JAWS, as it comes, says "same page" only for a link to a place on the page
@@ -796,6 +826,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				browserPages.unregister()
 		except Exception:
 			debugLog.error("could not have NVDA say Edge's and Chrome's windows and pages as JAWS says them")
+		try:
+			from . import webRegions
+
+			# JAWS's words for regions, groups and lists on web pages and, as you read, the regions its Default.jcf
+			# [VirtualCursorVerbosity] names at Medium, as JAWS comes: the main and navigation regions.
+			if webRegions.wanted(data):
+				webRegions.register()
+			else:
+				webRegions.unregister()
+		except Exception:
+			debugLog.error("could not have NVDA say regions, groups, lists and articles on web pages with JAWS's words")
 		try:
 			from . import speechHistory
 

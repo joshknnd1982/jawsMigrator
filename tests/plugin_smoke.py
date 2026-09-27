@@ -220,6 +220,40 @@ class TextInfo:
 		return []
 
 
+class Gecko_ia2_TextInfo(TextInfo):
+	"""NVDA's virtualBuffers.gecko_ia2.Gecko_ia2_TextInfo, a web page's text: it has TextInfo's getControlFieldSpeech."""
+
+
+class Ia2Web:
+	"""NVDA's NVDAObjects.IAccessible.ia2Web.Ia2Web, a web page's object."""
+
+
+class ChromeVBuf(BrowseModeDocumentTreeInterceptor):
+	"""NVDA's NVDAObjects.IAccessible.chromium.ChromeVBuf, Edge's and Chrome's page: it has browseMode's
+	event_treeInterceptor_gainFocus."""
+
+
+def getObjectPropertiesSpeech(obj, reason=None, _prefixSpeechCommand=None, **allowedProperties):
+	"""NVDA's speech for an object's properties (speech.speech.getObjectPropertiesSpeech), as far as the smoke test goes."""
+	return []
+
+
+def webRegionsNvdasOwn():
+	"""Whether NVDA's own speech for a web page's fields and an object's properties are in place."""
+	return sys.modules["speech.speech"].getObjectPropertiesSpeech is getObjectPropertiesSpeech and "getControlFieldSpeech" not in vars(Gecko_ia2_TextInfo)
+
+
+def webRegionsInPlace():
+	"""Whether the assistant's speech for a web page's fields and an object's properties are there, once."""
+	fieldSpeech = vars(Gecko_ia2_TextInfo).get("getControlFieldSpeech")
+	return (
+		getattr(sys.modules["speech.speech"].getObjectPropertiesSpeech, "__wrapped__", None) is getObjectPropertiesSpeech
+		and fieldSpeech is not None
+		and getattr(fieldSpeech, "__wrapped__", None) is not None
+		and getattr(fieldSpeech.__wrapped__, "__wrapped__", None) is None
+	)
+
+
 class EditableText:
 	"""NVDA's editableText.EditableText, as far as Backspace goes."""
 
@@ -280,6 +314,7 @@ def installSpeech():
 	speech.speech._getPlaceholderSpeechIfTextEmpty = _getPlaceholderSpeechIfTextEmpty
 	speech.speech._objectSpeech_calculateAllowedProps = _objectSpeech_calculateAllowedProps
 	speech.speech.processText = processText
+	speech.speech.getObjectPropertiesSpeech = getObjectPropertiesSpeech
 	speech.getControlFieldSpeech = getControlFieldSpeech
 	speech.speakObject = speakObject
 	controlTypes = types.ModuleType("controlTypes")
@@ -323,7 +358,34 @@ def installSpeech():
 	characterProcessing.SymbolLevel = types.SimpleNamespace(MOST=200, ALL=300)
 	characterProcessing._symbolDictionaryDefinitions = [SymbolDictionaryDefinition(name="builtin", path=""), SymbolDictionaryDefinition(name="user", path="")]
 	characterProcessing.clearSpeechSymbols = lambda: None
-	for module in (speech, speech.extensions, speech.speech, controlTypes, browseMode, virtualBuffers, textInfos, editableText, characterProcessing):
+	textInfos.POSITION_FIRST = "first"
+	aria = types.ModuleType("aria")
+	aria.landmarkRoles = {"banner": "banner", "main": "main", "navigation": "navigation", "search": "search", "form": "form"}
+	gecko = types.ModuleType("virtualBuffers.gecko_ia2")
+	gecko.Gecko_ia2_TextInfo = Gecko_ia2_TextInfo
+	nvdaObjects = types.ModuleType("NVDAObjects")
+	iAccessible = types.ModuleType("NVDAObjects.IAccessible")
+	ia2Web = types.ModuleType("NVDAObjects.IAccessible.ia2Web")
+	ia2Web.Ia2Web = Ia2Web
+	chromium = types.ModuleType("NVDAObjects.IAccessible.chromium")
+	chromium.ChromeVBuf = ChromeVBuf
+	for module in (
+		speech,
+		speech.extensions,
+		speech.speech,
+		controlTypes,
+		browseMode,
+		virtualBuffers,
+		textInfos,
+		editableText,
+		characterProcessing,
+		aria,
+		gecko,
+		nvdaObjects,
+		iAccessible,
+		ia2Web,
+		chromium,
+	):
 		sys.modules[module.__name__] = module
 	return speech.extensions.filter_speechSequence
 
@@ -976,6 +1038,63 @@ def main():
 		jawsMigrator.state.set(listBounds.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(vars(columnsReview.GlobalPlugin)["reportListBounds"].__wrapped__ is reportListBounds, "and on again, wrapped once")
+		# Columns Review asked NVDA for every command at each profile switch, and Emoticons wrote 177 warnings, so each
+		# Alt+Tab into or out of Edge held NVDA up for seconds (issue 31; see profileSwitches).
+		from jawsMigrator import profileSwitches
+
+		askedNvda = []
+
+		def getScriptGestures(*scriptFunctions):
+			askedNvda.append(scriptFunctions)
+			return {function: ["kb(laptop):a+nvda"] for function in scriptFunctions}
+
+		emoticonsChanges = []
+
+		def deactivateAnnouncement():
+			emoticonsChanges.append("out")
+
+		def activateAnnouncement():
+			emoticonsChanges.append("in")
+
+		columnsReview.getScriptGestures = getScriptGestures
+		emoticons = types.ModuleType(profileSwitches.EMOTICONS)
+		emoticons.deactivateAnnouncement, emoticons.activateAnnouncement = deactivateAnnouncement, activateAnnouncement
+		sys.modules[profileSwitches.EMOTICONS] = emoticons
+		nvdaKeyModules = {"braille": types.SimpleNamespace(handler=None), "globalCommands": types.SimpleNamespace(commands=types.SimpleNamespace(_gestureMap={}))}
+		savedKeyModules = {name: sys.modules.get(name) for name in nvdaKeyModules}
+		sys.modules.update(nvdaKeyModules)
+		plugin.applyRuntimeSettings()
+		sayAll = object()
+		for _switch in range(4):
+			keys = columnsReview.getScriptGestures(sayAll)
+		check(
+			profileSwitches.isInstalled() and len(askedNvda) == 1 and keys == {sayAll: ["kb(laptop):a+nvda"]},
+			f"Columns Review asks NVDA for the keys of its commands once, not at every profile switch: {len(askedNvda)}",
+		)
+		userGestures = sys.modules["inputCore"].manager.userGestureMap._map
+		userGestures["kb:nvda+r+shift"] = [("globalCommands", "GlobalCommands", "sayAll")]
+		columnsReview.getScriptGestures(sayAll)
+		check(len(askedNvda) == 2, "and again once NVDA's keys change")
+		del userGestures["kb:nvda+r+shift"]
+		emoticons.deactivateAnnouncement()
+		emoticons.activateAnnouncement()
+		speechDicts = sys.modules.get("speechDictHandler")
+		check(
+			emoticonsChanges == ["out", "in"] and (speechDicts is None or "dictionaries" not in vars(speechDicts)),
+			"Emoticons still changes NVDA's temporary dictionary",
+		)
+		jawsMigrator.state.set(profileSwitches.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(
+			not profileSwitches.isRegistered() and columnsReview.getScriptGestures is getScriptGestures and emoticons.activateAnnouncement is activateAnnouncement,
+			"turned off in the Settings panel, Columns Review and Emoticons have their own back",
+		)
+		jawsMigrator.state.set(profileSwitches.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(
+			columnsReview.getScriptGestures.__wrapped__ is getScriptGestures and emoticons.deactivateAnnouncement.__wrapped__ is deactivateAnnouncement,
+			"and on again, wrapped once",
+		)
 		# A link on a web page is said as JAWS says it: "same page" only for a link to a place on the page, no title, and
 		# "link" after the heading (see linkSpeech). None of what it changes is what quickNavHeadings changes.
 		from jawsMigrator import linkSpeech
@@ -1032,15 +1151,34 @@ def main():
 		from jawsMigrator import browserPages
 
 		check(
-			browserPages.isRegistered() and speechPackage.speakObject.__wrapped__ is speakObject,
-			"Edge's and Chrome's windows and pages are said as JAWS says them",
+			browserPages.isRegistered()
+			and speechPackage.speakObject.__wrapped__ is speakObject
+			and "event_treeInterceptor_gainFocus" in vars(ChromeVBuf)
+			and vars(BrowseModeDocumentTreeInterceptor)["event_treeInterceptor_gainFocus"] is not None,
+			"Edge's and Chrome's windows and pages are said as JAWS says them, and a page's first line the first time as JAWS does",
 		)
 		jawsMigrator.state.set(browserPages.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
-		check(not browserPages.isRegistered() and speechPackage.speakObject is speakObject, "turned off in the Settings panel, NVDA's own is back")
+		check(
+			not browserPages.isRegistered() and speechPackage.speakObject is speakObject and "event_treeInterceptor_gainFocus" not in vars(ChromeVBuf),
+			"turned off in the Settings panel, NVDA's own is back",
+		)
 		jawsMigrator.state.set(browserPages.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
-		check(browserPages.isRegistered() and speechPackage.speakObject.__wrapped__ is speakObject, "and on again, wrapped once")
+		check(
+			browserPages.isRegistered() and speechPackage.speakObject.__wrapped__ is speakObject and "event_treeInterceptor_gainFocus" in vars(ChromeVBuf),
+			"and on again, wrapped once",
+		)
+		# Regions, groups, lists and articles on web pages are said with JAWS's words (see webRegions).
+		from jawsMigrator import webRegions
+
+		check(webRegions.isRegistered() and webRegionsInPlace(), "regions, groups, lists and articles on web pages are said with JAWS's words")
+		jawsMigrator.state.set(webRegions.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not webRegions.isRegistered() and webRegionsNvdasOwn(), "turned off in the Settings panel, NVDA's own are back")
+		jawsMigrator.state.set(webRegions.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(webRegions.isRegistered() and webRegionsInPlace(), "and on again, wrapped once")
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 
@@ -1142,13 +1280,30 @@ def main():
 			not listBounds.isRegistered() and vars(columnsReview.GlobalPlugin)["reportListBounds"] is reportListBounds,
 			"and Columns Review's own report of a list's ends",
 		)
+		check(
+			not profileSwitches.isRegistered()
+			and columnsReview.getScriptGestures is getScriptGestures
+			and emoticons.deactivateAnnouncement is deactivateAnnouncement
+			and emoticons.activateAnnouncement is activateAnnouncement,
+			"and Columns Review's own keys of NVDA's commands, and Emoticons' own changes to NVDA's temporary dictionary",
+		)
+		del sys.modules[profileSwitches.EMOTICONS]
+		for name, saved in savedKeyModules.items():
+			if saved is None:
+				del sys.modules[name]
+			else:
+				sys.modules[name] = saved
 		del sys.modules[listBounds.MODULE]
 		check(not linkSpeech.isRegistered() and linkSpeechNvdasOwn(), "and NVDA's link types, a document's field speech and a web page's quick navigation report")
 		check(
 			not formFields.isRegistered() and plugin._formFields is None and formFieldsNvdasOwn(),
 			"and NVDA's object speech, property speech and an empty field's placeholder",
 		)
-		check(not browserPages.isRegistered() and speechPackage.speakObject is speakObject, "and NVDA's saying of an object")
+		check(
+			not browserPages.isRegistered() and speechPackage.speakObject is speakObject and "event_treeInterceptor_gainFocus" not in vars(ChromeVBuf),
+			"and NVDA's saying of an object, and of a page it comes into",
+		)
+		check(not webRegions.isRegistered() and webRegionsNvdasOwn(), "and NVDA's speech for a web page's fields and an object's properties")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -1186,9 +1341,11 @@ def main():
 			"outlookMessages",
 			"outlookStatusBar",
 			"listBounds",
+			"profileSwitches",
 			"linkSpeech",
 			"formFields",
 			"browserPages",
+			"webRegions",
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",
