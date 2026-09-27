@@ -1049,11 +1049,18 @@ def main():
 			return {function: ["kb(laptop):a+nvda"] for function in scriptFunctions}
 
 		emoticonsChanges = []
+		# Emoticons 38.0.0's two functions read speechDictHandler.dictionaries, which NVDA 2026.2 warns about; from 38.2.0
+		# they don't, and the assistant leaves them alone (1.35). These name it as 38.0.0's do, in a branch that doesn't
+		# run, as this imitation NVDA has no speechDictHandler.
 
 		def deactivateAnnouncement():
+			if emoticonsChanges is None:
+				speechDictHandler.dictionaries["temp"].clear()  # noqa: F821
 			emoticonsChanges.append("out")
 
 		def activateAnnouncement():
+			if emoticonsChanges is None:
+				speechDictHandler.dictionaries["temp"].clear()  # noqa: F821
 			emoticonsChanges.append("in")
 
 		columnsReview.getScriptGestures = getScriptGestures

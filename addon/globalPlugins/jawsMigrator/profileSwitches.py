@@ -31,6 +31,10 @@ commands. Wherever the focus is, NVDA's global commands have the same keys. And 
 dictionary once for each change, as it read it before, so NVDA writes the warning once, not 177 times. What Columns
 Review binds and what Emoticons says are unchanged. It works while the assistant runs, unless it is turned off in
 NVDA's Settings, JAWS Migration Assistant.
+
+Emoticons 38.2.0, which needs NVDA 2026.3, keeps NVDA's temporary dictionary itself and no longer reads that name, so
+NVDA writes no warning for it. Reading the name for it would add a warning at each change, so the assistant leaves
+such a version of Emoticons alone, and wraps only functions that still read ``speechDictHandler.dictionaries``.
 """
 
 from __future__ import annotations
@@ -47,7 +51,8 @@ SCRIPT_GESTURES = "getScriptGestures"
 #: The Emoticons global plugin, and the two functions with which it changes NVDA's temporary speech dictionary.
 EMOTICONS = "globalPlugins.emoticons"
 EMOTICONS_FUNCTIONS = ("deactivateAnnouncement", "activateAnnouncement")
-#: NVDA's speech dictionaries, the name NVDA 2026.2 warns about each time it is read (speechDictHandler.__getattr__).
+#: NVDA's speech dictionaries, the name NVDA 2026.2 and 2026.3 warn about each time it is read
+#: (speechDictHandler.__getattr__).
 DICTIONARIES = "dictionaries"
 #: Marks what the assistant put in the place of an add-on's own, and keeps its own.
 ORIGINAL = "_jawsMigratorOriginal"
@@ -165,11 +170,21 @@ def _isOurs(function) -> bool:
 def _install() -> bool:
 	"""Put the assistant's versions in Columns Review and Emoticons, once each. True when either is there."""
 	columnsReview = _installIn(COLUMNS_REVIEW, (SCRIPT_GESTURES,), _rememberedKeys, "Columns Review asks NVDA for the keys of NVDA's own commands only when they change")
-	emoticons = _installIn(EMOTICONS, EMOTICONS_FUNCTIONS, _oneWarning, "Emoticons reads NVDA's temporary speech dictionary once for each change")
+	emoticons = _installIn(
+		EMOTICONS,
+		EMOTICONS_FUNCTIONS,
+		_oneWarning,
+		"Emoticons reads NVDA's temporary speech dictionary once for each change",
+		needed=_readsDictionaries,
+		notNeeded="Emoticons doesn't read speechDictHandler.dictionaries (as from its version 38.2.0), so NVDA writes no warning "
+		"at a profile switch, and the assistant leaves it as it is",
+	)
 	return columnsReview or emoticons
 
 
-def _installIn(moduleName: str, names: tuple, make, what: str) -> bool:
+def _installIn(moduleName: str, names: tuple, make, what: str, needed=None, notNeeded: str = "") -> bool:
+	"""Put the assistant's version in the place of each of the add-on's functions ``names``, where ``needed`` (if given)
+	says the function holds NVDA up. True when the assistant's versions are there."""
 	module = sys.modules.get(moduleName)
 	if module is None:
 		# Not installed, turned off, or not loaded yet.
@@ -182,13 +197,22 @@ def _installIn(moduleName: str, names: tuple, make, what: str) -> bool:
 		if not all(callable(function) for function in current.values()):
 			_failure(f"{moduleName} has no {', '.join(names)} the assistant knows, so it switches profiles as it always has")
 			return False
-		for name, function in current.items():
-			if _isOurs(function):
-				continue
+		wrapping = {
+			name: function
+			for name, function in current.items()
+			if not _isOurs(function) and (needed is None or needed(function))
+		}
+		if not wrapping:
+			if not any(_isOurs(function) for function in current.values()):
+				# This version of the add-on doesn't hold NVDA up.
+				_note(moduleName, notNeeded)
+				return False
+			return True
+		for name, function in wrapping.items():
 			installed = make(function)
 			setattr(module, name, installed)
 			_replaced.append((module, name, installed, function))
-		_log().debug(f"jawsMigrator: {what} ({moduleName}.{', '.join(names)})")
+		_log().debug(f"jawsMigrator: {what} ({moduleName}.{', '.join(wrapping)})")
 		return True
 	except Exception:
 		_failure(f"can't keep {moduleName} from holding NVDA up at a profile switch")
@@ -264,6 +288,27 @@ def _rememberedKeys(original):
 	setattr(getScriptGestures, MARK, _TOKEN)
 	setattr(getScriptGestures, ORIGINAL, original)
 	return getScriptGestures
+
+
+def _readsDictionaries(function) -> bool:
+	"""Whether one of Emoticons' functions reads ``speechDictHandler.dictionaries``, as Emoticons 38.0.0's do; from
+	38.2.0 they use a dictionary Emoticons keeps itself. When that can't be told, as if it does, as 1.34 had it."""
+	try:
+		import inspect
+
+		code = getattr(inspect.unwrap(function), "__code__", None)
+		if code is None:
+			return True
+		codes = [code]
+		while codes:
+			code = codes.pop()
+			if DICTIONARIES in code.co_names:
+				return True
+			# Any function or comprehension inside it.
+			codes.extend(constant for constant in code.co_consts if hasattr(constant, "co_names"))
+		return False
+	except Exception:
+		return True
 
 
 def _oneWarning(original):

@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.35](#whats-new-in-135)
 - [What's new in 1.34](#whats-new-in-134)
 - [What's new in 1.33](#whats-new-in-133)
 - [What's new in 1.32](#whats-new-in-132)
@@ -86,10 +87,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.34.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.35.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.35
+
+- **The Emoticons add-on is left alone from its version 38.2.0, which writes no warnings.** Since 1.34, the assistant has Emoticons 38.0.0 read NVDA's speech dictionaries once for each change instead of twice for each emoticon, so NVDA writes its warning once instead of 177 times at each profile switch (see [What's new in 1.34](#whats-new-in-134)). To do that, the assistant read them once itself. Emoticons 38.2.0, which needs NVDA 2026.3, keeps NVDA's temporary dictionary itself and no longer reads the name NVDA warns about, so NVDA writes no warning, but the assistant's own reading would have added one at each change. Now the assistant helps only a version of Emoticons that still reads that name, such as 38.0.0 on NVDA 2026.2 or 2026.3. Columns Review is helped as before; its author has [the report](https://github.com/ABuffEr/columnsReview/issues/55).
+- **Tested with NVDA 2026.3's own code and Emoticons 38.2.0's own code.** The tests run NVDA 2026.3's getDictionaryDefinition, on 1.34's imitation of NVDA 2026.2's speech dictionaries and their warning, with Emoticons 38.2.0's own code for a profile switch. With 1.34, eight profile switches wrote 16 warnings; now none, and NVDA's temporary dictionary holds the same emoticons. Emoticons 38.0.0 on NVDA 2026.3, which still warns, gets one warning for each change, as in 1.34.
+
+This is part of "Keep Columns Review and Emoticons from holding NVDA up each time you switch programs or browse mode turns on or off", in NVDA's Settings, JAWS Migration Assistant.
 
 ## What's new in 1.34
 
@@ -676,7 +684,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on, or a migration takes it from that JAWS option; see [What's new in 1.26](#whats-new-in-126) and [What's new in 1.27](#whats-new-in-127));
 - reading Outlook's status bar as JAWS does, with Insert+Page Down: its items, such as Items in View and the zoom, without "Status Bar" and the view and zoom buttons (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
-- keeping the Columns Review and Emoticons add-ons from holding NVDA up each time NVDA switches configuration profiles, as switching programs or browse mode does (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134));
+- keeping the Columns Review and Emoticons add-ons from holding NVDA up each time NVDA switches configuration profiles, as switching programs or browse mode does (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134) and [What's new in 1.35](#whats-new-in-135));
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));
 - saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region", not the page of a tab you are leaving, and not a page's first line the first time you come to it (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131), [What's new in 1.33](#whats-new-in-133) and [What's new in 1.34](#whats-new-in-134));
