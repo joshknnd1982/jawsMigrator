@@ -27,6 +27,20 @@ Migration Assistant.
 Version 1.12 read a heading level first when quick navigation moved to it (headingOrder), from a report
 that turned out to be about "main landmark". JAWS says the text first, so that is gone, and the text
 comes first again.
+
+E does the same for an edit field (issue 30). On a reddit post in Edge, NVDA said "banner landmark,
+navigation landmark, search landmark, Remove r/Visible filter and expand search to all of Reddit, edit,
+Search in r/Visible" for the search box, and "main landmark, edit, Join the conversation" for the reply
+box. JAWS's E (MoveToNextEdit) says no landmark: on a copy of the page, JAWS 2026 said "Remove r/Visible
+filter and expand search to all of Reddit, edit, blank, placeholder, Search in r/Visible", and on reddit
+the tester's JAWS said "edit, blank, placeholder, Join the conversation" (issue 22). JAWS says "blank"
+for an edit field with nothing in it, then "placeholder" and its placeholder (common.jsm cmsgBlank1 and
+cmsgPlaceholder), as its scripts do for the focus (IA2Browser.jss HandleSayObjectForEdit). NVDA's browse
+mode says an empty field's placeholder where its value goes, without either word
+(``speech.getControlFieldSpeech``). So E and Shift+E, and Move to in the Elements List (the item type
+"edit"), say an edit field without the containers around it, and an empty one with "blank", then
+"placeholder" and its placeholder, after its type and states. A field with text in it is said as NVDA
+says it.
 """
 
 from __future__ import annotations
@@ -44,6 +58,13 @@ MARK = "_jawsMigratorQuickNavHeadings"
 _TOKEN = object()
 #: Quick navigation's item types for headings: "heading", and "heading1" to "heading9" for one level.
 HEADING = "heading"
+#: Quick navigation's item type for edit fields (E and Shift+E).
+EDIT = "edit"
+#: What JAWS says for an edit field with nothing in it, and before its placeholder (common.jsm cmsgBlank1, cmsgPlaceholder).
+BLANK = "blank"
+PLACEHOLDER = "placeholder"
+#: The field types of the field quick navigation reports, as NVDA says it where the report starts.
+REPORTED = ("start_addedToControlFieldStack", "start_relative")
 #: How NVDA says a field (in the speech package, where textInfos.TextInfo looks it up), and how quick navigation reports an item.
 FIELD_SPEECH = "getControlFieldSpeech"
 REPORT = "report"
@@ -57,10 +78,12 @@ _failed = False
 _lock = threading.RLock()
 #: What the assistant put in the place of NVDA's own: [(owner, attribute name, the assistant's, NVDA's)].
 _replaced: list = []
-#: NVDA's OutputReason.QUICKNAV and Role.HEADING, once known.
+#: NVDA's OutputReason.QUICKNAV, Role.HEADING and Role.EDITABLETEXT, once known.
 _quickNav = None
 _headingRole = None
-#: For each thread: how many heading reports are going on (``headings``), and what they left out (``leftOut``).
+_editRole = None
+#: For each thread: the reports going on, innermost last (``reports``: [the role of what is reported, whether it is an
+#: empty edit field]), and what they left out (``leftOut``).
 _local = threading.local()
 
 
@@ -82,7 +105,7 @@ def _failure(what: str) -> None:
 
 
 def wanted(stateData: dict) -> bool:
-	"""Whether quick navigation says a heading without what it is in: on unless the user turned it off."""
+	"""Whether quick navigation says a heading or an edit field without what it is in: on unless the user turned it off."""
 	return isinstance(stateData, dict) and bool(stateData.get(STATE_KEY, True))
 
 
@@ -95,9 +118,23 @@ def isHeading(item) -> bool:
 	return not level or level.isdigit()
 
 
+def isEditField(item) -> bool:
+	"""Whether the quick navigation item ``item`` is an edit field: "edit", what E moves to."""
+	return getattr(item, "itemType", None) == EDIT
+
+
+def _isEmpty(item) -> bool:
+	"""Whether the edit field quick navigation reports has nothing in it: its text, as browse mode has it, is blank."""
+	try:
+		text = item.textInfo.text
+	except Exception:
+		return False
+	return isinstance(text, str) and not text.strip()
+
+
 def register() -> None:
-	"""Have quick navigation say the headings it moves to without what they are in, from now on."""
-	global _enabled, _quickNav, _headingRole
+	"""Have quick navigation say the headings and edit fields it moves to without what they are in, from now on."""
+	global _enabled, _quickNav, _headingRole, _editRole
 	if _enabled:
 		return
 	_enabled = True
@@ -108,12 +145,13 @@ def register() -> None:
 
 		_quickNav = OutputReason.QUICKNAV
 		_headingRole = Role.HEADING
+		_editRole = Role.EDITABLETEXT
 		with _lock:
 			# Without NVDA's field speech there is nothing to leave out, and NVDA's reports are left alone too.
 			if _replace(speech, FIELD_SPEECH, _fieldSpeechGuarded):
 				_replace(browseMode.TextInfoQuickNavItem, REPORT, _reportGuarded)
 	except Exception:
-		_failure("can't have quick navigation say a heading without what it is in")
+		_failure("can't have quick navigation say a heading or an edit field without what it is in")
 
 
 def unregister() -> None:
@@ -154,17 +192,17 @@ def _replace(owner, name: str, guarded) -> bool:
 		# Still there from before: turned off and on again, or another add-on has put its own around it since.
 		return True
 	if not callable(current):
-		_failure(f"NVDA has no {name} the assistant knows, so quick navigation says headings as NVDA does")
+		_failure(f"NVDA has no {name} the assistant knows, so quick navigation says headings and edit fields as NVDA does")
 		return False
 	installed = guarded(current)
 	setattr(owner, name, installed)
 	_replaced.append((owner, name, installed, current))
-	_log().debug(f"jawsMigrator: quick navigation says a heading without the landmark, region or list it is in ({getattr(owner, '__name__', owner)}.{name})")
+	_log().debug(f"jawsMigrator: quick navigation says a heading or an edit field without the landmark, region or list it is in ({getattr(owner, '__name__', owner)}.{name})")
 	return True
 
 
-def _isHeadingField(field) -> bool:
-	return hasattr(field, "get") and field.get("role") == _headingRole
+def _hasRole(field, role) -> bool:
+	return hasattr(field, "get") and field.get("role") == role
 
 
 def _argument(args: tuple, kwargs: dict, name: str, index: int, default=None):
@@ -174,12 +212,13 @@ def _argument(args: tuple, kwargs: dict, name: str, index: int, default=None):
 	return args[index] if len(args) > index else default
 
 
-def _isAround(attrs, ancestorAttrs, args: tuple, kwargs: dict) -> bool:
-	"""Whether the field ``attrs`` is a container or table cell around the heading quick navigation reports."""
+def _isAround(attrs, ancestorAttrs, args: tuple, kwargs: dict, role) -> bool:
+	"""Whether the field ``attrs`` is a container or table cell around the heading or edit field (``role``) quick
+	navigation reports."""
 	if _argument(args, kwargs, "reason", 2) != _quickNav or not hasattr(attrs, "getPresentationCategory"):
 		return False
-	# The heading, and whatever is in it, are said. So is a link or button around it, which isn't a container.
-	if _isHeadingField(attrs) or any(_isHeadingField(ancestor) for ancestor in ancestorAttrs or ()):
+	# The heading or edit field, and whatever is in it, are said. So is a link or button around it, which isn't a container.
+	if _hasRole(attrs, role) or any(_hasRole(ancestor, role) for ancestor in ancestorAttrs or ()):
 		return False
 	formatConfig = _argument(args, kwargs, "formatConfig", 0)
 	if not formatConfig:
@@ -196,18 +235,69 @@ def _words(sequence) -> str:
 	return " ".join(item for item in sequence if isinstance(item, str) and item.strip())
 
 
+def _afterTypeAndStates(sequence: list, attrs, reason) -> int:
+	"""Where NVDA's speech for the edit field ``attrs`` has said its type and its states (speech.getControlFieldSpeech
+	says its name, type, states, then its value or placeholder, description and the rest)."""
+	# NVDA's getControlFieldSpeech finds getPropertiesSpeech in its own module, where formFields leaves out "multi line".
+	from speech import speech
+
+	role = attrs.get("role")
+	roleText = attrs.get("roleText")
+	typeWords = [roleText] if roleText else list(speech.getPropertiesSpeech(reason=reason, role=role))
+	stateWords = list(speech.getPropertiesSpeech(reason=reason, states=attrs.get("states", set()), _role=role))
+	size = len(typeWords)
+	for start in range(len(sequence) - size + 1):
+		if size and sequence[start : start + size] == typeWords:
+			end = start + size
+			if stateWords and sequence[end : end + len(stateWords)] == stateWords:
+				end += len(stateWords)
+			return end
+	return len(sequence)
+
+
+def withBlank(sequence, attrs, reason) -> list:
+	"""NVDA's speech for an empty edit field quick navigation reports, as JAWS says it: "blank", then "placeholder" and
+	its placeholder, after its type and states. NVDA said the placeholder where the field's value goes."""
+	result = list(sequence)
+	placeholder = attrs.get("placeholder")
+	if placeholder:
+		for index in range(len(result) - 1, -1, -1):
+			if isinstance(result[index], str) and result[index] == placeholder:
+				del result[index]
+				break
+	at = _afterTypeAndStates(result, attrs, reason)
+	result[at:at] = [BLANK, PLACEHOLDER, placeholder] if placeholder else [BLANK]
+	return result
+
+
 def _fieldSpeechGuarded(original):
-	"""NVDA's speech for a field: nothing for a container around a heading quick navigation reports."""
+	"""NVDA's speech for a field: nothing for a container around a heading or edit field quick navigation reports, and
+	an empty edit field it reports as JAWS says it."""
 
 	@functools.wraps(original)
 	def getControlFieldSpeech(attrs, ancestorAttrs, fieldType, *args, **kwargs):
 		sequence = original(attrs, ancestorAttrs, fieldType, *args, **kwargs)
-		if not sequence or not _enabled or fieldType not in AROUND or not getattr(_local, "headings", 0):
+		reports = getattr(_local, "reports", None)
+		if not sequence or not _enabled or not reports:
+			return sequence
+		role, empty = reports[-1]
+		if empty and fieldType in REPORTED and _hasRole(attrs, role) and _argument(args, kwargs, "reason", 2) == _quickNav:
+			try:
+				said = withBlank(sequence, attrs, _quickNav)
+			except Exception:
+				_failure('could not say "blank" and the placeholder of an empty edit field')
+				return sequence
+			try:
+				_log().debug(f"jawsMigrator: quick navigation moved to an empty edit field, said as JAWS says it: {', '.join(item for item in said if isinstance(item, str) and item)}")
+			except Exception:
+				pass
+			return said
+		if fieldType not in AROUND:
 			return sequence
 		try:
-			around = _isAround(attrs, ancestorAttrs, args, kwargs)
+			around = _isAround(attrs, ancestorAttrs, args, kwargs, role)
 		except Exception:
-			_failure("could not tell what a heading is in")
+			_failure("could not tell what a heading or edit field is in")
 			around = False
 		if not around:
 			return sequence
@@ -220,24 +310,32 @@ def _fieldSpeechGuarded(original):
 
 
 def _reportGuarded(original):
-	"""NVDA's report of what quick navigation moved to, which says a heading without what it is in."""
+	"""NVDA's report of what quick navigation moved to, which says a heading or an edit field without what it is in."""
 
 	@functools.wraps(original)
 	def report(item, *args, **kwargs):
-		if not _enabled or not isHeading(item):
+		if not _enabled:
 			return original(item, *args, **kwargs)
-		depth = getattr(_local, "headings", 0)
-		if not depth:
+		if isHeading(item):
+			reported = (_headingRole, False)
+		elif isEditField(item):
+			reported = (_editRole, _isEmpty(item))
+		else:
+			return original(item, *args, **kwargs)
+		reports = getattr(_local, "reports", None)
+		if not reports:
+			reports = _local.reports = []
 			_local.leftOut = []
-		_local.headings = depth + 1
+		reports.append(reported)
 		try:
 			return original(item, *args, **kwargs)
 		finally:
-			_local.headings = depth
-			if not depth and _local.leftOut:
+			reports.pop()
+			if not reports and _local.leftOut:
+				what = "a heading" if reported[0] == _headingRole else "an edit field"
 				try:
 					_log().debug(
-						f"jawsMigrator: quick navigation moved to a heading ({item.itemType}), so NVDA doesn't say what it is in: {'; '.join(_local.leftOut)}",
+						f"jawsMigrator: quick navigation moved to {what} ({item.itemType}), so NVDA doesn't say what it is in: {'; '.join(_local.leftOut)}",
 					)
 				except Exception:
 					pass

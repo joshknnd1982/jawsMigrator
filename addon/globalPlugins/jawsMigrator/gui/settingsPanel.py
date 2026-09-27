@@ -17,6 +17,7 @@ from gui.settingsDialogs import SettingsPanel
 from .. import (
 	autoFormsMode,
 	backspaceEcho,
+	browserPages,
 	documentPolling,
 	documentValues,
 	driveLetters,
@@ -75,9 +76,13 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="When NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, go back to the window you were in"),
 		)
 		self.backFromTaskbar.SetValue(startupFocus.wanted(state.load()))
-		# NVDA's H says "main landmark" before a heading in the page's main part; JAWS's H says the heading alone.
+		# NVDA's H says "main landmark" before a heading in the page's main part; JAWS's H says the heading alone. JAWS's
+		# E says the edit field alone, and "blank, placeholder" and the placeholder for an empty one.
 		self.headingAlone = helper.addItem(
-			wx.CheckBox(self, label="When &quick navigation moves to a heading, don't say the landmark, region or list it is in"),
+			wx.CheckBox(
+				self,
+				label='When &quick navigation moves to a heading or an edit field, don\'t say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field',
+			),
 		)
 		self.headingAlone.SetValue(quickNavHeadings.wanted(state.load()))
 		# File Explorer's drives, Alt+Tab's windows and Outlook's messages have a row and column; JAWS never says them.
@@ -215,6 +220,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.formFieldsAsJaws.SetValue(formFields.wanted(state.load()))
+		# NVDA said "... - Microsoft Edge, window", "... - Microsoft Edge, region" and "..., document" with the page's
+		# address as a reddit post opened (issue 30); JAWS said the titles alone.
+		self.browserPagesAsJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label='Say Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the address or Edge\'s "region"',
+			),
+		)
+		self.browserPagesAsJaws.SetValue(browserPages.wanted(state.load()))
 		# JAWS keeps the last 500 things it said for Insert+Space, then H; the assistant's layer has the same keys.
 		self.keepSpeechHistory = helper.addItem(
 			wx.CheckBox(self, label="Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history"),
@@ -317,6 +331,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownQuietListBounds = self.quietListBounds.GetValue()
 		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
 		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
+		self._shownBrowserPagesAsJaws = self.browserPagesAsJaws.GetValue()
 		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
@@ -409,6 +424,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[linkSpeech.STATE_KEY] = self.linksAsJaws.GetValue()
 		if self.formFieldsAsJaws.GetValue() != self._shownFormFieldsAsJaws:
 			updates[formFields.STATE_KEY] = self.formFieldsAsJaws.GetValue()
+		if self.browserPagesAsJaws.GetValue() != self._shownBrowserPagesAsJaws:
+			updates[browserPages.STATE_KEY] = self.browserPagesAsJaws.GetValue()
 		if self.keepSpeechHistory.GetValue() != self._shownKeepSpeechHistory:
 			updates[speechHistory.STATE_KEY] = self.keepSpeechHistory.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:

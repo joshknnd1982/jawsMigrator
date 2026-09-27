@@ -71,8 +71,9 @@ DEFAULTS = {
 	"playJawsLayerSound": True,
 	#: NVDA says a system tray icon when the focus moves to it, not each time its program changes it (see trayChanges).
 	"quietTrayIconChanges": True,
-	#: Quick navigation says a heading without the landmark, region or list it is in, as JAWS does (see quickNavHeadings).
-	#: Version 1.12's "sayHeadingLevelFirst" (a heading's level before its text) is gone: JAWS says the text first.
+	#: Quick navigation says a heading or an edit field without the landmark, region or list it is in, and an empty edit
+	#: field with "blank, placeholder", as JAWS does (see quickNavHeadings). Version 1.12's "sayHeadingLevelFirst" (a
+	#: heading's level before its text) is gone: JAWS says the text first.
 	"sayHeadingAlone": True,
 	#: An item in a list is said without its row and column numbers, as JAWS says it (see listCoordinates).
 	"listItemsWithoutCoordinates": True,
@@ -125,6 +126,9 @@ DEFAULTS = {
 	#: placeholder, no "multi line" for any edit field, and nothing again of what browse mode's cursor was in when the
 	#: focus moves there (see formFields).
 	"sayFormFieldsAsJaws": True,
+	#: Edge's and Chrome's windows and pages are said as JAWS says them: the window by its name and a page that opens by
+	#: its title, without "window", "document", the page's address or Edge's frame around the page (see browserPages).
+	"sayBrowserPagesAsJaws": True,
 	#: An Outlook message you read is said as JAWS says it: "send mail link" for a link to an e-mail address, a list
 	#: where it starts and after it, and no "heading level 1" for the From line of a message it quotes (see
 	#: outlookMessages).

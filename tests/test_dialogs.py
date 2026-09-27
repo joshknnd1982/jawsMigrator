@@ -546,9 +546,9 @@ class SettingsPanelTests(unittest.TestCase):
 
 		self._checkBoxIsSavedAndApplied(
 			self.dialog.panel.headingAlone,
-			"When &quick navigation moves to a heading, don't say the landmark, region or list it is in",
+			'When &quick navigation moves to a heading or an edit field, don\'t say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field',
 			quickNavHeadings.STATE_KEY,
-			"quick navigation says what a heading is in again, at once",
+			"quick navigation says what a heading or an edit field is in again, at once",
 		)
 
 	def test_listItemsWithoutCoordinatesIsSavedAndApplied(self):
@@ -738,6 +738,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'Say edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder, no "multi line", and no landmark you were already in',
 			formFields.STATE_KEY,
 			'NVDA says an edit field\'s placeholder first, "multi line" and the landmark again, at once',
+		)
+
+	def test_sayBrowserPagesAsJawsIsSavedAndApplied(self):
+		from jawsMigrator import browserPages
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.browserPagesAsJaws,
+			'Say Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the address or Edge\'s "region"',
+			browserPages.STATE_KEY,
+			'NVDA says "window", "document" and a page\'s address again, at once',
 		)
 
 	def test_keepSpeechHistoryIsSavedAndApplied(self):

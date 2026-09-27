@@ -107,6 +107,11 @@ def _getPlaceholderSpeechIfTextEmpty(obj, reason):
 	return False, []
 
 
+def speakObject(obj, reason=None, _prefixSpeechCommand=None, priority=None):
+	"""NVDA's saying of an object (speech.speakObject), as far as the smoke test goes."""
+	return None
+
+
 def formFieldsNvdasOwn():
 	"""Whether NVDA's own object speech, property speech and placeholder speech are in place."""
 	speechModule = sys.modules["speech.speech"]
@@ -276,6 +281,7 @@ def installSpeech():
 	speech.speech._objectSpeech_calculateAllowedProps = _objectSpeech_calculateAllowedProps
 	speech.speech.processText = processText
 	speech.getControlFieldSpeech = getControlFieldSpeech
+	speech.speakObject = speakObject
 	controlTypes = types.ModuleType("controlTypes")
 	controlTypes.Role = Labelled(
 		"Role",
@@ -289,6 +295,9 @@ def installSpeech():
 			"ALERT": "alert",
 			"LINK": "link",
 			"EDITABLETEXT": "edit",
+			"WINDOW": "window",
+			"REGION": "region",
+			"DOCUMENT": "document",
 		},
 	)
 	controlTypes.DescriptionFrom = enum.Enum("DescriptionFrom", {"UNKNOWN": "unknown", "ARIA_DESCRIPTION": "aria-description", "TOOLTIP": "tooltip"})
@@ -1018,6 +1027,20 @@ def main():
 			and speechModule.getPropertiesSpeech.__wrapped__ is getPropertiesSpeech,
 			"and on again, wrapped once",
 		)
+		# Edge's and Chrome's windows and pages are said as JAWS says them: their titles, without "window", "document",
+		# the page's address or Edge's frame around the page (see browserPages).
+		from jawsMigrator import browserPages
+
+		check(
+			browserPages.isRegistered() and speechPackage.speakObject.__wrapped__ is speakObject,
+			"Edge's and Chrome's windows and pages are said as JAWS says them",
+		)
+		jawsMigrator.state.set(browserPages.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not browserPages.isRegistered() and speechPackage.speakObject is speakObject, "turned off in the Settings panel, NVDA's own is back")
+		jawsMigrator.state.set(browserPages.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(browserPages.isRegistered() and speechPackage.speakObject.__wrapped__ is speakObject, "and on again, wrapped once")
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 
@@ -1125,6 +1148,7 @@ def main():
 			not formFields.isRegistered() and plugin._formFields is None and formFieldsNvdasOwn(),
 			"and NVDA's object speech, property speech and an empty field's placeholder",
 		)
+		check(not browserPages.isRegistered() and speechPackage.speakObject is speakObject, "and NVDA's saying of an object")
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -1164,6 +1188,7 @@ def main():
 			"listBounds",
 			"linkSpeech",
 			"formFields",
+			"browserPages",
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",

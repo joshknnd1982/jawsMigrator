@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.30
+- Version: 1.31
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.31](#whats-new-in-131)
 - [What's new in 1.30](#whats-new-in-130)
 - [What's new in 1.29](#whats-new-in-129)
 - [What's new in 1.28](#whats-new-in-128)
@@ -82,10 +83,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.30.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.31.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.31
+
+From the tester's report:
+
+- **Edge and Chrome windows and pages are said as JAWS says them, by their titles.** The tester opened a reddit post in Edge, and NVDA said "Worst three days of my life : r/Visible and 1 more page - Profile 1 - Microsoft Edge, window", then "Worst three days of my life : r/Visible - Microsoft Edge, region", then "Worst three days of my life : r/Visible, document" and the page's whole address. On a copy of the page, JAWS 2026 said the titles alone: "Worst three days of my life : r/Visible - Microsoft Edge", the page's title, and how many regions, headings and links the page has, never "window", "document" or the address. NVDA said the address and "region" because it read Edge through UI Automation that time. That way, a page's value is its address, and Edge's own frame around the page is a region named after the page. NVDA normally reads Edge's pages through IAccessible2, as JAWS does, and there it says neither. Now NVDA says Edge's and Chrome's window by its name, without "window", and a page, when it opens or you come back to it, by its title, without "document" or its address, and it doesn't say Edge's frame. Anything else NVDA says with them, such as "busy", stays. NVDA+Tab, a page without a title, other programs and braille are as before. When NVDA logs at its debug level, its log says what was left out. To have NVDA say them as before, uncheck 'Say Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the address or Edge\'s "region"' in NVDA's Settings, JAWS Migration Assistant.
+- **E says an edit field as JAWS does: without the landmarks around it, and "blank, placeholder" when it is empty.** On the same post, E said "banner landmark, navigation landmark, search landmark, Remove r/Visible filter and expand search to all of Reddit, edit, Search in r/Visible" for the search box, and "main landmark, edit, Join the conversation" for the reply box. JAWS's E says no landmark. For a field with nothing in it, JAWS says "blank", then "placeholder" and the grey text the field shows: on a copy of the page JAWS said "Remove r/Visible filter and expand search to all of Reddit, edit, blank, placeholder, Search in r/Visible", and on reddit the tester's JAWS said "edit, blank, placeholder, Join the conversation". (The search box has that long name because Reddit puts the button that removes the r/Visible filter inside the box's label; on the copy, JAWS said it too.) Now E and Shift+E, and Move to in the Elements List, say an edit field without the landmarks, regions and lists around it, as H has said a heading since 1.13, and an empty one with "blank", then "placeholder" and its placeholder, after its type. A field with text in it is said as before, and the arrow keys, Tab and NVDA's other quick navigation keys still say the landmarks they come into. It is part of the check box for headings, now "When quick navigation moves to a heading or an edit field, don't say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field".
+- **Tested with both NVDA and JAWS, as the tester asked.** Reddit turns automated browsers away, so the tests used a copy of the post's page, with the search box and the reply box built the way Reddit's own scripts build them. On the maintainer's computer, with Edge 154, JAWS 2026 read the copy, driven through JAWS's own programming interface, and its speech history was copied after each step; then NVDA 2026.2 read it without this version's changes and with them. With them, NVDA said for E exactly what JAWS said, and the window and page by their titles. The assistant's tests also run NVDA 2026.2's own speech code on the tester's page and give the tester's lines word for word before the change, and JAWS's words after it.
 
 ## What's new in 1.30
 
@@ -595,7 +604,7 @@ The version details have JAWS's lines, with NVDA's facts. In Outlook they look l
 Version Details Information:
 Microsoft Outlook Subscription Version 16.0.20326.20158
 NVDA version 2026.2 (2026.2.0.57664)
-JAWS Migration Assistant version 1.30
+JAWS Migration Assistant version 1.31
 Current settings: normal configuration.
 Current application: OUTLOOK.EXE.
 Active configuration: outlook.
@@ -614,7 +623,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - saying a control's type and state once, even when its label repeats them, and a change once when you activate a control in browse mode (on unless you turn it off; see [What's new in 1.5](#whats-new-in-15) and [What's new in 1.8](#whats-new-in-18));
 - saying a system tray icon when you move to it, not each time its program changes it (on unless you turn it off; see [What's new in 1.9](#whats-new-in-19));
 - going back to the window you were in when NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, where NVDA then reads the focus as it reads that program (on unless you turn it off; see [What's new in 1.18](#whats-new-in-118) and [What's new in 1.28](#whats-new-in-128));
-- saying a heading without the landmark, region or list it is in when quick navigation moves to it (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113));
+- saying a heading or an edit field without the landmark, region or list it is in when quick navigation moves to it, and "blank, placeholder" for an empty edit field (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113) and [What's new in 1.31](#whats-new-in-131));
 - leaving out the row and column numbers of items in lists, such as drives, files and messages (on unless you turn it off);
 - leaving out the position, such as 3 of 3, in Alt+Tab and when you come to a list in File Explorer (on unless you turn it off; see [What's new in 1.14](#whats-new-in-114));
 - saying a drive's name without the colon and parenthesis after its letter, as in Data (D:) (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
@@ -634,6 +643,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));
+- saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region" (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131));
 - keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.

@@ -13,8 +13,9 @@ It also has NVDA say a control's type and state once when a web page repeats
 them in the control's label (see labelRepeats), or when NVDA would say again
 what activating a control in browse mode changed (see changeRepeats), and a
 system tray icon when the focus moves to it, not each time its program changes
-it (see trayChanges), and a heading without the landmark, region or list it is
-in when quick navigation moves to it (see quickNavHeadings), and an item in a
+it (see trayChanges), and a heading or an edit field without the landmark, region
+or list it is in when quick navigation moves to it, an empty edit field with
+"blank" and "placeholder" as JAWS says it (see quickNavHeadings), and an item in a
 list without row and column numbers (see listCoordinates), a position ("3 of 3")
 in File Explorer and Alt+Tab only where JAWS says one (see listPosition), a drive
 without the ":)" after its letter, as in "Data (D:)" (see driveLetters), and what Backspace
@@ -51,6 +52,9 @@ when quick navigation moves to the heading (see linkSpeech);
 an empty edit field on a web page is said as JAWS says it, "edit, blank,
 placeholder" and its placeholder, without "multi line" and without the
 landmark browse mode's cursor was already in (see formFields);
+Edge's and Chrome's windows and pages are said as JAWS says them, by their
+titles, without "window", "document", the page's address or Edge's frame
+around the page (see browserPages);
 NVDA started with its desktop shortcut's key comes up in the window you were
 in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
@@ -474,6 +478,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import browserPages
+
+			browserPages.unregister()
+		except Exception:
+			pass
+		try:
 			from . import typingWatch
 
 			typingWatch.unregister()
@@ -581,13 +591,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			from . import quickNavHeadings
 
-			# Not a JAWS setting: JAWS's H says the heading alone, not the landmark it is in (NVDA's order stays).
+			# Not a JAWS setting: JAWS's H says the heading alone, not the landmark it is in (NVDA's order stays), and its E
+			# the edit field alone, with "blank, placeholder" when it is empty.
 			if quickNavHeadings.wanted(data):
 				quickNavHeadings.register()
 			else:
 				quickNavHeadings.unregister()
 		except Exception:
-			debugLog.error("could not apply saying a heading without what it is in")
+			debugLog.error("could not apply saying a heading or an edit field without what it is in")
 		try:
 			from . import listCoordinates
 
@@ -774,6 +785,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._formFields = formFields
 		except Exception:
 			debugLog.error("could not have NVDA say edit fields on web pages as JAWS says them")
+		try:
+			from . import browserPages
+
+			# Not a JAWS setting: JAWS's scripts for Chrome and Edge (Chrome.jss) say the browser's window by its name
+			# alone, and a page that opens by its title, never "window", "document" or the page's address.
+			if browserPages.wanted(data):
+				browserPages.register()
+			else:
+				browserPages.unregister()
+		except Exception:
+			debugLog.error("could not have NVDA say Edge's and Chrome's windows and pages as JAWS says them")
 		try:
 			from . import speechHistory
 
