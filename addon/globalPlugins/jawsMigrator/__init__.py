@@ -30,7 +30,8 @@ NVDA's Elements List opens while a web page is still changing, instead of
 being left half made and unseen with the focus in it, and says its item once
 when it fills the list again (see elementsList), and shows links as JAWS's
 Links List does, without "level 0", says "no links" on a page without links
-and moves to the link it activates (see linksList);
+and moves to the link it activates, and each JAWS list key opens it on its own
+kind alone, as Insert+F7 opens JAWS's Links List (see linksList);
 an alert with nothing in it isn't said as "alert" alone (see emptyAlerts);
 the arrow keys stay in an edit field on a web page when they reach its start or
 end, as in JAWS's Auto Forms Mode (see fieldEdges);
@@ -39,7 +40,9 @@ leave (see outlookRows), and an Outlook message without page and section
 numbers (see outlookPages); an Outlook message you read is said with "send
 mail link" for an e-mail address, a list where it starts and ends, and no
 heading for the From line of a message it quotes, as JAWS says it, and read
-from the top when it opens only when turned on (see outlookMessages);
+from the top when it opens only when turned on (see outlookMessages), and
+Outlook's status bar is read as JAWS reads it, its items and zoom without the
+view and zoom buttons (see outlookStatusBar);
 the Columns Review add-on doesn't say "List top" or "List bottom" at the ends
 of a list, which JAWS never says (see listBounds);
 a link on a web page is said as JAWS says it: "same page" only for a link to
@@ -53,7 +56,9 @@ in, not on the taskbar, as JAWS does (see startupFocus); JAWS's dictionary for
 one application changes speech only in that application (see appDicts); and
 NVDA's debug log says when a program types a key late or not at all (see
 typingWatch). NVDA+Shift+J, then L saves NVDA's log as a zip file small enough
-to attach to a GitHub issue (see logZip).
+to attach to a GitHub issue (see logZip), and NVDA+Shift+J, then H shows what
+NVDA said, as JAWS's speech history does, where Control+H copies it and Shift+H
+clears it (see speechHistory).
 """
 
 from __future__ import annotations
@@ -99,7 +104,11 @@ LAYER_GESTURES = {
 	"kb:u": "checkForUpdates",
 	"kb:i": "systemSummary",
 	"kb:l": "saveLogForIssue",
-	"kb:h": "layerHelp",
+	# JAWS's own keys after Insert+Space (Default.JKM): H, Control+H and Shift+H for the speech history, and ? for help.
+	"kb:h": "showSpeechHistory",
+	"kb:control+h": "copySpeechHistory",
+	"kb:shift+h": "clearSpeechHistory",
+	"kb:shift+/": "layerHelp",
 	"kb:f1": "layerHelp",
 }
 
@@ -118,7 +127,10 @@ LAYER_HELP = (
 	"U, check for updates. "
 	"I, JAWS, Windows and NVDA versions on this computer. "
 	"L, save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue. "
-	"H, this help. Escape leaves the layer."
+	"H, what NVDA said, the most recent last, as JAWS's speech history. "
+	"Control+H, copy the speech history to the clipboard. "
+	"Shift+H, clear the speech history. "
+	"Question mark or F1, this help. Escape leaves the layer."
 )
 
 
@@ -425,6 +437,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import outlookStatusBar
+
+			outlookStatusBar.unregister()
+		except Exception:
+			pass
+		try:
 			from . import listBounds
 
 			listBounds.unregister()
@@ -449,6 +467,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			typingWatch.unregister()
 		except Exception:
 			pass
+		try:
+			from . import speechHistory
+
+			speechHistory.unregister()
+		except Exception:
+			pass
 		super().terminate()
 
 	def _onConfigReset(self, factoryDefaults=False):
@@ -465,8 +489,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		a system tray icon said when the focus moves to it, a heading said without what it is in when quick
 		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
 		a slow program too, Enhanced Control Support's timer kept off documents, browse mode kept on a web page's
-		tabs and toolbar buttons, links shown in the Elements List as JAWS's Links List shows them, and the
-		layer's sound.
+		tabs and toolbar buttons, links shown in the Elements List as JAWS's Links List shows them, the speech
+		history, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -620,9 +644,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import linksList
 
 			# Not a JAWS setting: JAWS's Links List shows a link's text with "Current Page" and its shortcut key,
-			# without visited, same page or a level.
-			if linksList.wanted(data):
-				linksList.register()
+			# without visited, same page or a level; and each JAWS list key (Insert+F7, Insert+F6...) opens a list of
+			# its own kind alone.
+			links, keys = linksList.wanted(data), linksList.keysWanted(data)
+			if links or keys:
+				linksList.register(links=links, keys=keys)
 			else:
 				linksList.unregister()
 			self._linksList = linksList
@@ -691,6 +717,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not apply reading Outlook messages as JAWS does")
 		try:
+			from . import outlookStatusBar
+
+			# Not a JAWS setting: JAWS's script for Outlook reads the status bar's items and zoom (Outlook.jss,
+			# GetStatusBarWindowInfo), where NVDA said "Status Bar" and the view and zoom buttons too (issue 26).
+			if outlookStatusBar.wanted(data):
+				outlookStatusBar.register()
+			else:
+				outlookStatusBar.unregister()
+		except Exception:
+			debugLog.error("could not apply reading Outlook's status bar as JAWS does")
+		try:
 			from . import listBounds
 
 			# Not a JAWS setting: the Columns Review add-on, as it comes, says "List top" at a list's first item and
@@ -725,6 +762,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._formFields = formFields
 		except Exception:
 			debugLog.error("could not have NVDA say edit fields on web pages as JAWS says them")
+		try:
+			from . import speechHistory
+
+			# JAWS's [Options] SpeechHistory, on as JAWS comes: JAWS keeps the last 500 things it said, for Insert+Space
+			# then H, Control+H and Shift+H; the assistant's layer has the same keys. Turned off, the history is forgotten.
+			if speechHistory.wanted(data):
+				speechHistory.register()
+			else:
+				speechHistory.unregister()
+		except Exception:
+			debugLog.error("could not keep a speech history")
 		try:
 			from . import layerSound
 
@@ -836,6 +884,39 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not save NVDA's log for a GitHub issue")
 			ui.message("NVDA's log could not be saved. The assistant's debug log says why.")
+
+	def showSpeechHistory(self):
+		# JAWS's Insert+Space, H: what NVDA said, in a window, on the most recent line (see speechHistory).
+		if self._secure:
+			return
+		try:
+			from . import speechHistory
+
+			speechHistory.showAndSay()
+		except Exception:
+			debugLog.error("could not show the speech history")
+
+	def copySpeechHistory(self):
+		# JAWS's Insert+Space, Control+H: all of what NVDA said on the clipboard, one line each.
+		if self._secure:
+			return
+		try:
+			from . import speechHistory
+
+			speechHistory.copyAndSay()
+		except Exception:
+			debugLog.error("could not copy the speech history")
+
+	def clearSpeechHistory(self):
+		# JAWS's Insert+Space, Shift+H.
+		if self._secure:
+			return
+		try:
+			from . import speechHistory
+
+			speechHistory.clearAndSay()
+		except Exception:
+			debugLog.error("could not clear the speech history")
 
 	def _activateProfileAtStartup(self):
 		try:
@@ -1319,7 +1400,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self.bindGestures(self._GlobalPlugin__gestures)
 
 	@script(
-		description="Starts a layer of JAWS Migration Assistant commands; press H after it to hear them",
+		description="Starts a layer of JAWS Migration Assistant commands; press question mark or F1 after it to hear them",
 		gesture="kb:NVDA+shift+j",
 	)
 	def script_commandLayer(self, gesture):
@@ -1407,6 +1488,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	@script(description="Saves NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue")
 	def script_saveLogForIssue(self, gesture):
 		self.saveLogForIssue()
+
+	@script(description="Shows what NVDA said, the most recent last, as JAWS's speech history does (Insert+Space, H)")
+	def script_showSpeechHistory(self, gesture):
+		wx.CallAfter(self.showSpeechHistory)
+
+	@script(description="Copies what NVDA said to the clipboard, one line each, as JAWS's Insert+Space, Control+H does")
+	def script_copySpeechHistory(self, gesture):
+		self.copySpeechHistory()
+
+	@script(description="Clears the speech history, as JAWS's Insert+Space, Shift+H does")
+	def script_clearSpeechHistory(self, gesture):
+		self.clearSpeechHistory()
 
 	@script(description="Lists the commands of the JAWS Migration Assistant layer")
 	def script_layerHelp(self, gesture):

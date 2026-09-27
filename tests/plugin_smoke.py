@@ -64,6 +64,14 @@ class SpeechFilter:
 		yield from self._handlers.values()
 
 
+class SpeechAction(SpeechFilter):
+	"""NVDA's speech.extensions.pre_speech: each handler is told what NVDA is about to say."""
+
+	def notify(self, **kwargs):
+		for handler in list(self.handlers):
+			handler(**kwargs)
+
+
 class Labelled(enum.Enum):
 	@property
 	def displayString(self):
@@ -175,6 +183,13 @@ class BrowseModeDocumentTreeInterceptor(BrowseModeTreeInterceptor):
 class ElementsListDialog:
 	"""NVDA's browseMode.ElementsListDialog."""
 
+	ELEMENT_TYPES = (("link", "Lin&ks"), ("heading", "&Headings"))
+	lastSelectedElementType = 0
+
+	def __init__(self, document):
+		self.document = document
+		self.opensOn = self.ELEMENT_TYPES[self.lastSelectedElementType][0]
+
 	def initElementType(self, elType):
 		pass
 
@@ -222,6 +237,7 @@ NVDA_LABEL = vars(VirtualBufferQuickNavItem)["label"]
 NVDA_IS_CHILD = vars(VirtualBufferQuickNavItem)["isChild"]
 NVDA_ELEMENTS_LIST = vars(BrowseModeTreeInterceptor)["script_elementsList"]
 NVDA_ACTIVATE = vars(TextInfoQuickNavItem)["activate"]
+NVDA_MAKE_ELEMENTS_LIST = vars(ElementsListDialog)["__init__"]
 NVDA_LINK_TYPE = vars(BrowseModeTreeInterceptor)["getLinkTypeInDocument"]
 NVDA_TEXT_FIELD_SPEECH = vars(TextInfo)["getControlFieldSpeech"]
 NVDA_DOCUMENT_GAIN_FOCUS = vars(BrowseModeDocumentTreeInterceptor)["event_treeInterceptor_gainFocus"]
@@ -237,11 +253,12 @@ def linkSpeechNvdasOwn():
 
 
 def linksListNvdasOwn():
-	"""Whether NVDA's own label, Elements List script and activation are in place, as NVDA has them."""
+	"""Whether NVDA's own label, Elements List script and dialog and activation are in place, as NVDA has them."""
 	return (
 		vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL
 		and vars(BrowseModeTreeInterceptor)["script_elementsList"] is NVDA_ELEMENTS_LIST
 		and vars(TextInfoQuickNavItem)["activate"] is NVDA_ACTIVATE
+		and vars(ElementsListDialog)["__init__"] is NVDA_MAKE_ELEMENTS_LIST
 	)
 
 
@@ -251,6 +268,7 @@ def installSpeech():
 	speech = types.ModuleType("speech")
 	speech.extensions = types.ModuleType("speech.extensions")
 	speech.extensions.filter_speechSequence = SpeechFilter()
+	speech.extensions.pre_speech = SpeechAction()
 	speech.speech = types.ModuleType("speech.speech")
 	speech.speech.getPropertiesSpeech = getPropertiesSpeech
 	speech.speech.getObjectSpeech = getObjectSpeech
@@ -385,6 +403,32 @@ def main():
 		jawsMigrator.state.set(trayChanges.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(trayChanges.isRegistered() and decider.handlers.count(trayChanges.noteGesture) == 1, "and on again, once")
+		# What NVDA says is kept for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history.
+		from jawsMigrator import speechHistory
+
+		preSpeech = sys.modules["speech.extensions"].pre_speech
+		check(speechHistory.isRegistered() and list(preSpeech.handlers) == [speechHistory._onSpeech], "what NVDA says is kept, through pre_speech")
+		preSpeech.notify(speechSequence=["Items View", "list"], symbolLevel=None, priority=0)
+		check(speechHistory.entries() == ["Items View  list"], f"one line each time NVDA speaks: {speechHistory.entries()}")
+		layerKeys = jawsMigrator.LAYER_GESTURES
+		check(
+			tuple(layerKeys.get(key) for key in ("kb:h", "kb:control+h", "kb:shift+h", "kb:shift+/", "kb:f1"))
+			== ("showSpeechHistory", "copySpeechHistory", "clearSpeechHistory", "layerHelp", "layerHelp"),
+			"NVDA+Shift+J then H, Control+H and Shift+H, as after JAWS's Insert+Space, and ? or F1 for the layer's help",
+		)
+		plugin.showSpeechHistory()
+		viewer = speechHistory._viewer
+		check(viewer is not None and viewer.GetTitle() == "Speech History" and viewer.text.GetValue() == "Items View  list", "H shows it")
+		speechHistory.closeViewer()
+		del nvdaStubs.spoken[:]
+		plugin.clearSpeechHistory()
+		check(speechHistory.entries() == [] and nvdaStubs.spoken == ["Speech history cleared"], f"Shift+H clears it: {nvdaStubs.spoken}")
+		jawsMigrator.state.set(speechHistory.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not speechHistory.isRegistered() and not list(preSpeech.handlers), "turned off in the Settings panel, nothing is kept")
+		jawsMigrator.state.set(speechHistory.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(speechHistory.isRegistered() and list(preSpeech.handlers) == [speechHistory._onSpeech], "and on again, once")
 		# Quick navigation says a heading without what it is in, a list item has no row and column, and a web page's
 		# tabs and toolbar buttons stay in browse mode: NVDA's field speech, quick navigation report, what NVDA may say
 		# about an object, and its choice of mode.
@@ -555,16 +599,39 @@ def main():
 		clsList = [object]
 		plugin.chooseNVDAObjectOverlayClasses(types.SimpleNamespace(windowClassName="Edit"), clsList)
 		check(clsList == [object] and plugin._elementsList is elementsList, "anything but an item of NVDA's Elements List keeps its classes")
+		# Each JAWS list key opens the Elements List on its own kind alone (Insert+F6 the headings), unless that is turned off.
+		f6 = types.SimpleNamespace(identifiers=["kb(desktop):NVDA+f6", "kb:NVDA+f6"])
+		document = BrowseModeDocumentTreeInterceptor()
+		document.ElementsListDialog = ElementsListDialog
+		check(
+			linksList.keysRegistered()
+			and ElementsListDialog.__init__.__wrapped__ is NVDA_MAKE_ELEMENTS_LIST
+			and linksList.keyKind(document, f6) == "heading"
+			and linksList.keyKind(document, types.SimpleNamespace(identifiers=["kb:NVDA+f8"])) is None,
+			"Insert+F6 opens the Elements List on headings alone, as JAWS's Heading List; any other key, NVDA's own list",
+		)
 		jawsMigrator.state.set(linksList.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
-		check(not linksList.isRegistered() and linksListNvdasOwn(), "turned off in the Settings panel, NVDA's own labels, script and activation are back")
+		check(
+			linksList.isRegistered()
+			and not linksList._enabled
+			and vars(TextInfoQuickNavItem)["_getLabelForProperties"] is NVDA_GET_LABEL
+			and vars(TextInfoQuickNavItem)["activate"] is NVDA_ACTIVATE
+			and BrowseModeTreeInterceptor.script_elementsList.__wrapped__ is NVDA_ELEMENTS_LIST,
+			"turned off in the Settings panel, NVDA's own labels and activation are back; JAWS's list keys keep their lists",
+		)
 		check(TextInfoQuickNavItem()._getLabelForProperties(github.get) == "joshknnd1982; same page; visited", "as NVDA says them")
+		jawsMigrator.state.set(linksList.KEYS_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not linksList.isRegistered() and linksListNvdasOwn(), "the list keys turned off too, NVDA's own script and dialog are back as well")
 		jawsMigrator.state.set(linksList.STATE_KEY, True)
+		jawsMigrator.state.set(linksList.KEYS_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(
 			TextInfoQuickNavItem._getLabelForProperties.__wrapped__ is NVDA_GET_LABEL
 			and BrowseModeTreeInterceptor.script_elementsList.__wrapped__ is NVDA_ELEMENTS_LIST
-			and TextInfoQuickNavItem.activate.__wrapped__ is NVDA_ACTIVATE,
+			and TextInfoQuickNavItem.activate.__wrapped__ is NVDA_ACTIVATE
+			and ElementsListDialog.__init__.__wrapped__ is NVDA_MAKE_ELEMENTS_LIST,
 			"and on again, wrapped once",
 		)
 		# NVDA's debug log notes a key a program types late or not at all; nothing else changes, and every key goes on.
@@ -813,6 +880,54 @@ def main():
 			jawsMigrator.state.set(outlookMessages.STATE_KEY, True)
 			plugin.applyRuntimeSettings()
 			check(outlookMessages.isRegistered() and wrapsNvdasText() and nvdasOwnOpening(), "and on again")
+		# Insert+Page Down in Outlook's Inbox: NVDA said "Status Bar" and every button in it; JAWS says the status bar's
+		# NetUISimpleButton items (Outlook.jss). The imitation NVDA has no api module until here.
+		from jawsMigrator import outlookStatusBar
+
+		check(not outlookStatusBar.isRegistered(), "without NVDA's api module there is nothing to change")
+
+		def nvdasStatusBarText(obj):
+			"""NVDA's api.getStatusBarText, as far as the smoke test goes: the status bar's name, then its items."""
+			return " ".join([obj.name] + [child.name for child in obj.children])
+
+		def statusBarItem(name, className):
+			return types.SimpleNamespace(name=name, UIAElement=types.SimpleNamespace(cachedClassName=className))
+
+		class OutlookAppModule:
+			appName = "outlook"
+
+			def getStatusBarText(self, obj):
+				raise NotImplementedError
+
+		statusBarApi = types.ModuleType("api")
+		statusBarApi.getStatusBarText = nvdasStatusBarText
+		outlookStatus = types.SimpleNamespace(
+			name="Status Bar",
+			appModule=OutlookAppModule(),
+			UIAElement=types.SimpleNamespace(cachedClassName="NetUIHWNDElement"),
+			children=[
+				statusBarItem("Items in View 2,675", "NetUISimpleButton"),
+				statusBarItem("Normal View. Show All Pinned Panes.", "NetUIRibbonButton"),
+				statusBarItem("Zoom 10%", "NetUISimpleButton"),
+			],
+		)
+		with mock.patch.dict(sys.modules, {"api": statusBarApi}), mock.patch.object(appModuleHandler, "AppModule", OutlookAppModule, create=True):
+			plugin.applyRuntimeSettings()
+			said = statusBarApi.getStatusBarText(outlookStatus)
+			check(
+				outlookStatusBar.isRegistered() and statusBarApi.getStatusBarText.__wrapped__ is nvdasStatusBarText and said == "Items in View 2,675, Zoom 10%",
+				f"Outlook's status bar is read as JAWS reads it: {said!r}",
+			)
+			jawsMigrator.state.set(outlookStatusBar.STATE_KEY, False)
+			plugin.applyRuntimeSettings()
+			said = statusBarApi.getStatusBarText(outlookStatus)
+			check(
+				not outlookStatusBar.isRegistered() and statusBarApi.getStatusBarText is nvdasStatusBarText and said.startswith("Status Bar Items"),
+				"turned off in the Settings panel, NVDA reads it as it does",
+			)
+			jawsMigrator.state.set(outlookStatusBar.STATE_KEY, True)
+			plugin.applyRuntimeSettings()
+			check(outlookStatusBar.isRegistered() and statusBarApi.getStatusBarText.__wrapped__ is nvdasStatusBarText, "and on again")
 		# The Columns Review add-on said "List top: " as File Explorer opened a folder; JAWS says the item alone. Its beeps stay.
 		from jawsMigrator import listBounds
 
@@ -960,6 +1075,7 @@ def main():
 		check(not tray.toolsMenu.GetMenuItems(), "unloading removes the Tools submenu")
 		check(not settingsDialogs.NVDASettingsDialog.categoryClasses, "unloading removes the Settings panel")
 		check(not labelRepeats.isRegistered() and list(speechFilter.handlers) == [otherAddon], "unloading stops checking NVDA's speech")
+		check(not speechHistory.isRegistered() and not list(preSpeech.handlers) and not speechHistory.entries(), "and keeping what NVDA says")
 		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
 		check(not trayChanges.isRegistered() and plugin._trayChanges is None and not decider.handlers, "and NVDA's key presses")
 		check(
@@ -993,6 +1109,7 @@ def main():
 		check(not outlookRows.isRegistered() and plugin._outlookRows is None, "and the Outlook message you leave")
 		check(not outlookPages.isRegistered() and vars(WordText)["getTextWithFields"] is nvdasWordText, "and NVDA's text of a Word document")
 		check(not outlookMessages.isRegistered() and outlookMessagesNvdasOwn(), "and NVDA's browse mode coming into a document, and its fields and formatting of Word's text")
+		check(not outlookStatusBar.isRegistered() and vars(statusBarApi)["getStatusBarText"] is nvdasStatusBarText, "and NVDA's text of a status bar")
 		check(
 			not listBounds.isRegistered() and vars(columnsReview.GlobalPlugin)["reportListBounds"] is reportListBounds,
 			"and Columns Review's own report of a list's ends",
@@ -1038,6 +1155,7 @@ def main():
 			"documentValues",
 			"outlookPages",
 			"outlookMessages",
+			"outlookStatusBar",
 			"listBounds",
 			"linkSpeech",
 			"formFields",

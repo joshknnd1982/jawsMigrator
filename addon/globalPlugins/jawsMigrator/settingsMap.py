@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import jawsFiles, outlookMessages
+from . import jawsFiles, outlookMessages, speechHistory
 
 NVDA = "nvda"
 CLASSIC_SPEECH = "classicSpeech"
@@ -268,6 +268,19 @@ def mapSettings(
 	value = r.int("options", "TypingInterrupt")
 	if value is not None:
 		add(NVDA, ("keyboard", "speechInterruptForCharacters"), bool(value), f"Speech interrupt for typed characters: {'on' if value else 'off'}", r.src("options", "TypingInterrupt"))
+
+	# JAWS's speech history (Insert+Space, then H), on as JAWS comes, for every application. NVDA has none; the
+	# assistant keeps one for its layer's H, Control+H and Shift+H (speechHistory).
+	if not isApplication:
+		value = r.int("options", "SpeechHistory")
+		if value is not None:
+			add(
+				ASSISTANT,
+				(speechHistory.STATE_KEY,),
+				bool(value),
+				f"Keep what NVDA says, for NVDA+Shift+J then H: {'on' if value else 'off'}, as JAWS's speech history",
+				r.src("options", "SpeechHistory"),
+			)
 
 	screenEcho = r.int("options", "ScreenEcho")
 	liveRegions = r.int("HTML", "AnnounceLiveRegionUpdates")

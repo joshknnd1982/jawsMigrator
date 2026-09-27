@@ -51,6 +51,25 @@ So, also:
   before.
 
 It works while the assistant runs, unless it is turned off in NVDA's Settings, JAWS Migration Assistant.
+
+JAWS has a list of its own for each kind of element, each with its own key: Insert+F7 lists the links alone (its Links
+List), Insert+F6 the headings (Heading List), Insert+F5 the form fields (Select a Form Field), Control+Insert+B the
+buttons (Select a Button) and Control+Insert+R the regions (Document Regions); Default.JKM, [virtual keys]. The migration
+gives each of those keys to NVDA's Elements List, which lists links, headings, form fields, buttons or landmarks, with
+radio buttons to choose which, and opens on the kind chosen last (on links at first). A tester asked, after pressing
+NVDA+F7: "When using Jaws pressing insert f7 only brings up links. should we Make the Jaws migrator do the same?" So,
+with a setting of its own, also on unless it is turned off:
+
+- A JAWS key for one of those lists opens NVDA's Elements List on that kind alone, whatever kind the list was left on.
+  The list has JAWS's title for it, so NVDA says "Links List dialog", and no radio buttons for other kinds: Tab goes
+  from the list to the Filter box and the buttons. NVDA keeps the kind of the last list you moved or activated from, to
+  open its own Elements List on next time; one of these lists leaves that as it was.
+- A page with none of that kind gets JAWS's words, and no list: "no links", "No headings found", "no form fields were
+  found", "no buttons were found", "No regions were found on the page" (common.jsm, ie.jsm).
+- The keys are JAWS's own, as the migration brings them: NVDA+F7, NVDA+F6 and, when the migration was allowed to take
+  NVDA's keys for them, NVDA+F5, NVDA+Control+B and NVDA+Control+R (the Kinesis layout's NVDA+/ opens the links too).
+  Any other key given to the Elements List in NVDA's Input Gestures opens NVDA's own list with every kind. So does a key
+  where the document's list has no such kind (Word's has no form fields), and a browse mode that isn't a document (Excel).
 """
 
 from __future__ import annotations
@@ -58,9 +77,12 @@ from __future__ import annotations
 import functools
 import os
 import threading
+import weakref
 
 #: The assistant's setting (state.json) that turns this on or off.
 STATE_KEY = "linksLikeJaws"
+#: The assistant's setting (state.json) for JAWS's list keys: each opens NVDA's Elements List on its own kind alone.
+KEYS_KEY = "listKeysLikeJaws"
 #: Marks what the assistant put in the place of NVDA's own, and keeps NVDA's.
 ORIGINAL = "_jawsMigratorOriginal"
 #: Marks the assistant's own versions, so another add-on's wrapper around one is recognized.
@@ -80,16 +102,53 @@ NO_LINKS = "no links"
 #: Browse mode's script that opens the Elements List, and what activates an element from it.
 ELEMENTS_LIST = "script_elementsList"
 ACTIVATE = "activate"
+#: What makes the Elements List's dialog, which opens it on a kind of element.
+MAKE_DIALOG = "__init__"
+#: JAWS's keys for its lists of one kind (Default.JKM: [virtual keys], and JAWSKey+/ in [Kinesis keys]), the JAWS script
+#: each runs, and NVDA's name for that kind in its Elements List.
+JAWS_LIST_KEYS = (
+	("JAWSKey+F7", "SelectALink", "link"),
+	("JAWSKey+/", "SelectALink", "link"),
+	("JAWSKey+F6", "SelectAHeading", "heading"),
+	("JAWSKey+F5", "SelectAFormField", "formField"),
+	("Control+JAWSKey+B", "SelectAButtonFormField", "button"),
+	("Control+JAWSKey+R", "SelectaRegion", "landmark"),
+)
+#: The title of JAWS's list of each kind: its own dialogs in jfw.exe (Links List, Heading List, Document Regions), and
+#: the form field lists' in Virtual.jss (msgSelectAFormFieldTitle in ie.jsm, cMsgSelectAButton in common.jsm).
+TITLES = {
+	"link": "Links List",
+	"heading": "Heading List",
+	"formField": "Select a Form Field",
+	"button": "Select a Button",
+	"landmark": "Document Regions",
+}
+#: What JAWS says for a list's key on a page with none of its kind: common.jsm's cMsgNoLinks, cmsgNoRegionsOnPage and
+#: CMSGNoTagsFound_L ("no %1 were found", with CVMSGFormFields_L and cVMsgButton1_L), and ie.jsm's msgNoHeadings1_L.
+NONE_FOUND = {
+	"link": NO_LINKS,
+	"heading": "No headings found",
+	"formField": "no form fields were found",
+	"button": "no buttons were found",
+	"landmark": "No regions were found on the page",
+}
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
+#: Links are shown as JAWS's Links List shows them (STATE_KEY).
 _enabled = False
+#: JAWS's list keys open a list of their own kind (KEYS_KEY).
+_keys = False
 _failed = False
 _lock = threading.RLock()
 #: What the assistant put in the place of NVDA's own: [(owner, attribute name, the assistant's, NVDA's)].
 _replaced: list = []
 #: The class the assistant gives the Elements List's items, made the first time it is needed (see overlayClass).
 _overlay = None
+#: The kind of element each JAWS list key opens, by the key as NVDA normalizes it without its source ("f7+nvda").
+_keyKinds: dict | None = None
+#: The Elements List a JAWS list key asked for, until NVDA makes its dialog: (the document, as a weak reference, the kind).
+_opening = None
 
 
 def _log():
@@ -114,17 +173,42 @@ def wanted(stateData: dict) -> bool:
 	return isinstance(stateData, dict) and bool(stateData.get(STATE_KEY, True))
 
 
-def register() -> None:
-	"""Show links in NVDA's Elements List as JAWS's Links List does, from now on."""
-	global _enabled
-	if _enabled:
+def keysWanted(stateData: dict) -> bool:
+	"""Whether each JAWS list key opens the Elements List on its own kind alone: on unless the user turned it off."""
+	return isinstance(stateData, dict) and bool(stateData.get(KEYS_KEY, True))
+
+
+def _parts(links: bool, keys: bool) -> list:
+	"""What the assistant puts in the place of NVDA's own for links (``links``) and for JAWS's list keys (``keys``)."""
+	parts = []
+	if links:
+		parts.append(("TextInfoQuickNavItem", LABEL, _labelGuarded))
+	if links or keys:
+		parts.append(("BrowseModeTreeInterceptor", ELEMENTS_LIST, _scriptGuarded))
+	if links:
+		parts.append(("TextInfoQuickNavItem", ACTIVATE, _activateGuarded))
+	if keys:
+		parts.append(("ElementsListDialog", MAKE_DIALOG, _dialogGuarded))
+	return parts
+
+
+def register(links: bool = True, keys: bool = False) -> None:
+	"""From now on, show links in NVDA's Elements List as JAWS's Links List does (``links``), and open it on one kind
+	alone for each JAWS list key (``keys``). What is no longer wanted is NVDA's own again."""
+	global _enabled, _keys
+	if not links and not keys:
+		unregister()
 		return
-	_enabled = True
-	for owner, name, guarded in (
-		("TextInfoQuickNavItem", LABEL, _labelGuarded),
-		("BrowseModeTreeInterceptor", ELEMENTS_LIST, _scriptGuarded),
-		("TextInfoQuickNavItem", ACTIVATE, _activateGuarded),
-	):
+	parts = _parts(links, keys)
+	wanted = {(owner, name) for owner, name, _guarded in parts}
+	with _lock:
+		for entry in list(_replaced):
+			owner, name, installed, original = entry
+			if (getattr(owner, "__name__", None), name) not in wanted:
+				_restore(owner, name, installed, original)
+				_replaced.remove(entry)
+	_enabled, _keys = bool(links), bool(keys)
+	for owner, name, guarded in parts:
 		# Each on its own: one NVDA doesn't have leaves the others working.
 		try:
 			import browseMode
@@ -132,27 +216,37 @@ def register() -> None:
 			with _lock:
 				_replace(getattr(browseMode, owner), name, guarded)
 		except Exception:
-			_failure("can't show links in NVDA's Elements List as JAWS's Links List does")
+			_failure("can't show NVDA's Elements List as JAWS's lists")
 
 
 def unregister() -> None:
-	"""Give NVDA its own labels back, where nothing has been put over the assistant's since. Levels come back at once."""
-	global _enabled
-	if not _enabled:
+	"""Give NVDA its own labels and Elements List back, where nothing has been put over the assistant's since. Levels
+	come back at once."""
+	global _enabled, _keys, _opening
+	if not _enabled and not _keys:
 		return
-	_enabled = False
+	_enabled = _keys = False
+	_opening = None
 	with _lock:
 		for owner, name, installed, original in reversed(_replaced):
-			try:
-				if vars(owner).get(name) is installed:
-					setattr(owner, name, original)
-			except Exception:
-				pass
+			_restore(owner, name, installed, original)
 		_replaced.clear()
 
 
+def _restore(owner, name: str, installed, original) -> None:
+	try:
+		if vars(owner).get(name) is installed:
+			setattr(owner, name, original)
+	except Exception:
+		pass
+
+
 def isRegistered() -> bool:
-	return _enabled
+	return _enabled or _keys
+
+
+def keysRegistered() -> bool:
+	return _keys
 
 
 def _isOurs(function) -> bool:
@@ -271,21 +365,160 @@ def hasAny(document, itemType: str) -> bool:
 
 
 def _scriptGuarded(original):
-	"""Browse mode's script that opens the Elements List: on a page without links, JAWS's "no links" in its place."""
+	"""Browse mode's script that opens the Elements List: on the kind of a JAWS list key alone, and on a page with none of
+	that kind (or without links, when the list opens on links), JAWS's words in its place."""
 
 	@functools.wraps(original)
 	def script_elementsList(self, gesture, *args, **kwargs):
-		if _enabled and opensOn(self) == LINK and not hasAny(self, LINK):
-			_log().debug("jawsMigrator: the page has no links, so NVDA says so, as JAWS does, instead of opening an empty Elements List")
+		global _opening
+		kind = keyKind(self, gesture) if _keys else None
+		_opening = None
+		kindSaid = kind or (LINK if _enabled and opensOn(self) == LINK else None)
+		if kindSaid is not None and not hasAny(self, kindSaid):
+			_log().debug(f"jawsMigrator: the page has no {kindSaid}, so NVDA says so, as JAWS does, instead of opening an empty Elements List")
 			import ui
 
-			ui.message(NO_LINKS)
+			ui.message(NONE_FOUND.get(kindSaid, NO_LINKS))
 			return None
+		if kind is not None:
+			_opening = (_reference(self), kind)
+			_log().debug(f"jawsMigrator: {_keyName(gesture)} is JAWS's key for its {TITLES.get(kind)}, so NVDA's Elements List opens on {kind} alone")
 		return original(self, gesture, *args, **kwargs)
 
 	setattr(script_elementsList, MARK, _TOKEN)
 	setattr(script_elementsList, ORIGINAL, original)
 	return script_elementsList
+
+
+# -- JAWS's list keys ----------------------------------------------------------------------------------------------
+
+
+def _normalized(identifier: str) -> tuple[str, str]:
+	"""A gesture identifier as NVDA normalizes it (``inputCore.normalizeGestureIdentifier``): (its source, its keys)."""
+	source, _sep, keys = str(identifier).lower().partition(":")
+	return source, "+".join(sorted(keys.split("+")))
+
+
+def keyKinds() -> dict:
+	"""The kind of element each JAWS list key opens, by its keys as NVDA normalizes them ("f7+nvda"), as the migration
+	converts JAWS's keys."""
+	global _keyKinds
+	if _keyKinds is None:
+		from . import jawsKeyMap
+
+		kinds = {}
+		for jawsKey, _script, kind in JAWS_LIST_KEYS:
+			gesture = jawsKeyMap.jawsKeyToNvdaGesture(jawsKey, "common")
+			if gesture:
+				kinds[_normalized(gesture)[1]] = kind
+		_keyKinds = kinds
+	return _keyKinds
+
+
+def keyKind(document, gesture) -> str | None:
+	"""The kind JAWS lists for the key ``gesture``, where ``document``'s Elements List has it alone; else None.
+
+	None for any other key or gesture, and in a browse mode that isn't a document, such as Excel's.
+	"""
+	try:
+		identifiers = list(getattr(gesture, "identifiers", None) or ())
+		if not identifiers:
+			return None
+		import browseMode
+
+		if not isinstance(document, browseMode.BrowseModeDocumentTreeInterceptor):
+			return None
+		kinds = keyKinds()
+		for source, keys in map(_normalized, identifiers):
+			if source.startswith("kb") and keys in kinds:
+				kind = kinds[keys]
+				break
+		else:
+			return None
+		return kind if kind in (elementType[0] for elementType in document.ElementsListDialog.ELEMENT_TYPES) else None
+	except Exception:
+		_failure("could not tell which of JAWS's lists a key opens")
+		return None
+
+
+def _keyName(gesture) -> str:
+	try:
+		return gesture.displayName
+	except Exception:
+		identifiers = getattr(gesture, "identifiers", None) or ("the key",)
+		return str(identifiers[0])
+
+
+def _reference(document):
+	"""A weak reference to ``document``, or something that gives it back like one."""
+	try:
+		return weakref.ref(document)
+	except TypeError:
+		return lambda: document
+
+
+def _takeOpening(document) -> str | None:
+	"""The kind a JAWS list key asked NVDA's next Elements List of ``document`` to open on alone, once; else None."""
+	global _opening
+	opening, _opening = _opening, None
+	if opening is None:
+		return None
+	reference, kind = opening
+	return kind if reference() is document else None
+
+
+def _dialogGuarded(original):
+	"""NVDA's making of its Elements List: for a JAWS list key, on its kind alone, as JAWS's list."""
+
+	@functools.wraps(original)
+	def __init__(self, document, *args, **kwargs):
+		kind = _takeOpening(document) if _keys else None
+		index = None
+		if kind is not None:
+			try:
+				index = [elementType[0] for elementType in self.ELEMENT_TYPES].index(kind)
+			except Exception:
+				index = None
+		if index is None:
+			return original(self, document, *args, **kwargs)
+		# NVDA's __init__ checks the radio button of this kind and fills the list with it.
+		self.lastSelectedElementType = index
+		try:
+			original(self, document, *args, **kwargs)
+		finally:
+			# NVDA keeps the kind a list was on when you move or activate from it (onAction), to open its own list on it
+			# next time: this one leaves that as it was.
+			try:
+				del self.lastSelectedElementType
+			except AttributeError:
+				pass
+		showOnly(self, kind)
+
+	setattr(__init__, MARK, _TOKEN)
+	setattr(__init__, ORIGINAL, original)
+	return __init__
+
+
+def showOnly(dialog, kind: str) -> None:
+	"""Make NVDA's Elements List ``dialog`` JAWS's list of ``kind``: its title, and no radio buttons for other kinds."""
+	try:
+		import wx
+
+		for child in dialog.GetChildren():
+			if isinstance(child, wx.RadioBox):
+				# Disabled too, so that its access keys (Alt+K, Alt+H...) do nothing.
+				child.Disable()
+				child.Hide()
+		title = TITLES.get(kind)
+		if title:
+			dialog.SetTitle(title)
+		sizer = dialog.GetSizer()
+		if sizer is not None:
+			dialog.Layout()
+			sizer.Fit(dialog)
+			dialog.CentreOnScreen()
+	except Exception:
+		_failure("could not show NVDA's Elements List as JAWS's list of one kind")
 
 
 # -- activating a link ---------------------------------------------------------------------------------------------

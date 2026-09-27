@@ -34,7 +34,9 @@ from .. import (
 	outlookMessages,
 	outlookPages,
 	outlookRows,
+	outlookStatusBar,
 	quickNavHeadings,
+	speechHistory,
 	startupFocus,
 	state,
 	trayChanges,
@@ -132,6 +134,18 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.linksJaws.SetValue(linksList.wanted(state.load()))
+		# JAWS has a list of one kind for each of its keys (Insert+F7 its Links List); NVDA's Elements List has every kind,
+		# with radio buttons to choose, and opens on the kind chosen last.
+		self.listKeysJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label=(
+					"Open a list of one kind for each JAWS list key, as JAWS does: Insert+F7 links, Insert+F6 headings, "
+					"Insert+F5 form fields, Control+Insert+B buttons, Control+Insert+R regions"
+				),
+			),
+		)
+		self.listKeysJaws.SetValue(linksList.keysWanted(state.load()))
 		# GitHub adds an alert with nothing in it as its page loads; NVDA said "alert" alone, JAWS says nothing.
 		self.quietEmptyAlerts = helper.addItem(
 			wx.CheckBox(self, label='Don\'t say "alert" for an alert with nothing in it, as on GitHub pages'),
@@ -171,6 +185,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="Read an Outlook message from the top when it opens, as JAWS's \"Messages automatically read\" does"),
 		)
 		self.outlookReadOnOpen.SetValue(outlookMessages.readWanted(state.load()))
+		# JAWS's Insert+Page Down in Outlook said "Items in View 2,675", "Unread Items in View 1,135" and "Zoom 10%"; NVDA
+		# said "Status Bar", then the view buttons with their tooltips and the zoom slider with its buttons too (issue 26).
+		self.outlookStatusBar = helper.addItem(
+			wx.CheckBox(self, label="Read Outlook's status bar as JAWS does: its items and zoom, without the view and zoom buttons"),
+		)
+		self.outlookStatusBar.SetValue(outlookStatusBar.wanted(state.load()))
 		# The Columns Review add-on, as it comes, says "List top" at a list's first item, as File Explorer opens a folder,
 		# and "List bottom" at its last; JAWS says the item alone.
 		self.quietListBounds = helper.addItem(
@@ -195,6 +215,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.formFieldsAsJaws.SetValue(formFields.wanted(state.load()))
+		# JAWS keeps the last 500 things it said for Insert+Space, then H; the assistant's layer has the same keys.
+		self.keepSpeechHistory = helper.addItem(
+			wx.CheckBox(self, label="Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history"),
+		)
+		self.keepSpeechHistory.SetValue(speechHistory.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -281,15 +306,18 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownDocumentsNoValue = self.documentsNoValue.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
 		self._shownLinksJaws = self.linksJaws.GetValue()
+		self._shownListKeysJaws = self.listKeysJaws.GetValue()
 		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
 		self._shownStayInFields = self.stayInFields.GetValue()
 		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
 		self._shownOutlookNoPages = self.outlookNoPages.GetValue()
 		self._shownOutlookAsJaws = self.outlookAsJaws.GetValue()
 		self._shownOutlookReadOnOpen = self.outlookReadOnOpen.GetValue()
+		self._shownOutlookStatusBar = self.outlookStatusBar.GetValue()
 		self._shownQuietListBounds = self.quietListBounds.GetValue()
 		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
 		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
+		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -359,6 +387,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
 		if self.linksJaws.GetValue() != self._shownLinksJaws:
 			updates[linksList.STATE_KEY] = self.linksJaws.GetValue()
+		if self.listKeysJaws.GetValue() != self._shownListKeysJaws:
+			updates[linksList.KEYS_KEY] = self.listKeysJaws.GetValue()
 		if self.quietEmptyAlerts.GetValue() != self._shownQuietEmptyAlerts:
 			updates[emptyAlerts.STATE_KEY] = self.quietEmptyAlerts.GetValue()
 		if self.stayInFields.GetValue() != self._shownStayInFields:
@@ -371,12 +401,16 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[outlookMessages.STATE_KEY] = self.outlookAsJaws.GetValue()
 		if self.outlookReadOnOpen.GetValue() != self._shownOutlookReadOnOpen:
 			updates[outlookMessages.READ_KEY] = self.outlookReadOnOpen.GetValue()
+		if self.outlookStatusBar.GetValue() != self._shownOutlookStatusBar:
+			updates[outlookStatusBar.STATE_KEY] = self.outlookStatusBar.GetValue()
 		if self.quietListBounds.GetValue() != self._shownQuietListBounds:
 			updates[listBounds.STATE_KEY] = self.quietListBounds.GetValue()
 		if self.linksAsJaws.GetValue() != self._shownLinksAsJaws:
 			updates[linkSpeech.STATE_KEY] = self.linksAsJaws.GetValue()
 		if self.formFieldsAsJaws.GetValue() != self._shownFormFieldsAsJaws:
 			updates[formFields.STATE_KEY] = self.formFieldsAsJaws.GetValue()
+		if self.keepSpeechHistory.GetValue() != self._shownKeepSpeechHistory:
+			updates[speechHistory.STATE_KEY] = self.keepSpeechHistory.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

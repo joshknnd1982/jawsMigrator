@@ -689,6 +689,27 @@ class SettingsPanelTests(unittest.TestCase):
 		state.forget()
 		self.assertIs(state.get(outlookMessages.READ_KEY), False)
 
+	def test_listKeysLikeJawsIsSavedAndApplied(self):
+		from jawsMigrator import linksList
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.listKeysJaws,
+			"Open a list of one kind for each JAWS list key, as JAWS does: Insert+F7 links, Insert+F6 headings, "
+			"Insert+F5 form fields, Control+Insert+B buttons, Control+Insert+R regions",
+			linksList.KEYS_KEY,
+			"Insert+F7 and JAWS's other list keys open NVDA's whole Elements List again, at once",
+		)
+
+	def test_outlookStatusBarLikeJawsIsSavedAndApplied(self):
+		from jawsMigrator import outlookStatusBar
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.outlookStatusBar,
+			"Read Outlook's status bar as JAWS does: its items and zoom, without the view and zoom buttons",
+			outlookStatusBar.STATE_KEY,
+			'NVDA reads "Status Bar" and the view and zoom buttons in Outlook again, at once',
+		)
+
 	def test_quietColumnsReviewListBoundsIsSavedAndApplied(self):
 		from jawsMigrator import listBounds
 
@@ -717,6 +738,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'Say edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder, no "multi line", and no landmark you were already in',
 			formFields.STATE_KEY,
 			'NVDA says an edit field\'s placeholder first, "multi line" and the landmark again, at once',
+		)
+
+	def test_keepSpeechHistoryIsSavedAndApplied(self):
+		from jawsMigrator import speechHistory
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.keepSpeechHistory,
+			"Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history",
+			speechHistory.STATE_KEY,
+			"what NVDA says is no longer kept, and what was kept is forgotten, at once",
 		)
 
 	def test_version112sLevelFirstSettingIsGone(self):

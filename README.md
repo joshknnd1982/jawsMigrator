@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.29](#whats-new-in-129)
 - [What's new in 1.28](#whats-new-in-128)
 - [What's new in 1.27](#whats-new-in-127)
 - [What's new in 1.26](#whats-new-in-126)
@@ -80,10 +81,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.28.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.29.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.29
+
+From the tester's reports:
+
+- **In Outlook, Insert+Page Down reads the status bar as JAWS does.** In Outlook's Inbox, the tester pressed Insert+Page Down, JAWS's command to read the bottom line of the window, which the migration gives NVDA's "Report status bar". JAWS said "Items in View 2,675", "Unread Items in View 1,135" and "Zoom 10%". NVDA said "Status Bar", those, and every other control in the status bar too: "Normal View. Show All Pinned Panes. Reading View. Hide All Pinned Panes. Zoom Out 10 Zoom 10 Zoom In 10". NVDA reads a status bar as its name, then the name and value of each control in it, and NVDA's support for Outlook has no way of its own. JAWS's script for Outlook reads only the status bar's items, the kind of control Office calls a simple button: the item counts, the zoom, and messages Outlook shows there at times, such as a filter being applied, a line each. The view buttons and the zoom slider and its buttons are other kinds of controls, and JAWS leaves them out. Now NVDA reads Outlook's status bar as JAWS does, with a short pause between the items: "Items in View 2,675, Unread Items in View 1,135, Zoom 10%". Pressed twice, NVDA spells that, and pressed three times copies it to the clipboard, as before. Where Outlook's status bar has no such item, NVDA reads it as before, and so it does in other programs. When NVDA logs at its debug level, its log says what it read. To have NVDA read Outlook's status bar as before, uncheck "Read Outlook's status bar as JAWS does: its items and zoom, without the view and zoom buttons" in NVDA's Settings, JAWS Migration Assistant.
+- **Insert+F7 lists the links alone, as JAWS's Links List does, and JAWS's other list keys list their own kinds.** The tester wrote: "When using Jaws pressing insert f7 only brings up links. should we Make the Jaws migrator do the same?" In NVDA the key opens the Elements List, whose radio buttons choose links, headings, form fields, buttons or landmarks. JAWS has a list of its own for each kind, each with its own key: Insert+F7 its Links List, Insert+F6 its Heading List, Insert+F5 its list of form fields, Control+Insert+B its list of buttons and Control+Insert+R its list of regions. The migration gives each of those keys to NVDA's Elements List, so each opened the same list, on links or on the kind last chosen there. Now each of JAWS's keys opens the Elements List on its own kind alone. The list has JAWS's title, so NVDA says "Links List dialog" or "Heading List dialog" as it opens. It has no radio buttons, so Tab goes from the list to the Filter box and the buttons. The Filter box, Move to and Activate work as before, and moving to a heading from the Heading List doesn't change the kind NVDA's own list opens on. On a page with none of that kind, NVDA says what JAWS says and opens nothing: "no links", "No headings found", "no form fields were found", "no buttons were found" or "No regions were found on the page". NVDA+F7 is NVDA's own key for the Elements List, and the migration gives it Insert+F6. Insert+F5, Control+Insert+B and Control+Insert+R are NVDA's keys for refreshing a web page, its browse mode settings and reverting its configuration, and the migration takes them only when you let JAWS's keys take NVDA's; otherwise they stay NVDA's. Any other key you give the Elements List in NVDA's Input Gestures opens NVDA's own list with every kind, and so does a JAWS key in a program whose list lacks that kind, such as Excel. When NVDA logs at its debug level, its log says which list a key opened. To have NVDA's own list with every kind for every key, uncheck "Open a list of one kind for each JAWS list key, as JAWS does" in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA+Shift+J, then H shows what NVDA said, as JAWS's speech history does.** The tester wrote: "I find the speech history a pain to use. should we make it easier?" To tell us what NVDA said, the tester uses the Speech History add-on: Shift+F11 and Shift+F12 go back and forth through what NVDA said one thing at a time, and F12 copies the one thing it is on, so a report of five things takes five copies and five pastes. Its NVDA+H list shows the newest first. JAWS keeps the last 500 things it said, and has three layered keys for them: Insert+Space, H opens them in its Results Viewer, the oldest first, on the line of the most recent one; Insert+Space, Control+H copies them all to the clipboard; and Insert+Space, Shift+H clears them. Now the assistant keeps the last 500 things NVDA said, one line for each time NVDA spoke, and NVDA+Shift+J, then the same keys do the same. H opens a window called Speech History on the most recent line: Up Arrow goes back through what NVDA said, Control+C copies what you select, Copy all copies everything, Clear empties it, and Escape closes it. Control+H copies it all without opening anything, and NVDA says "Copy speech history to clipboard", as JAWS does. Shift+H says "Speech history cleared" and clears it. So to show us what NVDA says: press NVDA+Shift+J, then Shift+H; do what makes NVDA say it; press NVDA+Shift+J, then Control+H; and press Control+V in GitHub's comment box. What is kept is what you heard, after ClassicSpeech changed it, the parts of each thing two spaces apart, as NVDA's Speech Viewer shows them. What NVDA says while the window is in front isn't kept, so reading the history doesn't change it. It stays in memory only, and is gone when NVDA restarts. The Speech History add-on keeps working as before. The layer's help, which was on H, is now on question mark and F1, JAWS's keys for it (Insert+Space, question mark). A migration takes JAWS's own option for its speech history, on as JAWS comes. To stop keeping a speech history, uncheck "Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history" in NVDA's Settings, JAWS Migration Assistant. See [Speech history](#speech-history).
 
 ## What's new in 1.28
 
@@ -511,7 +520,7 @@ Layouts of other JAWS versions and languages are found the same way. Freedom Sci
 - JAWS quick navigation letters can be used in browse mode, so R moves to regions and A to radio buttons, as in JAWS.
 - No JAWS keystroke gets an NVDA command that passes the keystroke on to the program. In edit fields, NVDA's sentence commands do that, so Caps Lock+Y would type a Y; those JAWS keystrokes only work in browse mode.
 - Versions 1.0 to 1.2 added some keystrokes that do such things. Version 1.3 removes them once, a little after NVDA starts, after backing up NVDA's settings; keystrokes you added yourself are left alone.
-- Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own.
+- Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own. JAWS's speech history keys, Insert+Space, then H, Control+H or Shift+H, are NVDA+Shift+J, then the same key (see [Speech history](#speech-history)).
 - Application key maps and JAWS-only commands are listed too.
 
 To learn NVDA, use the JAWS keystroke helper: press NVDA+Shift+J, then K, then a JAWS keystroke. NVDA tells you:
@@ -539,11 +548,26 @@ Press NVDA+Shift+J, then:
 | C | Install ClassicSpeech, or update it to its newest version |
 | I | Hear the JAWS, Windows and NVDA versions on this computer |
 | L | Save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue (see [Debug logs](#debug-logs)) |
-| H or F1 | List these commands |
+| H | Speech history: what NVDA said, in a window, on the most recent line, as JAWS's Insert+Space, H (see [Speech history](#speech-history)) |
+| Control+H | Copy the speech history to the clipboard, one line for each time NVDA spoke |
+| Shift+H | Clear the speech history |
+| ? or F1 | List these commands |
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
 
 NVDA+Shift+J plays the sound JAWS plays when a layered keystroke such as Insert+Space starts. That is the sound JAWS's Default.jcf names (KeyLayerSound.wav, unless you chose another), found in your JAWS sounds and then in the shared ones, as JAWS finds it. It comes from the JAWS you migrated from, or else the newest JAWS on the computer. The assistant keeps a copy in its own folder, so the sound stays after JAWS is uninstalled. If JAWS plays no sound there, or none is found, NVDA+Shift+J beeps. To hear the beep in place of JAWS's sound, uncheck "Play JAWS's layered keystroke sound for NVDA+Shift+J, instead of a beep" in NVDA's Settings, JAWS Migration Assistant.
+
+### Speech history
+
+As JAWS does, the assistant keeps the last 500 things NVDA said, one line for each time NVDA spoke, in the order it said them. The keys after NVDA+Shift+J are JAWS's keys after Insert+Space:
+
+- **H** opens them in a window called Speech History, on the line of the most recent one. Up Arrow goes back through what NVDA said, and you can select any of it and copy it with Control+C. Copy all copies everything in the window, Clear empties it, and Escape closes it. Press H again and the window shows what NVDA said since.
+- **Control+H** copies the whole speech history to the clipboard, without opening anything. NVDA says "Copy speech history to clipboard", as JAWS does.
+- **Shift+H** clears it. NVDA says "Speech history cleared", and those words aren't kept either.
+
+To show what NVDA says in a GitHub issue: press NVDA+Shift+J, then Shift+H. Do what makes NVDA say it. Then press NVDA+Shift+J, then Control+H, and paste into the comment box with Control+V.
+
+What is kept is what NVDA sends to the synthesizer, after add-ons such as ClassicSpeech changed it and before speech dictionaries. So it is what you heard, with the parts of each thing two spaces apart, as NVDA's Speech Viewer shows them. While the Speech History window is in front, what NVDA says in it isn't kept, so reading the history doesn't change it. The history is kept in memory only, never on disk, and is gone when NVDA exits or restarts. The Speech History add-on, if you have it, keeps working as before; this doesn't need it. To stop keeping a speech history, uncheck "Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history" in NVDA's Settings, JAWS Migration Assistant; what was kept is forgotten at once. A migration takes this setting from JAWS's own option for its speech history (`SpeechHistory` in Default.jcf, on as JAWS comes).
 
 The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open the debug log, and the NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
 
@@ -561,15 +585,18 @@ The NVDA menu, Tools, JAWS Migration Assistant has the same actions, plus Open t
 - keeping NVDA from having a document build its whole text at every key, which slows typing in a large file (on unless you turn it off; see [What's new in 1.23](#whats-new-in-123));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
 - showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119) and [What's new in 1.20](#whats-new-in-120));
+- opening a list of one kind for each JAWS list key, as JAWS does: Insert+F7 links, Insert+F6 headings, Insert+F5 form fields, Control+Insert+B buttons and Control+Insert+R regions, each with JAWS's title and no radio buttons, and JAWS's words on a page with none (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
 - staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125) and [What's new in 1.26](#whats-new-in-126));
 - reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on, or a migration takes it from that JAWS option; see [What's new in 1.26](#whats-new-in-126) and [What's new in 1.27](#whats-new-in-127));
+- reading Outlook's status bar as JAWS does, with Insert+Page Down: its items, such as Items in View and the zoom, without "Status Bar" and the view and zoom buttons (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));
+- keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 

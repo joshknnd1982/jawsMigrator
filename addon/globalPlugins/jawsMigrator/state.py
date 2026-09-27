@@ -96,6 +96,10 @@ DEFAULTS = {
 	#: without visited, same page or "level 0"; NVDA says "no links" on a page without links, and moves browse mode's
 	#: cursor to the link it activates from the list (see linksList).
 	"linksLikeJaws": True,
+	#: Each of JAWS's list keys opens NVDA's Elements List on its own kind alone, with JAWS's title and no radio buttons
+	#: for other kinds: Insert+F7 links, Insert+F6 headings, Insert+F5 form fields, Control+Insert+B buttons and
+	#: Control+Insert+R regions, and JAWS's words on a page with none (see linksList).
+	"listKeysLikeJaws": True,
 	#: An alert with nothing in it, which NVDA said as "alert" alone, isn't said, as JAWS says nothing for it (see emptyAlerts).
 	"quietEmptyAlerts": True,
 	#: An arrow key at the start or end of an edit field on a web page stays in the field, in focus mode, as in JAWS's Auto
@@ -125,6 +129,13 @@ DEFAULTS = {
 	#: An Outlook message you open isn't read from the top: the tester's JAWS reads it only with the arrow keys (issue
 	#: 23). Turned on, it is, as JAWS's "Messages automatically read" does (see outlookMessages).
 	"readOutlookMessagesOnOpen": False,
+	#: In Outlook, NVDA's "Report status bar" (JAWS's Insert+Page Down) reads the status bar as JAWS's script for Outlook
+	#: does: its items, such as "Items in View" and the zoom, without "Status Bar" and the view and zoom buttons (see
+	#: outlookStatusBar).
+	"outlookStatusBarLikeJaws": True,
+	#: What NVDA says is kept, the last 500 things, for NVDA+Shift+J then H, Control+H and Shift+H, as JAWS keeps its
+	#: speech history for Insert+Space then the same keys; JAWS's [Options] SpeechHistory (see speechHistory).
+	"keepSpeechHistory": True,
 }
 
 _lock = threading.RLock()

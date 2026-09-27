@@ -561,7 +561,7 @@ def decideGesture(gesture=None, **kwargs) -> bool:
 			return True
 		import queueHandler
 
-		queueHandler.queueFunction(queueHandler.eventQueue, withoutDocument, _gestures)
+		queueHandler.queueFunction(queueHandler.eventQueue, withoutDocument, _gestures, None, gesture)
 	except Exception:
 		_failure("could not tell whether NVDA would give the Elements List's key to the program")
 		return True
@@ -592,10 +592,11 @@ def _loadingDocument(focus):
 	return None
 
 
-def withoutDocument(pressedAt: int, deadline: float | None = None) -> None:
+def withoutDocument(pressedAt: int, deadline: float | None = None, gesture=None) -> None:
 	"""A key of the Elements List where NVDA had no browse mode document ready: open the list once it is, or say why not.
 
 	``pressedAt`` is the count of gestures at the key press: when another key comes, NVDA stops waiting and says nothing.
+	``gesture`` is the key, which the list is opened with, so that a JAWS list key opens its own kind (see linksList).
 	"""
 	try:
 		import api
@@ -606,7 +607,7 @@ def withoutDocument(pressedAt: int, deadline: float | None = None) -> None:
 		document = _readyDocument(focus)
 		if document is not None:
 			_log().debug("jawsMigrator: the browse mode document is ready, so NVDA opens its Elements List")
-			document.script_elementsList(None)
+			document.script_elementsList(gesture)
 			return
 		now = time.monotonic()
 		if deadline is None:
@@ -614,7 +615,7 @@ def withoutDocument(pressedAt: int, deadline: float | None = None) -> None:
 		if _loadingDocument(focus) is not None and now < deadline:
 			import core
 
-			core.callLater(LOOK_EVERY, withoutDocument, pressedAt, deadline)
+			core.callLater(LOOK_EVERY, withoutDocument, pressedAt, deadline, gesture)
 			return
 		import ui
 
