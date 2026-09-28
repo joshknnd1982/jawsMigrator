@@ -31,7 +31,14 @@ title="Homepage">Headlines</a></h3>``, and on reddit.com JAWS said "Feels to goo
   on a web page (H, Shift+H, 1 to 9, Move to in the Elements List: ``virtualBuffers.VirtualBufferQuickNavItem.report``)
   that holds a link from its start to its end, or is in one, NVDA now says the text, the link's states ("visited",
   "same page"), the heading and its level, then "link" and whatever NVDA says after it. A link that ends before the
-  heading does is said where NVDA says it. K, Tab and the arrow keys say a link in a heading as NVDA does.
+  heading does is said where NVDA says it. K and Tab say a link in a heading as NVDA does.
+- The order, reading a line (the arrow keys, NVDA+Up Arrow, and the line read after Alt+Left). On reddit.com NVDA said
+  "heading, level 2, visited, link, Downgrading is a nightmare" for a post's title, a heading holding a link, and
+  "link, heading, level 2, Bi-weekly Megathread..." for a highlight, a link holding a heading (issue 38). JAWS 2026,
+  run live on a copy of the page, said "visited heading level 2 Link Downgrading is a nightmare" and "heading level 2
+  Link Bi-weekly Megathread..." on SayLine and on the arrow keys: the link's states, the heading, then "Link", however
+  the two are nested. When a line NVDA reads as the caret moves (OutputReason.CARET) starts in a heading and a link
+  right inside it, or a link and a heading right inside it, NVDA now says them in that order, before the text.
 - A description, in quick navigation. The tester pressed H on reddit.com (issue 32), and NVDA said "What Phones Work
   Best On Visible?, visited, heading, level 2, link, Author: u/Pikachufourtytwo 2 hr. ago". JAWS said the same without
   "Author: ...", which is the link's description (reddit's aria-describedby). NVDA says a description for the focus and
@@ -71,6 +78,9 @@ LINK_TYPE = "getLinkTypeInDocument"
 HEADING = "heading"
 #: The field type NVDA uses, after a field's text, for a field the text was in from start to end.
 AFTER_TEXT = "end_inControlFieldStack"
+#: The field types NVDA uses, before a line's text, for a field the line starts in: one the line before was in too,
+#: and one it comes into (speech.getTextInfoSpeech).
+LINE_START = ("start_inControlFieldStack", "start_addedToControlFieldStack")
 #: What marks an address as a place on its page.
 PLACE = "#"
 #: No function is wrapped deeper than this.
@@ -84,18 +94,21 @@ _lock = threading.RLock()
 #: What the assistant put in the place of NVDA's own: [(owner, attribute name, the assistant's, NVDA's)]. NVDA's is None
 #: where the class had none of its own and took it from the class it comes from.
 _replaced: list = []
-#: NVDA's OutputReason.QUICKNAV and FOCUS, Role.LINK, Role.HEADING, State.INTERNAL_LINK and DescriptionFrom.TOOLTIP,
-#: once known.
+#: NVDA's OutputReason.QUICKNAV, FOCUS and CARET, Role.LINK, Role.HEADING, State.INTERNAL_LINK and
+#: DescriptionFrom.TOOLTIP, once known.
 _quickNav = None
 _focus = None
+_caret = None
 _linkRole = None
 _headingRole = None
 _samePage = None
 _fromTitle = None
 #: For each thread: how many heading reports are going on (``headings``), the fields already said with the other of
-#: their pair (``said``), and the pairs said in the assistant's order, for the log (``pairs``).
+#: their pair (``said``), the pairs said in the assistant's order, for the log (``pairs``), and, reading a line, the
+#: field said already with the one it is right inside (``lineInner``: the text, that field, and its role).
 _local = threading.local()
 #: What the log has named already.
+_loggedLines: set = set()
 _loggedTitles: set = set()
 _loggedAddresses: set = set()
 _loggedDescriptions: set = set()
@@ -139,7 +152,7 @@ def isPlaceOnPage(url) -> bool:
 
 def register() -> None:
 	"""Have NVDA say links as JAWS says them, from now on."""
-	global _enabled, _quickNav, _focus, _linkRole, _headingRole, _samePage, _fromTitle
+	global _enabled, _quickNav, _focus, _caret, _linkRole, _headingRole, _samePage, _fromTitle
 	if _enabled:
 		return
 	_enabled = True
@@ -148,7 +161,7 @@ def register() -> None:
 		import textInfos
 		from controlTypes import DescriptionFrom, OutputReason, Role, State
 
-		_quickNav, _focus = OutputReason.QUICKNAV, OutputReason.FOCUS
+		_quickNav, _focus, _caret = OutputReason.QUICKNAV, OutputReason.FOCUS, OutputReason.CARET
 		_linkRole, _headingRole = Role.LINK, Role.HEADING
 		_samePage = State.INTERNAL_LINK
 		_fromTitle = DescriptionFrom.TOOLTIP
@@ -396,14 +409,102 @@ def _together(original, info, attrs, ancestorAttrs, fieldType, args, kwargs, ind
 	return states + headingSpeech + rest
 
 
+def _innerAtLineStart(info, attrs, ancestorAttrs, formatConfig):
+	"""The field right inside ``attrs`` where the line ``info`` starts, which NVDA says next, or None.
+
+	speech.getTextInfoSpeech says the fields a line starts in (its controlStart fields before any text), outermost first:
+	``attrs`` is the one after ``ancestorAttrs``. NVDA's fields don't say what is inside them, so the line's are read
+	again, as speech.getTextInfoSpeech reads them. The copy leaves out where the field's node starts and ends, as it
+	does."""
+	import textInfos
+
+	index = len(ancestorAttrs or ())
+	fields = []
+	for item in info.getTextWithFields(formatConfig):
+		if not isinstance(item, textInfos.FieldCommand):
+			break
+		if item.command == "controlStart":
+			fields.append(item.field)
+			if len(fields) > index + 1:
+				break
+		elif item.command != "formatChange":
+			break
+	if len(fields) <= index + 1 or _role(fields[index]) != _role(attrs):
+		return None
+	inner = copy.copy(fields[index + 1])
+	inner.pop("_startOfNode", None)
+	inner.pop("_endOfNode", None)
+	return inner
+
+
+def _lineTogether(original, info, attrs, ancestorAttrs, fieldType, args, kwargs) -> list | None:
+	"""A line that starts in a heading and a link right inside it, or a link and a heading right inside it, as JAWS
+	says it: the link's states, the heading, then the rest of the link. ``attrs`` is the outer of the two, which NVDA
+	asks for first; the inner is said with it, and marked so that NVDA's own ask for it says nothing. None when the line
+	doesn't start so, or there is nothing to put in between."""
+	role = _role(attrs)
+	if role not in (_linkRole, _headingRole):
+		return None
+	inner = _innerAtLineStart(info, attrs, ancestorAttrs, _argument(args, kwargs, "formatConfig", 0))
+	innerRole = _role(inner) if inner is not None else None
+	if innerRole not in (_linkRole, _headingRole) or innerRole == role:
+		return None
+	reason = _argument(args, kwargs, "reason", 2)
+	outerSpeech = list(original(info, asJaws(attrs, reason), ancestorAttrs, fieldType, *args, **kwargs) or ())
+	# The inner field is said as the outer is: for a heading or a link, NVDA says the same before a line's text whether
+	# the line before was in it or not.
+	innerSpeech = list(original(info, asJaws(inner, reason), list(ancestorAttrs or ()) + [attrs], fieldType, *args, **kwargs) or ())
+	if role == _linkRole:
+		link, linkSpeech, headingSpeech = attrs, outerSpeech, innerSpeech
+	else:
+		link, linkSpeech, headingSpeech = inner, innerSpeech, outerSpeech
+	states, rest = _splitAfterStates(linkSpeech, _stateWords(link, reason))
+	if not headingSpeech or not rest:
+		return None
+	_local.lineInner = (info, attrs, innerRole)
+	said = states + headingSpeech + rest
+	_noteOnce(
+		_loggedLines,
+		f"{role}/{innerRole}/{bool(states)}",
+		f"jawsMigrator: a line that starts in a {'link and a heading' if role == _linkRole else 'heading and a link'} is said as JAWS's SayLine and arrow keys say it, the link's states and the heading before \"link\": {', '.join(word for word in said if isinstance(word, str) and word)}",
+	)
+	return said
+
+
+def _saidWithOuter(info, attrs, ancestorAttrs) -> bool:
+	"""Whether NVDA asks, reading a line, for the inner field _lineTogether said already with the outer one."""
+	pending = getattr(_local, "lineInner", None)
+	if pending is None:
+		return False
+	_local.lineInner = None
+	pendingInfo, outer, role = pending
+	if pendingInfo is not info or not ancestorAttrs or _role(attrs) != role:
+		return False
+	last = ancestorAttrs[-1]
+	return last is outer or last == outer
+
+
 def _fieldSpeechGuarded(original):
 	"""NVDA's speech for a field of a document's text: a link without its title, in quick navigation a link or heading
-	without its description, and, as quick navigation reports a heading on a web page, the heading before "link"."""
+	without its description, as quick navigation reports a heading on a web page, the heading before "link", and
+	reading a line that starts in a heading and a link, the link's states, the heading, then "link"."""
 
 	@functools.wraps(original)
 	def getControlFieldSpeech(self, attrs, ancestorAttrs, fieldType, *args, **kwargs):
 		if not _enabled:
 			return original(self, attrs, ancestorAttrs, fieldType, *args, **kwargs)
+		if fieldType in LINE_START and _caret is not None and _argument(args, kwargs, "reason", 2) == _caret:
+			try:
+				if _saidWithOuter(self, attrs, ancestorAttrs):
+					# Said already, with the field it is right inside.
+					return []
+				if not _argument(args, kwargs, "extraDetail", 1, False):
+					said = _lineTogether(original, self, attrs, ancestorAttrs, fieldType, args, kwargs)
+					if said is not None:
+						return said
+			except Exception:
+				_local.lineInner = None
+				_failure("could not say a link's states and the heading before \"link\" on a line")
 		if fieldType == AFTER_TEXT and getattr(_local, "headings", 0) and _argument(args, kwargs, "reason", 2) == _quickNav:
 			if id(attrs) in _local.said:
 				# Said already, with the other of its pair.

@@ -40,6 +40,9 @@ NVDA said nothing at all.
   alone); and where NVDA's focus is still in the page you left but the browser's isn't, NVDA takes the browser's focus
   with a focus event of its own (eventHandler.queueEvent), and comes into that page as it does for any focus event.
 
+The line is said as JAWS's SayLine says it, without the regions and lists it is in (issue 38: after reddit drew the
+subreddit in a new main region, NVDA said "main region end, main region" before the line): see readLine.
+
 What NVDA says itself isn't said again: a page that loads is read by NVDA as before, and so is a link the page moves
 the focus to. Another key before the page is back, or going to another program, ends it. Only Edge, Chrome and
 Firefox, the browsers JAWS's scripts bind the keys in. It works while the assistant runs, unless it is turned off in
@@ -448,11 +451,24 @@ def comeInto(document) -> None:
 
 
 def readLine(document) -> None:
-	"""Say the line at browse mode's caret in ``document``, as NVDA says it when the caret moves there."""
+	"""Say the line at browse mode's caret in ``document`` as JAWS's SayLine does after Back and Forward, and as
+	NVDA+Up Arrow says it: what is in the line, without the regions, lists and articles it is in.
+
+	NVDA says a region or a list a line is in when the line it said before was outside it, and where one ends when the
+	line is outside it (speech.getTextInfoSpeech compares the line's fields with the ones it kept,
+	SpeakTextInfoState). The ones it kept are those of the page you left. Reddit draws the subreddit in a new main
+	region, which NVDA can't tell from another one, so the tester's NVDA said "main region end, main region, heading,
+	level 2, visited, link, Downgrading is a nightmare" (issue 38). JAWS's DocumentLoadedEvent calls SayLine after
+	GoBack and GoForward (Default.jss, BackForward), and SayLine says no region. JAWS 2026, run live on a plain
+	two-page site, said "Back", "Going back", "Plain page one", then "visited heading level 2 Link Go to page two"; in
+	3 of 5 runs it said the title of the page it had left and "main region end" first, as it read before the page was
+	back, and never "main region". So NVDA keeps the line's own fields first (OutputReason.ONLYCACHE, which says
+	nothing), then reads the line. The fields after it are said as before: a region the next line is out of, or in."""
 	import speech
 	import textInfos
 	from controlTypes import OutputReason
 
 	info = document.makeTextInfo(textInfos.POSITION_CARET)
 	info.expand(textInfos.UNIT_LINE)
+	speech.speakTextInfo(info, unit=textInfos.UNIT_LINE, reason=OutputReason.ONLYCACHE)
 	speech.speakTextInfo(info, unit=textInfos.UNIT_LINE, reason=OutputReason.CARET)

@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.39
+- Version: 1.40
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.40](#whats-new-in-140)
 - [What's new in 1.39](#whats-new-in-139)
 - [What's new in 1.38](#whats-new-in-138)
 - [What's new in 1.37](#whats-new-in-137)
@@ -91,10 +92,22 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.39.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.40.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.40
+
+From the tester's issue 38, "is this how Jaws pronounces things when you go back?":
+
+- **After Alt+Left or Alt+Right, the line a page comes back to is read as JAWS reads it, without the regions it is in.** On reddit.com the tester opened a post, then went back to the subreddit. NVDA said "Back", "Going back", then "main region end, main region, heading, level 2, visited, link, Downgrading is a nightmare". Reddit doesn't load a page when you go back: it draws the subreddit again, in a new main region. NVDA compares each line it reads with the one it read before, to say which regions you leave and come into. The line before was on the post, so NVDA said the post's main region ending and the subreddit's starting. After Back and Forward, JAWS reads the line with its SayLine command (Insert+Up Arrow), which never names a region. Now NVDA reads that line as NVDA+Up Arrow does, without them. The next lines are said as before, and "main region end" still comes when you arrow out of the region.
+- **A line that starts with a link in a heading, or a heading in a link, is said in JAWS's order.** For a post's title, a link in a heading, NVDA said "heading, level 2, visited, link, Downgrading is a nightmare". For one of reddit's highlights, a heading in a link, it said "link, heading, level 2, Bi-weekly Megathread for referral codes". JAWS says the link's states first, then the heading, then "Link", whichever holds the other: "visited, heading level 2, Link, Downgrading is a nightmare" and "heading level 2, Link, Bi-weekly Megathread for referral codes". Now NVDA does too, with the arrow keys, NVDA+Up Arrow and the line read after Back. Quick navigation (H) already said them in JAWS's order. A link that starts after some text in a heading is said where it is, as before. This is part of 'Say links on web pages as JAWS does' in NVDA's Settings, JAWS Migration Assistant.
+- **Tested live with JAWS 2026, as the tester asked.** Claude ran JAWS 2026 on the maintainer's computer in Edge, on a copy of the tester's subreddit and on a plain two-page site. JAWS was driven through its own programming interface, running the same scripts its keys run, and its speech history was copied after each one. On the post's title, SayLine and Down Arrow both said "visited, heading level 2, Link, Downgrading is a nightmare". On a highlight they said "heading level 2, Link, Bi-weekly Megathread …", and on a heading, "heading level 1, r/Visible". Going back on the plain site, JAWS said "Back", "Going back", "Loading page", "Loading complete", "Plain page one", then "visited, heading level 2, Link, Go to page two". In three of five tries, JAWS first said the title of the page it had just left and "main region end", because it read before the page was back. It never said "main region". The tests replay the tester's log with NVDA 2026.2's own speech code and Browse Mode Caret Fix's own code. With 1.39 they give the log word for word, "main region end, main region" included. With 1.40 they give "visited, heading, level 2, link, Downgrading is a nightmare".
+
+From the tester's issue 36:
+
+- **The Speech History opens as JAWS's does.** NVDA+Shift+J, then H said "Speech History, dialog, edit", your latest line, then "read only". JAWS says the window's title and the line. Now NVDA says "Speech History" and your latest line, without "dialog", "edit" and "read only".
 
 ## What's new in 1.39
 

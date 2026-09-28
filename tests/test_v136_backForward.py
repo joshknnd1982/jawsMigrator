@@ -1063,8 +1063,9 @@ class TesterTests(unittest.TestCase):
 			[
 				# JAWS's GoBack: "Back". Edge's "Going back" is the tester's MSEdgeDiscardAnnouncements' to say.
 				["Back"],
-				# The line Browse Mode Caret Fix put the caret back on, the post's title. JAWS read the line at its cursor.
-				["heading", "level 2", "visited", "link", "What Phones Work Best On Visible?"],
+				# The line Browse Mode Caret Fix put the caret back on, the post's title. JAWS read the line at its cursor,
+				# SayLine, which JAWS 2026 said live as "visited heading level 2 Link ..." (issue 38, from 1.40).
+				["visited", "heading", "level 2", "link", "What Phones Work Best On Visible?"],
 			],
 		)
 		self.assertEqual(self.page.caret, TITLE_LINE)
@@ -1086,7 +1087,7 @@ class TesterTests(unittest.TestCase):
 			self.clock.run(0.85)
 			self.assertEqual(spoken, [["Back"]], "the subreddit is back; Browse Mode Caret Fix has only just put the caret back")
 			self.clock.run(6)
-		self.assertEqual(spoken, [["Back"], ["heading", "level 2", "visited", "link", "What Phones Work Best On Visible?"]])
+		self.assertEqual(spoken, [["Back"], ["visited", "heading", "level 2", "link", "What Phones Work Best On Visible?"]])
 		said = [call.args[0] for call in log.return_value.debug.call_args_list]
 		self.assertTrue(any("reads the line at the caret" in line and "What Phones Work Best On Visible?" in line for line in said), said)
 

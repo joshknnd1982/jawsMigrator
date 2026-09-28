@@ -1651,6 +1651,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		startupFocus = getattr(self, "_startupFocus", None)
 		if startupFocus is not None:
 			startupFocus.chooseOverlay(obj, clsList)
+		# The Speech History window and its text box: the title, then the line, as JAWS says (see speechHistory).
+		speechHistory.chooseOverlay(obj, clsList)
 
 	# -- the command layer ------------------------------------------------------------------
 

@@ -30,6 +30,12 @@ goes when NVDA exits. As in NVDA's Speech Viewer, which stops adding lines while
 nothing NVDA says while the Speech History window is in front is added: reading the history doesn't push out what
 you want from it, or fill what you copy next.
 
+As the window opens, NVDA says what JAWS says as its Results Viewer opens: the title, "Speech History", then the most
+recent line. On its own, NVDA said "Speech History, dialog", then "edit", the line and "read only" (issue 36, the
+tester's log on 1.38). So the window and its text box get classes of the assistant's (chooseOverlay): NVDA says the
+window's title without its role, and the line at the caret as the arrow keys say it. Braille and NVDA's other
+commands still give the role and states.
+
 JAWS's option for it is [Options] SpeechHistory in Default.jcf, on as JAWS comes (with it off, JAWS says "Speech
 history disabled"). The migration brings it over as this setting (settingsMap), which NVDA's Settings, JAWS
 Migration Assistant can turn off; turned off, the history is forgotten.
@@ -75,6 +81,9 @@ _failed = False
 #: The Speech History window while it is open, and whether it is in front, when nothing is added.
 _viewer = None
 _viewerActive = False
+#: While it is open, the window handles of the Speech History window and its text box, for chooseOverlay, which NVDA
+#: may call off its main thread, where wx can't be asked.
+_viewerHandles = (None, None)
 
 
 def _log():
@@ -254,14 +263,15 @@ def _setViewerActive(active: bool) -> None:
 
 
 def _viewerClosed(viewer) -> None:
-	global _viewer
+	global _viewer, _viewerHandles
 	if _viewer is viewer:
 		_viewer = None
+		_viewerHandles = (None, None)
 		_setViewerActive(False)
 
 
 def _showViewer() -> None:
-	global _viewer
+	global _viewer, _viewerHandles
 	import wx
 
 	from .gui.common import mainFrame, postPopup, prePopup
@@ -279,6 +289,8 @@ def _showViewer() -> None:
 		return
 	viewer = _viewerClass()(mainFrame(), text())
 	_viewer = viewer
+	# Before the window shows: NVDA makes its objects for it once it has the focus.
+	_viewerHandles = (viewer.GetHandle(), viewer.text.GetHandle())
 	# As NVDA opens its own Settings dialogs: prePopup lets the window come in front of the program you were in.
 	prePopup()
 	try:
@@ -306,6 +318,91 @@ def closeViewer() -> None:
 			viewer.Destroy()
 		except Exception:
 			pass
+
+
+# -- what NVDA says as the window opens ------------------------------------------------------------------------------
+
+
+def chooseOverlay(obj, clsList) -> None:
+	"""NVDA's chooseNVDAObjectOverlayClasses: the Speech History window and its text box get the assistant's classes,
+	so NVDA says the title and then the line, as JAWS does."""
+	windowHandle, textHandle = _viewerHandles
+	if windowHandle is None:
+		return
+	try:
+		handle = getattr(obj, "windowHandle", None)
+		if handle is None or handle not in (windowHandle, textHandle):
+			return
+		# Told by the classes NVDA chose, not by the object's role: NVDA would go on using a property read before the
+		# object has its classes (see documentPolling). A window's other objects, such as its frame, have neither.
+		if handle == textHandle:
+			from editableText import EditableText as wanted
+		else:
+			from NVDAObjects.behaviors import Dialog as wanted
+		if not any(isinstance(cls, type) and issubclass(cls, wanted) for cls in clsList):
+			return
+		windowClass, textClass = _overlayClasses()
+		clsList.insert(0, textClass if handle == textHandle else windowClass)
+	except Exception:
+		_failure("could not tell whether an object is the Speech History window's")
+
+
+def _focusLossCommand(obj):
+	"""NVDA's command that drops what it says for the focus once the focus has moved on, as NVDA adds it to what it
+	says of an object for the focus, or None."""
+	try:
+		import controlTypes
+		from eventHandler import _getFocusLossCancellableSpeechCommand
+
+		return _getFocusLossCancellableSpeechCommand(obj, controlTypes.OutputReason.FOCUS)
+	except Exception:
+		return None
+
+
+_overlays = None
+
+
+def _overlayClasses():
+	"""The classes for the Speech History window and its text box, made the first time."""
+	global _overlays
+	if _overlays is not None:
+		return _overlays
+	import controlTypes
+	import speech
+	import textInfos
+	from NVDAObjects import NVDAObject
+
+	class SpeechHistoryWindow(NVDAObject):
+		"""The Speech History window: its title, as JAWS says the Results Viewer's, without "dialog"."""
+
+		def event_focusEntered(self):
+			try:
+				speech.speakObjectProperties(self, reason=controlTypes.OutputReason.FOCUS, name=True)
+			except Exception:
+				_failure("could not say the Speech History window's title")
+				super().event_focusEntered()
+
+	class SpeechHistoryText(NVDAObject):
+		"""The Speech History window's text box: the line at the caret, as the arrow keys say it, without "edit" and
+		"read only", as JAWS says only the line in its Results Viewer."""
+
+		def reportFocus(self):
+			try:
+				info = self.makeTextInfo(textInfos.POSITION_CARET)
+				info.expand(textInfos.UNIT_LINE)
+			except Exception:
+				_failure("could not read the Speech History window's line")
+				super().reportFocus()
+				return
+			speech.speakTextInfo(
+				info,
+				unit=textInfos.UNIT_LINE,
+				reason=controlTypes.OutputReason.CARET,
+				_prefixSpeechCommand=_focusLossCommand(self),
+			)
+
+	_overlays = (SpeechHistoryWindow, SpeechHistoryText)
+	return _overlays
 
 
 _viewerType = None
