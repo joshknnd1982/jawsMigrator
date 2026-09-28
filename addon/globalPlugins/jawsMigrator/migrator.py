@@ -27,6 +27,7 @@ from . import (
 	classicSounds,
 	debugLog,
 	dictMap,
+	exitMessage,
 	insertKeys,
 	jawsDetect,
 	jawsFiles,
@@ -1191,6 +1192,9 @@ class Migration:
 		# This migration planned the keystrokes of every JAWS command the assistant knows: none is left for newKeys.
 		updates[newKeys.STATE_KEY] = sorted(newKeys.NEW_SCRIPTS)
 		updates[newKeys.RECHECK_KEY] = True
+		# This migration decided from JAWS's settings whether NVDA says "Unloading NVDA" as it exits (a setting above, or
+		# left as it was): nothing is left for the check made once for migrations before 1.37 (see exitMessage).
+		updates[exitMessage.CHECKED_KEY] = True
 		updates["lastMigration"] = {
 			"when": datetime.datetime.now().isoformat(timespec="seconds"),
 			"jaws": plan.index.jaws.displayName,

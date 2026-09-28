@@ -76,7 +76,8 @@ of the program you are in, and pressed twice shows the version details to read
 and copy, with a migration's keystrokes or NVDA+Shift+J, then V (see appVersion);
 the keystrokes of such JAWS commands, which the assistant learned after a
 migration, are added once after an update, as that migration added its own (see
-newKeys).
+newKeys). Where JAWS's Insert+F4 says "Unloading JAWS", NVDA says "Unloading
+NVDA" as it exits, and exits once it is said (see exitMessage).
 """
 
 from __future__ import annotations
@@ -512,6 +513,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			speechHistory.unregister()
 		except Exception:
 			pass
+		try:
+			from . import exitMessage
+
+			exitMessage.unregister()
+		except Exception:
+			pass
 		super().terminate()
 
 	def _onConfigReset(self, factoryDefaults=False):
@@ -529,7 +536,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
 		a slow program too, Enhanced Control Support's timer kept off documents, browse mode kept on a web page's
 		tabs and toolbar buttons, links shown in the Elements List as JAWS's Links List shows them, the speech
-		history, and the layer's sound.
+		history, "Unloading NVDA" said as NVDA exits, and the layer's sound.
 
 		Each one is applied on its own: one that fails is logged, and never keeps the others from working.
 		It runs as NVDA starts, after a migration or a restore, and when NVDA reloads its configuration.
@@ -859,6 +866,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not keep a speech history")
 		try:
+			from . import exitMessage
+
+			# JAWS's Insert+F4 says "Unloading JAWS" (ShutDownJAWS, Default.jss) where JAWS Messages are on at the user's
+			# verbosity level; NVDA exits without a word. Turned on, NVDA says "Unloading NVDA" and exits once it is said.
+			if exitMessage.wanted(data):
+				exitMessage.register()
+			else:
+				exitMessage.unregister()
+		except Exception:
+			debugLog.error('could not have NVDA say "Unloading NVDA" as it exits')
+		try:
 			from . import layerSound
 
 			# A migration or a restore can change which JAWS the layer's sound comes from; look again next time.
@@ -888,7 +906,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._busy:
 			self._repairTimer = wx.CallLater(60000, self._repairVoices)
 			return
-		from . import dictRepair, gestureRepair, migrator, newKeys, rateRepair, symbolRepair
+		from . import dictRepair, exitMessage, gestureRepair, migrator, newKeys, rateRepair, symbolRepair
 
 		def insertKeysRepair(announce, done=None):
 			def reload():
@@ -907,6 +925,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("the keystrokes of JAWS commands new since the last migration", lambda announce, done=None: newKeys.addOnce(self._jawsKeymapFiles, announce, done)),
 			("the repair of the Eloquence rate", lambda announce, done=None: rateRepair.repairOnce(announce, migrator._backupFirst, done)),
 			("the repair of punctuation symbols for spaces and line breaks", symbolRepair.repairOnce),
+			# Whether NVDA says "Unloading NVDA" as it exits, from JAWS's settings, for a migration made before 1.37.
+			("the check whether JAWS says \"Unloading JAWS\"", lambda announce, done=None: exitMessage.checkOnce(self._jawsDefaultJcf, announce, done)),
 		]
 		self._busy = True
 		self._runRepairs(steps)
@@ -1694,6 +1714,25 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		"""``(merged default key map, JAWS keyboard layout in use)``, or None (see insertKeys.repairOnce)."""
 		source = self._jawsKeymapSource()
 		return None if source is None else (source[1], source[2])
+
+	def _jawsDefaultJcf(self):
+		"""JAWS's Default.jcf as JAWS runs it, the user's over JAWS's own, or None without JAWS (see exitMessage.checkOnce).
+
+		The JAWS of the last migration, when it is still here; otherwise the one JAWS's key map comes from."""
+		installations = [j for j in jawsDetect.findJawsInstallations() if j.programInstalled] or jawsDetect.findJawsInstallations()
+		if not installations:
+			return None
+		migrated = (state.get("lastMigration") or {}).get("jaws")
+		jaws = next((j for j in installations if j.displayName == migrated), installations[0])
+		language = jaws.primaryLanguage or "enu"
+		files = []
+		for path in (os.path.join(jaws.sharedLanguageDir(language), "Default.jcf"), os.path.join(jaws.userLanguageDir(language), "Default.jcf")):
+			if os.path.isfile(path):
+				try:
+					files.append(jawsFiles.readIni(path, inlineComments=True))
+				except OSError:
+					pass
+		return jawsFiles.mergeIni(*files) if files else None
 
 	def _jawsKeymap(self):
 		"""JAWS's installation, the reverse of its merged default key map, script descriptions, its keyboard layout and

@@ -23,6 +23,7 @@ from .. import (
 	documentValues,
 	driveLetters,
 	emptyAlerts,
+	exitMessage,
 	fieldEdges,
 	formFields,
 	labelRepeats,
@@ -264,6 +265,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history"),
 		)
 		self.keepSpeechHistory.SetValue(speechHistory.wanted(state.load()))
+		# JAWS's Insert+F4 says "Unloading JAWS" where its JAWS Messages are on; NVDA exits without a word (issue 34).
+		self.sayUnloading = helper.addItem(
+			wx.CheckBox(self, label='Say "Unloading NVDA" as NVDA exits, as JAWS says "Unloading JAWS"'),
+		)
+		self.sayUnloading.SetValue(exitMessage.wanted(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -366,6 +372,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownWebRegionsAsJaws = self.webRegionsAsJaws.GetValue()
 		self._shownBackForwardAsJaws = self.backForwardAsJaws.GetValue()
 		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
+		self._shownSayUnloading = self.sayUnloading.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -467,6 +474,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[backForward.STATE_KEY] = self.backForwardAsJaws.GetValue()
 		if self.keepSpeechHistory.GetValue() != self._shownKeepSpeechHistory:
 			updates[speechHistory.STATE_KEY] = self.keepSpeechHistory.GetValue()
+		if self.sayUnloading.GetValue() != self._shownSayUnloading:
+			updates[exitMessage.STATE_KEY] = self.sayUnloading.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

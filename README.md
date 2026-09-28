@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.37](#whats-new-in-137)
 - [What's new in 1.36](#whats-new-in-136)
 - [What's new in 1.35](#whats-new-in-135)
 - [What's new in 1.34](#whats-new-in-134)
@@ -92,6 +93,14 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.37
+
+From the tester's answer on issue 34:
+
+- **NVDA says "Unloading NVDA" as it exits, where JAWS says "Unloading JAWS".** Asked whether NVDA should say something as it exits, the tester wrote: "probably the best way to handle that is if they have it speak a conformation when unloading Jaws you do the same for NVDA. ... This could be able to be turned off just like you can in Jaws. If it is turned off in Jaws nothing changes." JAWS's Insert+F4 says "Unloading JAWS", then unloads JAWS. It says it as a JAWS Message, one of the Items to be Spoken that Settings Center has for each verbosity level, so JAWS says it only where JAWS Messages are on at your verbosity level: at Beginner and Intermediate as JAWS comes, and not at Advanced. A migration now takes that from your JAWS. Where your JAWS says "Unloading JAWS", NVDA says "Unloading NVDA" when you exit it, with Insert+F4, NVDA's menu or its exit dialog. Where your JAWS doesn't, NVDA exits without a word, as before. NVDA stops speaking as it exits, so it now waits for the message: it exits once the message has been said, at once if you press a key, and after 4 seconds at the most. Nothing is said when NVDA restarts, or when speech is off. To turn it on or off, check or uncheck 'Say "Unloading NVDA" as NVDA exits, as JAWS says "Unloading JAWS"' in NVDA's Settings, JAWS Migration Assistant.
+- **For a migration you made before, the assistant looks at your JAWS once.** You don't need to migrate again. A little after NVDA first starts with 1.37, the assistant reads your JAWS settings. If your JAWS says "Unloading JAWS", it turns the message on, and NVDA says: "JAWS Migration Assistant: NVDA now says "Unloading NVDA" as it exits, as your JAWS says "Unloading JAWS". To turn it off, uncheck it in NVDA's Settings, JAWS Migration Assistant." If your JAWS doesn't say it, nothing changes, and NVDA says nothing about it. The debug log says which JAWS setting decided.
+- **Tested with NVDA 2026.2's own code and JAWS 2026's own files.** In the tester's log, NVDA stopped speaking 0.2 seconds after it was asked to exit, too soon for a message. The tests run NVDA's own exit code (its exit command, its menu's and exit dialog's Exit, and its restart), and NVDA's own speech manager, speak and speech cancelling, with its focus and foreground events. With 1.37 the synthesizer says the whole message before NVDA's exit starts. Exiting from NVDA's menu gives the foreground back to the program you were in, which stops NVDA's speech; the message is then said again, once, to the end. The tests also read JAWS 2026's own ShutDownJAWS script, its "Unloading JAWS" message and its JAWS Messages row in Default.jcf at each verbosity level.
 
 ## What's new in 1.36
 
@@ -453,6 +462,7 @@ Settings Center options in more detail:
 - With only your settings, NVDA changes only what you changed in JAWS. If you changed a verbosity level, everything that level decides comes over.
 - A few JAWS defaults would hide information NVDA gives, such as object descriptions, which JAWS gives through its tutor messages. Those only come over when you changed them in JAWS.
 - JAWS plays no sound when it starts or exits, so NVDA's "Play sounds when starting or exiting NVDA" is turned off.
+- JAWS's Insert+F4 says "Unloading JAWS" where JAWS Messages are on at your verbosity level. There, the assistant's own check box has NVDA say "Unloading NVDA" as it exits. NVDA has no setting for JAWS's other JAWS Messages.
 - JAWS's Outlook option "Messages Automatically Read" (Quick Settings, Insert+V in Outlook) has no NVDA setting, so it sets the assistant's own check box for reading an Outlook message from the top when it opens.
 
 Dictionary rules in more detail:
@@ -712,6 +722,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region", not the page of a tab you are leaving, and not a page's first line the first time you come to it (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131), [What's new in 1.33](#whats-new-in-133) and [What's new in 1.34](#whats-new-in-134));
 - saying regions, groups, lists and articles on web pages with JAWS's words: "main region", "group", "list of 2 items", "main region end", and, reading, no banner, search, form, complementary or content information region (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134));
 - keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history, without what NVDA dropped before saying it (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129) and [What's new in 1.33](#whats-new-in-133));
+- saying "Unloading NVDA" as NVDA exits, where JAWS says "Unloading JAWS", and exiting once it has been said (off unless you turn it on, or a migration takes it from JAWS's JAWS Messages at your verbosity level; see [What's new in 1.37](#whats-new-in-137));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 
@@ -859,7 +870,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - JAWS scripts cannot run in NVDA, and there is no automatic translation. Custom scripts are archived and listed.
 - NVDA has no layered keystrokes, frames, graphics labels, color-based highlight detection, Flexible Web, Research It or list view column customization. Those settings are archived and listed.
 - Rates and pitches are converted from the percentage JAWS shows, except Eloquence's rate, which keeps JAWS's speed. Two synthesizers can sound a little different at the same percentage, so a voice may need a small adjustment afterwards, in NVDA's voice settings.
-- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, saying a control's type and state once, saying a system tray icon only when you move to it, saying what quick navigation moves to without what it is in, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, the focus going back to Outlook after NVDA waits for it, NVDA's Elements List on a page that is still changing and its key kept from the program, and the focus going back to your window when NVDA starts on the taskbar need the assistant: they stop when it is uninstalled or disabled.
+- The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, "Unloading NVDA" as NVDA exits, saying a control's type and state once, saying a system tray icon only when you move to it, saying what quick navigation moves to without what it is in, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, the focus going back to Outlook after NVDA waits for it, NVDA's Elements List on a page that is still changing and its key kept from the program, and the focus going back to your window when NVDA starts on the taskbar need the assistant: they stop when it is uninstalled or disabled.
 - The first time NVDA needs Outlook after Outlook starts, NVDA still moves the focus to its "Waiting for Outlook..." window for a moment, as it does without add-ons: Outlook offers what NVDA reads only after it has lost the focus once.
 - Quick navigation leaves out what it moves into on web pages read through IAccessible2 (Edge, Chrome and Firefox), and for headings and edit fields everywhere. Elsewhere, such as in Word, K, B, F and the other quick navigation keys still say the landmark or list they move into, as NVDA says it. The arrow keys and Tab say them everywhere, as JAWS does.
 - Backspace is said once the program has deleted, up to half a second after the key. A program slower than that is still silent, as NVDA is without the assistant; the text itself is never changed. While NVDA waits, it can't do anything else.

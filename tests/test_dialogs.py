@@ -780,6 +780,24 @@ class SettingsPanelTests(unittest.TestCase):
 			"what NVDA says is no longer kept, and what was kept is forgotten, at once",
 		)
 
+	def test_sayUnloadingIsOffUnlessTurnedOn(self):
+		# JAWS's Insert+F4 says "Unloading JAWS" where JAWS Messages are on; the tester turns it off in JAWS (issue 34).
+		from jawsMigrator import exitMessage, state
+
+		checkBox = self.dialog.panel.sayUnloading
+		self.assertEqual(checkBox.GetLabel(), 'Say "Unloading NVDA" as NVDA exits, as JAWS says "Unloading JAWS"')
+		self.assertFalse(checkBox.GetValue(), "off unless a migration or the user turned it on")
+		checkBox.SetValue(True)
+		self.calls.clear()
+		self.dialog.panel.onSave()
+		state.forget()
+		self.assertIs(state.get(exitMessage.STATE_KEY), True)
+		self.assertEqual(self.calls, ["applyRuntimeSettings"], 'NVDA says "Unloading NVDA" from its next exit')
+		checkBox.SetValue(False)
+		self.dialog.panel.onSave()
+		state.forget()
+		self.assertIs(state.get(exitMessage.STATE_KEY), False)
+
 	def test_version112sLevelFirstSettingIsGone(self):
 		from jawsMigrator import state
 

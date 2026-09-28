@@ -157,6 +157,11 @@ DEFAULTS = {
 	#: What NVDA says is kept, the last 500 things, for NVDA+Shift+J then H, Control+H and Shift+H, as JAWS keeps its
 	#: speech history for Insert+Space then the same keys; JAWS's [Options] SpeechHistory (see speechHistory).
 	"keepSpeechHistory": True,
+	#: NVDA says "Unloading NVDA" as it exits, as JAWS's Insert+F4 says "Unloading JAWS" where JAWS Messages are on at the
+	#: user's verbosity level; off unless a migration or the user turns it on (see exitMessage).
+	"sayUnloadingNvda": False,
+	#: True once the assistant looked whether JAWS says "Unloading JAWS", for a migration made before 1.37 (see exitMessage).
+	"exitMessageChecked": False,
 }
 
 _lock = threading.RLock()

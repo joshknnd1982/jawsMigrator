@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import jawsFiles, outlookMessages, speechHistory
+from . import exitMessage, jawsFiles, outlookMessages, speechHistory
 
 NVDA = "nvda"
 CLASSIC_SPEECH = "classicSpeech"
@@ -501,7 +501,30 @@ def mapSettings(
 					f"ClassicSpeech {levelName} verbosity, speak {token}: {'yes' if level else 'no'}",
 					f"[OutputModes] {key}",
 				)
+	# JAWS's Insert+F4 (ShutDownJAWS, Default.jss) says "Unloading JAWS" as a JAWS Message, so JAWS says it at a
+	# verbosity level where JAWS Messages are on: Beginner and Intermediate as JAWS comes, not Advanced. NVDA exits
+	# without a word; the assistant has it say "Unloading NVDA" (exitMessage). Exiting is the same in every program.
+	if not isApplication:
+		raw = r.raw("OutputModes", "JAWS_MESSAGE")
+		if raw is None and (effective or verbosityChanged):
+			raw = r.contextRaw("OutputModes", "JAWS_MESSAGE")
+		where = f"[OutputModes] JAWS_MESSAGE={raw}, {VERBOSITY_LEVELS[verbosity]} level"
+		if raw is None and (effective or verbosityChanged):
+			raw = exitMessage.JAWS_DEFAULT_ROW
+			where = f"JAWS's default JAWS_MESSAGE={raw}, {VERBOSITY_LEVELS[verbosity]} level"
+		says = exitMessage.jawsSays(raw, verbosity) if raw is not None else None
+		if says is not None:
+			add(
+				ASSISTANT,
+				(exitMessage.STATE_KEY,),
+				says,
+				f'Say "{exitMessage.MESSAGE}" as NVDA exits: {"on" if says else "off"}, as JAWS says '
+				f'{"" if says else "no "}"{exitMessage.JAWS_MESSAGE}" (JAWS Messages {"on" if says else "off"})',
+				where,
+			)
 	for key in ("TUTOR", "SMART_HELP", "APP_START", "JAWS_MESSAGE", "TOASTS", "SCREEN_MESSAGE"):
+		if key == "JAWS_MESSAGE" and not isApplication:
+			continue
 		raw = r.raw("OutputModes", key)
 		if raw is not None:
 			result.notMigrated.append(NotMigrated("OutputModes", key, raw, "NVDA has no separate setting for this JAWS message type."))
