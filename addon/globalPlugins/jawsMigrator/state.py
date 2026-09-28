@@ -157,11 +157,17 @@ DEFAULTS = {
 	#: What NVDA says is kept, the last 500 things, for NVDA+Shift+J then H, Control+H and Shift+H, as JAWS keeps its
 	#: speech history for Insert+Space then the same keys; JAWS's [Options] SpeechHistory (see speechHistory).
 	"keepSpeechHistory": True,
+	#: The notifications Windows and programs send are kept, the last 500 of the last 24 hours, for NVDA+Shift+J then N and
+	#: Shift+N, as JAWS keeps its Notification History for Insert+Space then the same keys (see notificationHistory).
+	"keepNotificationHistory": True,
 	#: NVDA says "Unloading NVDA" as it exits, as JAWS's Insert+F4 says "Unloading JAWS" where JAWS Messages are on at the
 	#: user's verbosity level; off unless a migration or the user turns it on (see exitMessage).
 	"sayUnloadingNvda": False,
 	#: True once the assistant looked whether JAWS says "Unloading JAWS", for a migration made before 1.37 (see exitMessage).
 	"exitMessageChecked": False,
+	#: NVDA started with the screen curtain on says "Screen curtain on" after it says where you are; NVDA itself says so
+	#: only on a braille display (see screenShade).
+	"sayScreenCurtainAtStart": True,
 }
 
 _lock = threading.RLock()

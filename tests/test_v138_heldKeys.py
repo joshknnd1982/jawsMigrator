@@ -47,7 +47,9 @@ SPACE_ALONE = "In JAWS, Space runs Virtual Spacebar. NVDA has no command that do
 INSERT_SPACE = (
 	"In JAWS, Insert+Space starts a layered keystroke: you press it, then another key. "
 	"In NVDA, NVDA+shift+j starts the JAWS Migration Assistant's layer of commands. It has JAWS's speech history keys, "
-	"H, Control+H and Shift+H, and question mark for its help. In NVDA, NVDA+space has no command of its own."
+	"H, Control+H and Shift+H, its notification keys, N and Shift+N, D for audio ducking, F11 and Print Screen for the "
+	"screen curtain, and question mark for its help. "
+	"In NVDA, NVDA+space has no command of its own."
 )
 
 

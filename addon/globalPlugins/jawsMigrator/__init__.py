@@ -74,13 +74,20 @@ NVDA's debug log says when a program types a key late or not at all (see
 typingWatch). NVDA+Shift+J, then L saves NVDA's log as a zip file small enough
 to attach to a GitHub issue (see logZip), and NVDA+Shift+J, then H shows what
 NVDA said, as JAWS's speech history does, where Control+H copies it and Shift+H
-clears it (see speechHistory). JAWS's Insert+Control+V says the name and version
+clears it (see speechHistory); NVDA+Shift+J, then N lists the notifications
+Windows and programs sent and Shift+N says the last one again, as JAWS's
+Notification History (see notificationHistory), and D turns audio ducking on or
+off with JAWS's words (see duckingToggle). JAWS's Insert+Control+V says the name and version
 of the program you are in, and pressed twice shows the version details to read
 and copy, with a migration's keystrokes or NVDA+Shift+J, then V (see appVersion);
 the keystrokes of such JAWS commands, which the assistant learned after a
 migration, are added once after an update, as that migration added its own (see
 newKeys). Where JAWS's Insert+F4 says "Unloading JAWS", NVDA says "Unloading
-NVDA" as it exits, and exits once it is said (see exitMessage).
+NVDA" as it exits, and exits once it is said (see exitMessage). JAWS's Insert+Space,
+F11 or Print Screen turns Screen Shade on or off; NVDA+Shift+J, then F11 or Print
+Screen turns NVDA's screen curtain on or off the same way, saying "Screen curtain on"
+or "Screen curtain off", Shift+F11 says whether it is on, and NVDA started with the
+curtain on says so after it says where you are (see screenShade).
 """
 
 from __future__ import annotations
@@ -139,6 +146,13 @@ LAYER_COMMANDS = (
 	(("kb:h",), "showSpeechHistory", "H", "what NVDA said, the most recent last, as JAWS's speech history."),
 	(("kb:control+h",), "copySpeechHistory", "Control+H", "copy the speech history to the clipboard."),
 	(("kb:shift+h",), "clearSpeechHistory", "Shift+H", "clear the speech history."),
+	# JAWS's Insert+Space, N and Shift+N for its Notification History, and D for audio ducking (issue 33).
+	(("kb:n",), "showNotificationHistory", "N", "list recent notifications, the most recent first, as JAWS's Notification History."),
+	(("kb:shift+n",), "repeatLastNotification", "Shift+N", "repeat the last notification."),
+	(("kb:d",), "toggleAudioDucking", "D", "audio ducking on or off: lower other programs' sound while NVDA speaks."),
+	# JAWS's Insert+Space, F11 and Insert+Space, Print Screen: Screen Shade on or off (issue 37).
+	(("kb:f11", "kb:printScreen"), "toggleScreenShade", "F11 or Print Screen", "turn the screen curtain on or off, as JAWS's Screen Shade."),
+	(("kb:shift+f11",), "reportScreenShade", "Shift+F11", "say whether the screen curtain is on."),
 	(("kb:shift+/", "kb:f1"), "layerHelp", "Question mark or F1", "this help."),
 )
 
@@ -210,6 +224,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._formFields = None
 		#: The startupFocus module, once NVDA went back from the taskbar to a window: NVDA's focus objects there go through it.
 		self._startupFocus = None
+		#: The screenShade module, while NVDA, started with the screen curtain on, is to say so after its first focus.
+		self._screenShade = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -223,6 +239,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("add the settings panel", self._addSettingsPanel),
 			("apply the assistant's own settings", self.applyRuntimeSettings),
 			("go back to the window you were in when NVDA starts on the taskbar", self._backFromTaskbar),
+			("say that the screen curtain is on when NVDA starts with it on", self._screenCurtainAtStart),
 			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
 			("keep NVDA's Elements List working while a web page changes", self._guardElementsList),
 			("read by sentence on web pages, as JAWS's virtual cursor does", self._readBySentence),
@@ -253,6 +270,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			# NVDA reads the focus in that window as it reads the program, not through UI Automation before it can tell.
 			self._startupFocus = startupFocus
 			startupFocus.followUntilSettled()
+
+	def _screenCurtainAtStart(self):
+		from . import screenShade
+
+		# Not a JAWS setting: NVDA turns the curtain on as it starts and says so only on a braille display (issue 37).
+		if screenShade.atStart(state.load()):
+			self._screenShade = screenShade
 
 	def _keepOutlookFocus(self):
 		from . import outlookFocus
@@ -546,6 +570,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import speechHistory
 
 			speechHistory.unregister()
+		except Exception:
+			pass
+		try:
+			from . import notificationHistory
+
+			notificationHistory.unregister()
+		except Exception:
+			pass
+		self._screenShade = None
+		try:
+			from . import screenShade
+
+			screenShade.stop()
 		except Exception:
 			pass
 		try:
@@ -901,6 +938,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not keep a speech history")
 		try:
+			from . import notificationHistory
+
+			# JAWS keeps the notifications it gets from Windows and programs, for Insert+Space then N and Shift+N; the
+			# assistant's layer has the same keys (issue 33). Turned off, the history is forgotten.
+			if notificationHistory.wanted(data):
+				notificationHistory.register()
+			else:
+				notificationHistory.unregister()
+		except Exception:
+			debugLog.error("could not keep a notification history")
+		try:
 			from . import exitMessage
 
 			# JAWS's Insert+F4 says "Unloading JAWS" (ShutDownJAWS, Default.jss) where JAWS Messages are on at the user's
@@ -1048,6 +1096,35 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			speechHistory.copyAndSay()
 		except Exception:
 			debugLog.error("could not copy the speech history")
+
+	def showNotificationHistory(self):
+		# JAWS's Insert+Space, N: the recent notifications in a list (see notificationHistory).
+		if self._secure:
+			return
+		try:
+			from . import notificationHistory
+
+			notificationHistory.showAndSay()
+		except Exception:
+			debugLog.error("could not show the notification history")
+
+	def repeatLastNotification(self):
+		# JAWS's Insert+Space, Shift+N.
+		try:
+			from . import notificationHistory
+
+			notificationHistory.repeatLast()
+		except Exception:
+			debugLog.error("could not say the last notification")
+
+	def toggleAudioDucking(self):
+		# JAWS's Insert+Space, D: on or off, with JAWS's words (see duckingToggle).
+		try:
+			from . import duckingToggle
+
+			duckingToggle.toggle()
+		except Exception:
+			debugLog.error("could not turn audio ducking on or off")
 
 	def clearSpeechHistory(self):
 		# JAWS's Insert+Space, Shift+H.
@@ -1484,6 +1561,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				formFields.afterFocus(heard)
 		if changeRepeats is not None:
 			changeRepeats.afterFocus(obj, activation)
+		# NVDA started with the screen curtain on: said after what NVDA has just queued for the focus (see screenShade).
+		screenShade = getattr(self, "_screenShade", None)
+		if screenShade is not None and not screenShade.afterFocus():
+			self._screenShade = None
 
 	def _beforeChange(self, obj, name):
 		changeRepeats = self._changeRepeats
@@ -1516,6 +1597,27 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		emptyAlerts = getattr(self, "_emptyAlerts", None)
 		if emptyAlerts is not None and emptyAlerts.nothingToSay(obj):
 			return
+		nextHandler()
+
+	def event_UIA_notification(self, obj, nextHandler, displayString=None, activityId=None, **kwargs):
+		# JAWS keeps every notification for Insert+Space, N and Shift+N; NVDA and other add-ons say it as before (see
+		# notificationHistory).
+		try:
+			from . import notificationHistory
+
+			notificationHistory.fromUIANotification(obj, displayString, activityId)
+		except Exception:
+			pass
+		nextHandler()
+
+	def event_UIA_window_windowOpen(self, obj, nextHandler):
+		# A Windows notification (a toast) opened: kept for the notification history, then said by NVDA as before.
+		try:
+			from . import notificationHistory
+
+			notificationHistory.fromToast(obj)
+		except Exception:
+			pass
 		nextHandler()
 
 	def event_caretMovementFailed(self, obj, nextHandler, gesture=None):
@@ -1672,6 +1774,35 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	@script(description="Clears the speech history, as JAWS's Insert+Space, Shift+H does")
 	def script_clearSpeechHistory(self, gesture):
 		self.clearSpeechHistory()
+
+	@script(description="Lists the recent notifications from Windows and programs, the most recent first, as JAWS's Insert+Space, N does")
+	def script_showNotificationHistory(self, gesture):
+		wx.CallAfter(self.showNotificationHistory)
+
+	@script(description="Says the last notification again, as JAWS's Insert+Space, Shift+N does")
+	def script_repeatLastNotification(self, gesture):
+		self.repeatLastNotification()
+
+	@script(description="Turns audio ducking on or off: other programs' sound is lowered while NVDA speaks, as JAWS's Insert+Space, D does")
+	def script_toggleAudioDucking(self, gesture):
+		self.toggleAudioDucking()
+
+	@script(
+		description=(
+			"Turns the screen curtain on or off, as JAWS's Insert+Space, F11 turns Screen Shade on or off; "
+			"it stays on until you turn it off or NVDA restarts"
+		),
+	)
+	def script_toggleScreenShade(self, gesture):
+		from . import screenShade
+
+		screenShade.toggle()
+
+	@script(description="Says whether the screen curtain is on, and whether NVDA turns it on each time it starts", speakOnDemand=True)
+	def script_reportScreenShade(self, gesture):
+		from . import screenShade
+
+		screenShade.report()
 
 	@script(
 		description=(
@@ -1845,7 +1976,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			if layer:
 				parts.append(
 					f"In NVDA, {layer} starts the JAWS Migration Assistant's layer of commands. It has JAWS's speech history keys, "
-					"H, Control+H and Shift+H, and question mark for its help."
+					"H, Control+H and Shift+H, its notification keys, N and Shift+N, D for audio ducking, F11 and Print Screen for the "
+					"screen curtain, and question mark for its help."
 				)
 		elif not matches:
 			parts.append(f"{keyName} does nothing special in JAWS.")

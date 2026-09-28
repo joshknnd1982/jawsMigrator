@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.33
+- Version: 1.39
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.39](#whats-new-in-139)
 - [What's new in 1.38](#whats-new-in-138)
 - [What's new in 1.37](#whats-new-in-137)
 - [What's new in 1.36](#whats-new-in-136)
@@ -90,10 +91,25 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.38.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.39.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.39
+
+From the tester's answers on issue 33:
+
+- **NVDA+Shift+J, then N lists the recent notifications, and NVDA+Shift+J, then Shift+N says the last one again, as JAWS's Insert+Space, N and Shift+N.** Asked whether they would use a notification history, the tester said yes. JAWS keeps the notifications it gets from Windows and programs, the last 500 of the last 24 hours, whether or not it said them. NVDA says a notification once, as it comes, and keeps nothing. Now the assistant keeps them as JAWS does: messages from programs, such as Edge's "Loading page" or a download finishing, and Windows notifications, such as Outlook's for new mail, including those NVDA or an add-on such as MS Edge Discard Announcements keeps silent, and those from a program in the background. As JAWS, it leaves out Windows' notice that the keyboard's language changed and a terminal's output, keeps only the last of a flood from the Snipping Tool, and keeps the same text again within half a second once. N opens a window called Notification History with the list, the most recent first. Enter, or Details, shows the whole notification, its program and when it came. Copy copies it, Clear history empties the list, and Escape closes it. Shift+N says the last notification again, or "No notification", as JAWS. What NVDA and other add-ons say for a notification doesn't change. The history is in memory only. To stop keeping it, uncheck "Keep the notifications Windows and programs send, for NVDA+Shift+J then N, as JAWS's notification history" in NVDA's Settings, JAWS Migration Assistant. See [Notification history](#notification-history).
+- **NVDA+Shift+J, then D turns audio ducking on or off, as JAWS's Insert+Space, D.** JAWS's toggle has two choices and says "Duck other audio" or "Do not duck other audio". NVDA has three (no ducking, ducking while NVDA speaks, and always), and NVDA's own NVDA+Shift+D goes through all three. D goes between JAWS's two: ducking while NVDA speaks, and none, with JAWS's words. A portable copy of NVDA can't duck, and says so.
+- **Tested with NVDA 2026.2's own code.** The tests run NVDA's own chain of event handlers, its own handlers for UI Automation notifications and Windows notifications, and the tester's MS Edge Discard Announcements add-on's own code: what NVDA says is word for word as before, and the history keeps what JAWS keeps. NVDA's own NVDA+Shift+D is run beside D.
+
+From the tester's issue 37:
+
+- **NVDA says "Screen curtain on" when it starts with the screen curtain on.** The tester wrote: "The status of the screen curtin isn't being said. Also should we make this more like Jaws?" In their log, NVDA started with the screen curtain on, from "Make screen black" in NVDA's Settings, Privacy and Security, and its first words were "Inbox - Outlook - Outlook". NVDA tells you it started with the curtain on only on a braille display. Now NVDA says "Screen curtain on" after it says where you are. If a window coming to the front cuts it off, it is said after that window's focus; a key you press stops it, as it stops any speech. It isn't said when NVDA reloads its add-ons. To turn it off, uncheck 'Say "Screen curtain on" when NVDA starts with the screen curtain on' in NVDA's Settings, JAWS Migration Assistant.
+- **NVDA+Shift+J, then F11 or Print Screen turns the screen curtain on or off, as JAWS's Insert+Space, F11 or Print Screen turns Screen Shade on or off.** On issue 33 the tester also asked for "announcements that indicate screen shade is on like Jaws". JAWS says "Screen Shade on" or "Screen Shade off", and its shade stays on until you turn it off or JAWS restarts. Now NVDA says "Screen curtain on" or "Screen curtain off", JAWS's words with NVDA's name for it, and the curtain stays on until you turn it off or NVDA restarts. NVDA's own key, NVDA+Control+Escape, still works: pressed once it says "Temporary Screen curtain, enabled until next restart", and pressed twice it keeps the curtain on after NVDA restarts. While "Always show a warning when enabling Screen Curtain" is checked in NVDA's Settings, as it comes, NVDA's own warning comes first, as with NVDA's key. See [Screen curtain](#screen-curtain).
+- **NVDA+Shift+J, then Shift+F11 says whether the screen curtain is on.** In the log the tester looked for a key that says it. NVDA 2026.2 has a command for it, "Reports the state of the screen curtain", with no key. They gave it NVDA+Escape in NVDA's Input Gestures dialog, then took the key off again. Before that, NVDA+Escape said nothing in Outlook: it is JAWS's Insert+Escape, Refresh Screen, which a migration gives to NVDA's refresh of a web page. Shift+F11 says "Screen curtain on", "Screen curtain off", or "Screen curtain on. NVDA turns it on each time it starts." when "Make screen black" is checked in NVDA's Settings.
+- **Tested with NVDA 2026.2's own code and JAWS 2026's own files.** The tests run NVDA's own Screen Curtain, its own NVDA+Control+Escape and its own report beside the layer's keys. F11 leaves the curtain as NVDA's key pressed once does, and turning it off leaves "Make screen black" off, as NVDA's key does. NVDA's own speech manager, focus and window code start NVDA in Outlook with the curtain on, as in the tester's log: without the new check box nothing about the curtain is said, and with it "Screen curtain on" comes after the window and the message you are on. The tests also read JAWS 2026's ScreenShadeToggle script, its "Screen Shade on" and "Screen Shade off", and its keys after Insert+Space.
 
 ## What's new in 1.38
 
@@ -623,7 +639,7 @@ Layouts of other JAWS versions and languages are found the same way. Freedom Sci
 - No JAWS keystroke gets an NVDA command that passes the keystroke on to the program. In edit fields, NVDA's sentence commands do that, so Caps Lock+Y would type a Y; those JAWS keystrokes only work in browse mode.
 - Versions 1.0 to 1.2 added some keystrokes that do such things. Version 1.3 removes them once, a little after NVDA starts, after backing up NVDA's settings; keystrokes you added yourself are left alone.
 - When a new version of the assistant can do a JAWS command it couldn't before, such as Insert+Control+V in version 1.30, or decides one of JAWS's keys anew, such as Insert+Q in version 1.36, it adds that command's keys once, a little after NVDA starts, if you migrated your keystrokes before. They are decided as your migration decided its own: the same JAWS keyboard layouts, and NVDA's keys taken only if you let it take them. A key you gave a command of your own in NVDA's Input Gestures dialog stays yours, unless that command belongs to an add-on that is turned off. NVDA's settings are backed up first, and NVDA says which keys it added.
-- Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own. JAWS's speech history keys, Insert+Space, then H, Control+H or Shift+H, are NVDA+Shift+J, then the same key (see [Speech history](#speech-history)).
+- Layered keystrokes (such as INSERT+SPACE, then a letter) and braille display keys are listed in the report. NVDA has no layered keys of its own. JAWS's speech history keys, Insert+Space, then H, Control+H or Shift+H, are NVDA+Shift+J, then the same key (see [Speech history](#speech-history)), and so are its notification history keys, N and Shift+N, and D for audio ducking (see [Notification history](#notification-history)), and its Screen Shade keys, F11 and Print Screen (see [Screen curtain](#screen-curtain)).
 - Application key maps and JAWS-only commands are listed too.
 
 To learn NVDA, use the JAWS keystroke helper: press NVDA+Shift+J, then K, then a JAWS keystroke. NVDA tells you:
@@ -632,7 +648,7 @@ To learn NVDA, use the JAWS keystroke helper: press NVDA+Shift+J, then K, then a
 - the NVDA command that does the same, and its keystroke; for a JAWS command the assistant does itself, such as Insert+Control+V, also its key after NVDA+Shift+J;
 - what the keystroke now does in NVDA.
 
-Insert+Space, which starts JAWS's layered keystrokes, is explained too: the helper says that NVDA+Shift+J starts the assistant's own layer, which has JAWS's speech history keys and question mark for its help.
+Insert+Space, which starts JAWS's layered keystrokes, is explained too: the helper says that NVDA+Shift+J starts the assistant's own layer, which has JAWS's speech history keys, its notification keys, D for audio ducking, F11 and Print Screen for the screen curtain, and question mark for its help.
 
 Hold the JAWS key down while you press the rest of the keystroke, as in JAWS. If you press Insert or Caps Lock and let it go before the next key, NVDA gets that key by itself, and the helper says so first: "You let go of Insert before you pressed space, so NVDA got space by itself. For Insert+space, hold Insert down while you press space." Then it tells you what that key does alone.
 
@@ -661,6 +677,11 @@ Press NVDA+Shift+J, then:
 | H | Speech history: what NVDA said, in a window, on the most recent line, as JAWS's Insert+Space, H (see [Speech history](#speech-history)) |
 | Control+H | Copy the speech history to the clipboard, one line for each time NVDA spoke |
 | Shift+H | Clear the speech history |
+| N | Notification history: the notifications Windows and programs sent, the most recent first, as JAWS's Insert+Space, N (see [Notification history](#notification-history)) |
+| Shift+N | Say the last notification again, as JAWS's Insert+Space, Shift+N |
+| D | Turn audio ducking on or off: "Duck other audio" lowers other programs' sound while NVDA speaks, as JAWS's Insert+Space, D |
+| F11 or Print Screen | Turn the screen curtain on or off, as JAWS's Insert+Space, F11 or Print Screen turns Screen Shade on or off: "Screen curtain on" or "Screen curtain off" (see [Screen curtain](#screen-curtain)) |
+| Shift+F11 | Say whether the screen curtain is on |
 | ? or F1 | Show these commands in a window, a line each, as JAWS's Insert+Space, question mark does |
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
@@ -680,6 +701,30 @@ As JAWS does, the assistant keeps the last 500 things NVDA said, one line for ea
 To show what NVDA says in a GitHub issue: press NVDA+Shift+J, then Shift+H. Do what makes NVDA say it. Then press NVDA+Shift+J, then Control+H, and paste into the comment box with Control+V.
 
 What is kept is what NVDA sends to the synthesizer, after add-ons such as ClassicSpeech changed it and before speech dictionaries. So it is what you heard, with the parts of each thing two spaces apart, as NVDA's Speech Viewer shows them. While the Speech History window is in front, what NVDA says in it isn't kept, so reading the history doesn't change it. The history is kept in memory only, never on disk, and is gone when NVDA exits or restarts. The Speech History add-on, if you have it, keeps working as before; this doesn't need it. To stop keeping a speech history, uncheck "Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history" in NVDA's Settings, JAWS Migration Assistant; what was kept is forgotten at once. A migration takes this setting from JAWS's own option for its speech history (`SpeechHistory` in Default.jcf, on as JAWS comes).
+
+### Notification history
+
+As JAWS does, the assistant keeps the notifications Windows and programs send while NVDA runs, the last 500 of the last 24 hours: messages from programs, such as Edge's "Loading page", and Windows notifications, such as Outlook's for new mail. It keeps them whether or not NVDA said them, as JAWS does, but not Windows' notice that the keyboard's language changed, or a terminal's output. The keys after NVDA+Shift+J are JAWS's keys after Insert+Space:
+
+- **N** opens a window called Notification History, with a list of the notifications, the most recent first. Enter, or the Details button, shows the whole notification, the program it came from, and when it came. Copy copies the notification you are on, Clear history empties the list, and Escape closes it.
+- **Shift+N** says the last notification again, such as one cut short while you typed. With none, NVDA says "No notification", as JAWS does.
+
+What NVDA and your other add-ons say for a notification doesn't change. The history stays in memory only, and is gone when NVDA restarts. To stop keeping it, uncheck "Keep the notifications Windows and programs send, for NVDA+Shift+J then N, as JAWS's notification history" in NVDA's Settings, JAWS Migration Assistant.
+
+**D** after NVDA+Shift+J turns audio ducking on or off, as JAWS's Insert+Space, D does: NVDA says "Duck other audio" when it lowers other programs' sound while it speaks, and "Do not duck other audio" when it doesn't. NVDA's own NVDA+Shift+D still goes through all three of NVDA's choices. NVDA can duck only as an installed copy; a portable copy says "Audio ducking not supported".
+
+### Screen curtain
+
+NVDA's screen curtain is JAWS's Screen Shade: it makes the screen black, so no one can see what is on it. After NVDA+Shift+J, JAWS's keys after Insert+Space work JAWS's way:
+
+- **F11** or **Print Screen** turns the curtain on or off, and NVDA says "Screen curtain on" or "Screen curtain off", as JAWS says "Screen Shade on" or "Screen Shade off". As with JAWS's Screen Shade, it stays on until you turn it off or NVDA restarts. Turning it off also leaves "Make screen black" off in NVDA's Settings, so NVDA starts without it, as NVDA's own key does.
+- **Shift+F11** says whether the curtain is on: "Screen curtain on", "Screen curtain off", or, when "Make screen black" is checked in NVDA's Settings, Privacy and Security, "Screen curtain on. NVDA turns it on each time it starts." JAWS has no key for this.
+
+While "Always show a warning when enabling Screen Curtain" is checked in NVDA's Settings, Privacy and Security, as it comes, NVDA asks before the screen goes black, and No has the focus. Uncheck that box in the warning and choose Yes, and NVDA doesn't ask again. Pressing F11 again while the warning is open brings it back and reads it again.
+
+When NVDA starts with the curtain on, because "Make screen black" is checked, NVDA says "Screen curtain on" after it says where you are. NVDA itself says so only on a braille display. To stop it, uncheck 'Say "Screen curtain on" when NVDA starts with the screen curtain on' in NVDA's Settings, JAWS Migration Assistant.
+
+NVDA's own keys still work. NVDA+Control+Escape pressed once turns the curtain on until NVDA restarts, and pressed twice keeps it on after that. NVDA's own "Reports the state of the screen curtain", under Miscellaneous in NVDA's Input Gestures dialog, has no key until you give it one. NVDA+Escape isn't a screen curtain key: a migration gives it JAWS's Insert+Escape, Refresh Screen, which refreshes a web page in browse mode.
 
 ### Program version
 
@@ -707,7 +752,7 @@ NVDA's version and the assistant's are where JAWS has its own version and its sc
 
 After NVDA+Shift+J, V says the version, Shift+V shows the version details, and Control+V copies them. A migration gives JAWS's keys to these commands, and Insert+Control+V, NVDA's key for its speech settings, only when you let JAWS's keys take NVDA's (see [Everything else about keystrokes](#everything-else-about-keystrokes)). To put them on other keys, find them under JAWS Migration Assistant in NVDA's Input Gestures dialog.
 
-The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands, and two more: Migrate JAWS settings to NVDA, Choose what to import, Use JAWS sounds in place of NVDA's sounds, Restore NVDA's own sounds, Copy all JAWS sounds into ClassicSpeech, Install or update ClassicSpeech, Restore NVDA settings from a backup, Open the last migration report, What does a JAWS keystroke do in NVDA?, Check for updates, Open the debug log, Save NVDA's log for a GitHub issue, and Help. The layer's G, P, I, the version keys and the speech history keys are only in the layer and in NVDA's Input Gestures dialog. The NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
+The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands, and two more: Migrate JAWS settings to NVDA, Choose what to import, Use JAWS sounds in place of NVDA's sounds, Restore NVDA's own sounds, Copy all JAWS sounds into ClassicSpeech, Install or update ClassicSpeech, Restore NVDA settings from a backup, Open the last migration report, What does a JAWS keystroke do in NVDA?, Check for updates, Open the debug log, Save NVDA's log for a GitHub issue, and Help. The layer's G, P, I, the version keys, the speech history and notification keys, D, and the screen curtain keys are only in the layer and in NVDA's Input Gestures dialog. The NVDA menu, Preferences, has JAWS Migration Assistant settings. The JAWS Migration Assistant category of NVDA's Settings dialog has buttons to choose which JAWS items to import, open NVDA's Input Gestures dialog, use JAWS sounds in place of NVDA's, restore NVDA's own sounds, copy all JAWS sounds into ClassicSpeech, open the assistant, restore a backup, open the last migration report and check for updates. It also says whether JAWS sounds or NVDA's own are playing. That category also has:
 
 - automatic update checks;
 - turning on the JAWS settings profile when NVDA starts;
@@ -739,6 +784,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying regions, groups, lists and articles on web pages with JAWS's words: "main region", "group", "list of 2 items", "main region end", and, reading, no banner, search, form, complementary or content information region (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134));
 - keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history, without what NVDA dropped before saying it (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129) and [What's new in 1.33](#whats-new-in-133));
 - saying "Unloading NVDA" as NVDA exits, where JAWS says "Unloading JAWS", and exiting once it has been said (off unless you turn it on, or a migration takes it from JAWS's JAWS Messages at your verbosity level; see [What's new in 1.37](#whats-new-in-137));
+- saying "Screen curtain on" after NVDA says where you are, when NVDA starts with the screen curtain on, which NVDA itself says only on a braille display (on unless you turn it off; see [Screen curtain](#screen-curtain));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
 

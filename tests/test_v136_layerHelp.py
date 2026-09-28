@@ -51,6 +51,17 @@ TESTERS_PASTE = (
 	"said, the most recent last, as JAWS's speech history. Control+H, copy the speech history to the clipboard. Shift+H, "
 	"clear the speech history. Question mark or F1, this help. Escape leaves the layer."
 )
+#: What 1.39 added to it, after Shift+H: JAWS's Insert+Space, N, Shift+N and D for issue 33, and F11 or Print Screen
+#: (JAWS's Screen Shade) and Shift+F11 for issue 37.
+ADDED_IN_139 = (
+	"N, list recent notifications, the most recent first, as JAWS's Notification History. "
+	"Shift+N, repeat the last notification. "
+	"D, audio ducking on or off: lower other programs' sound while NVDA speaks. "
+	"F11 or Print Screen, turn the screen curtain on or off, as JAWS's Screen Shade. "
+	"Shift+F11, say whether the screen curtain is on. "
+)
+#: The help now: the tester's, word for word, with 1.39's commands where they go.
+HELP_NOW = TESTERS_PASTE.replace("Question mark or F1, this help.", ADDED_IN_139 + "Question mark or F1, this help.")
 
 # NVDA 2026.2's inputCore.normalizeGestureIdentifier, word for word.
 NVDA_NORMALIZE_GESTURE = (
@@ -113,7 +124,7 @@ JAWS_JKM_LINES = (
 
 # How NVDA's Input Gestures dialog and the layer's help name the keys of the layer's gestures.
 MODIFIER_NAMES = {"shift": "Shift", "control": "Control", "alt": "Alt"}
-KEY_NAMES = {"/": "Question mark"}
+KEY_NAMES = {"/": "Question mark", "printscreen": "Print Screen"}
 
 
 def keyName(identifier: str) -> str:
@@ -123,7 +134,7 @@ def keyName(identifier: str) -> str:
 	modifiers = [MODIFIER_NAMES[part] for part in parts[:-1]]
 	if main == "/" and modifiers == ["Shift"]:
 		return KEY_NAMES[main]
-	return "+".join(modifiers + [main.upper()])
+	return "+".join(modifiers + [KEY_NAMES.get(main.lower(), main.upper())])
 
 
 def readmeLayerTable() -> list:
@@ -174,7 +185,7 @@ def newPlugin():
 class TheHelpTests(unittest.TestCase):
 	def test_theHelpTheTesterHeardIsTheSame(self):
 		# Where no window can show it, NVDA says what it said in 1.35: nothing was lost or added.
-		self.assertEqual(jawsMigrator.LAYER_HELP, TESTERS_PASTE)
+		self.assertEqual(jawsMigrator.LAYER_HELP, HELP_NOW)
 
 	def test_eachKeyHasItsLineOfHelp(self):
 		commands = jawsMigrator.LAYER_COMMANDS
@@ -190,9 +201,10 @@ class TheHelpTests(unittest.TestCase):
 		self.assertEqual(list(jawsMigrator.LAYER_GESTURES), gestures)
 		normalized = [normalizeGestureIdentifier(gesture) for gesture in gestures]
 		self.assertEqual(len(set(normalized)), len(normalized), "no key twice")
-		# 1.35's 20 commands, on 21 keys: question mark and F1 both show the help.
-		self.assertEqual(len(jawsMigrator.LAYER_GESTURES), 21)
-		self.assertEqual(len(jawsMigrator.LAYER_COMMANDS), 20)
+		# 1.35's 20 commands, on 21 keys (question mark and F1 both show the help), and 1.39's N, Shift+N and D, F11 or
+		# Print Screen (both turn the screen curtain on or off, as JAWS's Screen Shade) and Shift+F11.
+		self.assertEqual(len(jawsMigrator.LAYER_GESTURES), 27)
+		self.assertEqual(len(jawsMigrator.LAYER_COMMANDS), 25)
 
 	def test_eachCommandHasAScriptInInputGestures(self):
 		for _gestures, script, key, _words in jawsMigrator.LAYER_COMMANDS:
@@ -229,7 +241,7 @@ class TheHelpWindowTests(unittest.TestCase):
 		text = "\n".join(jawsMigrator.LAYER_HELP_LINES)
 		self.assertEqual(shown, [((text, "JAWS Migration Assistant Layer Help"), {"copyButton": True, "closeButton": True})])
 		# A line for each command, as in JAWS's Results Viewer: the arrow keys read one at a time.
-		self.assertEqual(len(text.splitlines()), 22)
+		self.assertEqual(len(text.splitlines()), len(jawsMigrator.LAYER_COMMANDS) + 2)
 		self.assertIn("Question mark or F1, this help.", text.splitlines())
 		self.assertEqual(nvdaStubs.spoken, [], "nothing said in one go")
 
@@ -250,7 +262,7 @@ class TheHelpWindowTests(unittest.TestCase):
 
 		with mock.patch.object(jawsMigrator.ui, "browseableMessage", browseableMessage, create=True):
 			self.assertFalse(newPlugin().showLayerHelp())
-		self.assertEqual(nvdaStubs.spoken, [TESTERS_PASTE])
+		self.assertEqual(nvdaStubs.spoken, [HELP_NOW])
 
 	def test_theHelpMenusFallbackHasALineEach(self):
 		boxes = []
@@ -340,7 +352,8 @@ class KeystrokeHelperTests(unittest.TestCase):
 			text,
 			"In JAWS, Insert+Space starts a layered keystroke: you press it, then another key. "
 			"In NVDA, NVDA+shift+j starts the JAWS Migration Assistant's layer of commands. It has JAWS's speech history keys, "
-			"H, Control+H and Shift+H, and question mark for its help. "
+			"H, Control+H and Shift+H, its notification keys, N and Shift+N, D for audio ducking, F11 and Print Screen for the "
+			"screen curtain, and question mark for its help. "
 			f"In NVDA, NVDA+space now does: {NVDA_SPACE_DESCRIPTION}",
 		)
 		self.assertNotIn("does nothing special in JAWS", text)

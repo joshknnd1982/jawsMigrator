@@ -798,6 +798,17 @@ class SettingsPanelTests(unittest.TestCase):
 		state.forget()
 		self.assertIs(state.get(exitMessage.STATE_KEY), False)
 
+	def test_sayScreenCurtainAtStartIsSavedAndApplied(self):
+		# NVDA turns the screen curtain on as it starts, and says so only on a braille display (issue 37).
+		from jawsMigrator import screenShade
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.sayScreenCurtainAtStart,
+			'Say "Screen curtain on" when NVDA starts with the screen curtain on',
+			screenShade.STATE_KEY,
+			"NVDA says nothing about the curtain from its next start",
+		)
+
 	def test_version112sLevelFirstSettingIsGone(self):
 		from jawsMigrator import state
 
