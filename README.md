@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.40
+- Version: 1.41
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.41](#whats-new-in-141)
 - [What's new in 1.40](#whats-new-in-140)
 - [What's new in 1.39](#whats-new-in-139)
 - [What's new in 1.38](#whats-new-in-138)
@@ -92,10 +93,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.40.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.41.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.41
+
+From the tester's answer on issue 37:
+
+- **NVDA+Shift+J, then Control+F11 or Control+Print Screen turns the screen curtain on and keeps it on, also each time NVDA starts.** Asked whether NVDA should say JAWS's "Screen Shade on" and "Screen Shade off", the tester left the words to us, and wrote: "I do think we should add a command to keep it turned on if the user wants that." F11 turns the curtain on JAWS's way, until you turn it off or NVDA restarts, and JAWS has no key that keeps its shade on. Control+F11 does what NVDA's own NVDA+Control+Escape pressed twice does: it checks "Make screen black" in NVDA's Settings, Privacy and Security, and NVDA says "Screen curtain on. NVDA turns it on each time it starts." If the curtain is already on, it is kept on from then. F11 still turns it off, and then it stays off when NVDA starts. NVDA keeps saying "Screen curtain on" and "Screen curtain off", its own name for it, which its warning, settings and help use too.
+- **Tested with NVDA 2026.2's own code.** The tests run NVDA's own Screen Curtain and its own NVDA+Control+Escape pressed twice beside Control+F11, which leaves NVDA's settings the same way.
 
 ## What's new in 1.40
 
@@ -695,6 +703,7 @@ Press NVDA+Shift+J, then:
 | D | Turn audio ducking on or off: "Duck other audio" lowers other programs' sound while NVDA speaks, as JAWS's Insert+Space, D |
 | F11 or Print Screen | Turn the screen curtain on or off, as JAWS's Insert+Space, F11 or Print Screen turns Screen Shade on or off: "Screen curtain on" or "Screen curtain off" (see [Screen curtain](#screen-curtain)) |
 | Shift+F11 | Say whether the screen curtain is on |
+| Control+F11 or Control+Print Screen | Turn the screen curtain on and keep it on, also each time NVDA starts: "Screen curtain on. NVDA turns it on each time it starts." F11 turns it off |
 | ? or F1 | Show these commands in a window, a line each, as JAWS's Insert+Space, question mark does |
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
@@ -732,10 +741,11 @@ NVDA's screen curtain is JAWS's Screen Shade: it makes the screen black, so no o
 
 - **F11** or **Print Screen** turns the curtain on or off, and NVDA says "Screen curtain on" or "Screen curtain off", as JAWS says "Screen Shade on" or "Screen Shade off". As with JAWS's Screen Shade, it stays on until you turn it off or NVDA restarts. Turning it off also leaves "Make screen black" off in NVDA's Settings, so NVDA starts without it, as NVDA's own key does.
 - **Shift+F11** says whether the curtain is on: "Screen curtain on", "Screen curtain off", or, when "Make screen black" is checked in NVDA's Settings, Privacy and Security, "Screen curtain on. NVDA turns it on each time it starts." JAWS has no key for this.
+- **Control+F11** or **Control+Print Screen** turns the curtain on and keeps it on, also each time NVDA starts, and NVDA says "Screen curtain on. NVDA turns it on each time it starts." It checks "Make screen black" in NVDA's Settings, Privacy and Security, as NVDA's own NVDA+Control+Escape pressed twice does. If the curtain is already on, it stays on and is kept on from then. To turn it off, press F11 as usual: it is then off, also the next time NVDA starts. JAWS has no key for this: its Screen Shade is always off when JAWS starts.
 
-While "Always show a warning when enabling Screen Curtain" is checked in NVDA's Settings, Privacy and Security, as it comes, NVDA asks before the screen goes black, and No has the focus. Uncheck that box in the warning and choose Yes, and NVDA doesn't ask again. Pressing F11 again while the warning is open brings it back and reads it again.
+While "Always show a warning when enabling Screen Curtain" is checked in NVDA's Settings, Privacy and Security, as it comes, NVDA asks before the screen goes black, and No has the focus. Uncheck that box in the warning and choose Yes, and NVDA doesn't ask again. Pressing F11 or Control+F11 again while the warning is open brings it back and reads it again.
 
-When NVDA starts with the curtain on, because "Make screen black" is checked, NVDA says "Screen curtain on" after it says where you are. NVDA itself says so only on a braille display. To stop it, uncheck 'Say "Screen curtain on" when NVDA starts with the screen curtain on' in NVDA's Settings, JAWS Migration Assistant.
+When NVDA starts with the curtain on, because "Make screen black" is checked or you kept it on with Control+F11, NVDA says "Screen curtain on" after it says where you are. NVDA itself says so only on a braille display. To stop it, uncheck 'Say "Screen curtain on" when NVDA starts with the screen curtain on' in NVDA's Settings, JAWS Migration Assistant.
 
 NVDA's own keys still work. NVDA+Control+Escape pressed once turns the curtain on until NVDA restarts, and pressed twice keeps it on after that. NVDA's own "Reports the state of the screen curtain", under Miscellaneous in NVDA's Input Gestures dialog, has no key until you give it one. NVDA+Escape isn't a screen curtain key: a migration gives it JAWS's Insert+Escape, Refresh Screen, which refreshes a web page in browse mode.
 

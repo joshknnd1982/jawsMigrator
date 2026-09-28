@@ -86,8 +86,9 @@ newKeys). Where JAWS's Insert+F4 says "Unloading JAWS", NVDA says "Unloading
 NVDA" as it exits, and exits once it is said (see exitMessage). JAWS's Insert+Space,
 F11 or Print Screen turns Screen Shade on or off; NVDA+Shift+J, then F11 or Print
 Screen turns NVDA's screen curtain on or off the same way, saying "Screen curtain on"
-or "Screen curtain off", Shift+F11 says whether it is on, and NVDA started with the
-curtain on says so after it says where you are (see screenShade).
+or "Screen curtain off", Shift+F11 says whether it is on, Control+F11 keeps it on each
+time NVDA starts, and NVDA started with the curtain on says so after it says where you
+are (see screenShade).
 """
 
 from __future__ import annotations
@@ -153,6 +154,8 @@ LAYER_COMMANDS = (
 	# JAWS's Insert+Space, F11 and Insert+Space, Print Screen: Screen Shade on or off (issue 37).
 	(("kb:f11", "kb:printScreen"), "toggleScreenShade", "F11 or Print Screen", "turn the screen curtain on or off, as JAWS's Screen Shade."),
 	(("kb:shift+f11",), "reportScreenShade", "Shift+F11", "say whether the screen curtain is on."),
+	# Not JAWS's: the curtain kept on each time NVDA starts, as NVDA's own key pressed twice (issue 37).
+	(("kb:control+f11", "kb:control+printScreen"), "keepScreenShade", "Control+F11 or Control+Print Screen", "turn the screen curtain on and keep it on, also each time NVDA starts."),
 	(("kb:shift+/", "kb:f1"), "layerHelp", "Question mark or F1", "this help."),
 )
 
@@ -1805,6 +1808,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		from . import screenShade
 
 		screenShade.report()
+
+	@script(
+		description=(
+			"Turns the screen curtain on and keeps it on, also each time NVDA starts, as NVDA+Control+Escape pressed twice does; "
+			"F11 after NVDA+Shift+J turns it off"
+		),
+	)
+	def script_keepScreenShade(self, gesture):
+		from . import screenShade
+
+		screenShade.keep()
 
 	@script(
 		description=(

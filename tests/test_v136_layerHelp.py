@@ -60,8 +60,11 @@ ADDED_IN_139 = (
 	"F11 or Print Screen, turn the screen curtain on or off, as JAWS's Screen Shade. "
 	"Shift+F11, say whether the screen curtain is on. "
 )
-#: The help now: the tester's, word for word, with 1.39's commands where they go.
-HELP_NOW = TESTERS_PASTE.replace("Question mark or F1, this help.", ADDED_IN_139 + "Question mark or F1, this help.")
+#: What 1.41 added after Shift+F11, for issue 37: "I do think we should add a command to keep it turned on if the user
+#: wants that."
+ADDED_IN_141 = "Control+F11 or Control+Print Screen, turn the screen curtain on and keep it on, also each time NVDA starts. "
+#: The help now: the tester's, word for word, with 1.39's and 1.41's commands where they go.
+HELP_NOW = TESTERS_PASTE.replace("Question mark or F1, this help.", ADDED_IN_139 + ADDED_IN_141 + "Question mark or F1, this help.")
 
 # NVDA 2026.2's inputCore.normalizeGestureIdentifier, word for word.
 NVDA_NORMALIZE_GESTURE = (
@@ -202,9 +205,10 @@ class TheHelpTests(unittest.TestCase):
 		normalized = [normalizeGestureIdentifier(gesture) for gesture in gestures]
 		self.assertEqual(len(set(normalized)), len(normalized), "no key twice")
 		# 1.35's 20 commands, on 21 keys (question mark and F1 both show the help), and 1.39's N, Shift+N and D, F11 or
-		# Print Screen (both turn the screen curtain on or off, as JAWS's Screen Shade) and Shift+F11.
-		self.assertEqual(len(jawsMigrator.LAYER_GESTURES), 27)
-		self.assertEqual(len(jawsMigrator.LAYER_COMMANDS), 25)
+		# Print Screen (both turn the screen curtain on or off, as JAWS's Screen Shade) and Shift+F11, and 1.41's Control+F11
+		# or Control+Print Screen (the curtain kept on).
+		self.assertEqual(len(jawsMigrator.LAYER_GESTURES), 29)
+		self.assertEqual(len(jawsMigrator.LAYER_COMMANDS), 26)
 
 	def test_eachCommandHasAScriptInInputGestures(self):
 		for _gestures, script, key, _words in jawsMigrator.LAYER_COMMANDS:

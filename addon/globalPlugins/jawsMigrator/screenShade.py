@@ -34,6 +34,13 @@ So, after NVDA+Shift+J, the assistant's layer, as after JAWS's Insert+Space:
   enabling Screen Curtain" is checked, NVDA's own warning comes first, and NVDA's refusal while it recognizes content
   stays, as with NVDA's own key.
 - Shift+F11 says whether the curtain is on, and whether NVDA turns it on each time it starts.
+- Control+F11 and Control+Print Screen turn the curtain on and keep it on, also each time NVDA starts, as NVDA's own key
+  pressed twice does (ScreenCurtain.enable(persist=True), which checks "Make screen black"). JAWS has no such key: its
+  Screen Shade is always off as JAWS starts. On issue 37 the tester asked for "a command to keep it turned on if the
+  user wants that". NVDA says "Screen curtain on. NVDA turns it on each time it starts.", as Shift+F11 then does.
+  Pressed while the curtain is on, it stays on and is kept on from then, as NVDA's own key pressed twice does when its
+  first press turned it on: the screen is black already, so NVDA's warning, which asks before it goes black, isn't
+  shown. F11 still turns it off, and off for good.
 
 And when NVDA starts with the curtain on, it says "Screen curtain on" after it says where you are, unless that is
 turned off in NVDA's Settings, JAWS Migration Assistant.
@@ -58,7 +65,7 @@ OFF = "Screen curtain off"
 #: JAWS's own words, for the assistant's own.
 JAWS_ON = "Screen Shade on"
 JAWS_OFF = "Screen Shade off"
-#: What Shift+F11 says when NVDA's settings turn the curtain on each time NVDA starts.
+#: What Shift+F11 says when NVDA's settings turn the curtain on each time NVDA starts, and what Control+F11 says.
 ON_AT_EVERY_START = "Screen curtain on. NVDA turns it on each time it starts."
 #: NVDA's own words, in its script_toggleScreenCurtain (globalCommands).
 NOT_AVAILABLE = "Screen curtain not available"
@@ -161,7 +168,6 @@ def _say(message: str) -> None:
 def toggle() -> str | None:
 	"""NVDA+Shift+J, then F11 or Print Screen: the curtain on or off, as JAWS's Insert+Space, F11 turns Screen Shade on or
 	off. Returns what was said, or None when NVDA's warning opened (or was open) first."""
-	global _warning
 	current = curtain()
 	if current is None:
 		_say(NOT_AVAILABLE)
@@ -182,6 +188,34 @@ def toggle() -> str | None:
 		_say(message)
 		_note(f'the screen curtain is off, as JAWS\'s Insert+Space, F11 says "{JAWS_OFF}"' if message == OFF else message)
 		return message
+	return _switchOn(current, keep=False)
+
+
+def keep() -> str | None:
+	"""NVDA+Shift+J, then Control+F11 or Control+Print Screen: the curtain on, also each time NVDA starts, as NVDA's own
+	key pressed twice (issue 37). Returns what was said, or None when NVDA's warning opened (or was open) first."""
+	current = curtain()
+	if current is None:
+		_say(NOT_AVAILABLE)
+		return NOT_AVAILABLE
+	warning = _openWarning()
+	if warning is not None:
+		_readAgain(warning)
+		return None
+	if not current.enabled:
+		return _switchOn(current, keep=True)
+	# On already, from F11 or NVDA's own key: kept on from now, as NVDA's own key pressed twice does. The screen is black
+	# already, so there is no warning.
+	current.settings["enabled"] = True
+	_say(ON_AT_EVERY_START)
+	_note("the screen curtain, on already, is kept on each time NVDA starts")
+	return ON_AT_EVERY_START
+
+
+def _switchOn(current, keep: bool) -> str | None:
+	"""The curtain on, after NVDA's warning where NVDA shows one, and never while NVDA recognizes content, as with NVDA's
+	own key: kept on each time NVDA starts, or on until it is turned off or NVDA restarts."""
+	global _warning
 	settings = current.settings
 	if settings["warnOnLoad"]:
 		import gui
@@ -189,13 +223,13 @@ def toggle() -> str | None:
 		from screenCurtain import _screenCurtain
 
 		_warning = _screenCurtain.WarnOnLoadDialog(screenCurtainSettingsStorage=settings, parent=gui.mainFrame)
-		gui.runScriptModalDialog(_warning, lambda result: wx.CallLater(AFTER_WARNING_MS, _afterWarning, result))
+		gui.runScriptModalDialog(_warning, lambda result: wx.CallLater(AFTER_WARNING_MS, _afterWarning, result, keep))
 		return None
 	if _recognizingContent():
 		message = _nvdaMessage("UNAVAILABLE_WHEN_RECOGNISING_CONTENT_MESSAGE", RECOGNIZING_CONTENT)
 		_say(message)
 		return message
-	return _turnOn()
+	return _turnOn(keep)
 
 
 def _openWarning():
@@ -222,7 +256,7 @@ def _readAgain(warning) -> None:
 	speech.speakObject(api.getFocusObject(), reason=controlTypes.OutputReason.FOCUS)
 
 
-def _afterWarning(result) -> str | None:
+def _afterWarning(result, keep: bool = False) -> str | None:
 	"""NVDA's warning was answered: Yes turns the curtain on; No leaves it off without a word, as NVDA does."""
 	global _warning
 	import wx
@@ -230,7 +264,7 @@ def _afterWarning(result) -> str | None:
 	_warning = None
 	if result != wx.YES:
 		return None
-	return _turnOn()
+	return _turnOn(keep)
 
 
 def _recognizingContent() -> bool:
@@ -245,20 +279,26 @@ def _recognizingContent() -> bool:
 		return False
 
 
-def _turnOn() -> str:
-	"""On until it is turned off or NVDA restarts, as JAWS's Screen Shade: NVDA's settings are left as they are."""
+def _turnOn(keep: bool = False) -> str:
+	"""On until it is turned off or NVDA restarts, as JAWS's Screen Shade: NVDA's settings are left as they are. Kept on,
+	NVDA's "Make screen black" is checked, and NVDA turns it on each time it starts."""
 	current = curtain()
 	if current is None:
 		_say(NOT_AVAILABLE)
 		return NOT_AVAILABLE
-	message = ON
+	message = ON_AT_EVERY_START if keep else ON
 	try:
-		current.enable(persist=False)
+		current.enable(persist=keep)
 	except Exception:
 		_log().error("jawsMigrator: could not turn the screen curtain on", exc_info=True)
 		message = _nvdaMessage("ERROR_ENABLING_MESSAGE", COULD_NOT_ENABLE)
 	_say(message)
-	_note(f'the screen curtain is on until NVDA restarts, as JAWS\'s Insert+Space, F11 says "{JAWS_ON}"' if message == ON else message)
+	if message == ON:
+		_note(f'the screen curtain is on until NVDA restarts, as JAWS\'s Insert+Space, F11 says "{JAWS_ON}"')
+	elif message == ON_AT_EVERY_START:
+		_note("the screen curtain is on, and kept on each time NVDA starts")
+	else:
+		_note(message)
 	return message
 
 
