@@ -24,6 +24,21 @@ Support keeps its timer for its own controls for windows NVDA doesn't know (its 
 for a window whose treatment the user chose in Enhanced Control Support (NVDA+Alt+C). Everything else it does
 is unchanged. It works while the assistant runs, unless it is turned off in NVDA's Settings, JAWS Migration
 Assistant.
+
+Enhanced Control Support makes its choice while NVDA is still making the object: in NVDA's
+``chooseNVDAObjectOverlayClasses``, before the object has the classes NVDA gives it (``DynamicNVDAObjectType``).
+NVDA keeps what an object's property says until the end of its core cycle
+(``baseObject.AutoPropertyObject._propertyCache``), under the function that worked it out. For a Win32 text field
+that is ``IAccessible._get_states``, which takes what the classes after it say (``super().states``), and NVDA's
+``EditBase``, which says "multi line" for the window's ES_MULTILINE style, is one of them only once the object has
+its classes. From version 1.15 to 1.37, the assistant read the object's states here, so they had no "multi line",
+and NVDA went on using those. A tester's NVDA (issue 36) said the whole of the assistant's Speech History as the
+window opened, one typed letter after another, and the whole of the release notes in the update dialog: NVDA says the
+text of a dialog's read-only fields of one line as the dialog's own (``behaviors.Dialog.getDialogText``), and these
+read as one line. So did any dialog's read-only Win32 text field of several lines, in any program, and Enhanced
+Control Support kept its timer on every such field it was meant to leave alone. So the assistant now reads nothing
+into the object's cache: it tells a Win32 text field of several lines by its window style, as ``EditBase`` will, and
+leaves the object's cache as it found it.
 """
 
 from __future__ import annotations
@@ -49,6 +64,8 @@ MARK = "_jawsMigratorDocumentPolling"
 _TOKEN = object()
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
+#: NVDA's winUser.ES_MULTILINE: the style of a Win32 text field of several lines.
+ES_MULTILINE = 0x0004
 
 _enabled = False
 _failed = False
@@ -179,14 +196,52 @@ def _followedDocument(conf, obj, clsList, module) -> bool:
 
 	if not any(issubclass(cls, editableText.EditableText) for cls in classes):
 		return False
-	from controlTypes import Role, State
+	from controlTypes import Role
 
-	role = obj.role
-	return role == Role.DOCUMENT or (role == Role.EDITABLETEXT and State.MULTILINE in obj.states)
+	role = _peek(obj, "role")
+	return role == Role.DOCUMENT or (role == Role.EDITABLETEXT and _isMultiLine(obj, classes))
+
+
+def _peek(obj, name: str):
+	"""``obj``'s property ``name``, leaving the object's property cache as it was: NVDA hasn't given the object its
+	classes yet, and would go on using what they don't say yet (see above)."""
+	cache = getattr(obj, "_propertyCache", None)
+	kept = dict(cache) if isinstance(cache, dict) else None
+	try:
+		return getattr(obj, name)
+	finally:
+		if kept is not None:
+			cache.clear()
+			cache.update(kept)
+
+
+def _win32EditClass():
+	"""NVDA's class for Win32 text fields, which says "multi line" for the ES_MULTILINE style, or None."""
+	try:
+		from NVDAObjects.window.edit import EditBase
+
+		return EditBase
+	except Exception:
+		return None
+
+
+def _isMultiLine(obj, classes) -> bool:
+	"""Whether the text field ``obj`` has several lines, as NVDA will say once the object has ``classes``."""
+	editBase = _win32EditClass()
+	if editBase is not None and any(issubclass(cls, editBase) for cls in classes):
+		# EditBase._get_states, which the object's states don't have yet.
+		style = _peek(obj, "windowStyle")
+		return isinstance(style, int) and bool(style & ES_MULTILINE)
+	from controlTypes import State
+
+	return State.MULTILINE in _peek(obj, "states")
 
 
 def _note(obj) -> None:
-	windowClass = getattr(obj, "windowClassName", None) or "?"
+	try:
+		windowClass = _peek(obj, "windowClassName") or "?"
+	except AttributeError:
+		windowClass = "?"
 	if windowClass in _logged:
 		return
 	_logged.add(windowClass)

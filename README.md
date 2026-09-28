@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.38](#whats-new-in-138)
 - [What's new in 1.37](#whats-new-in-137)
 - [What's new in 1.36](#whats-new-in-136)
 - [What's new in 1.35](#whats-new-in-135)
@@ -89,10 +90,23 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.36.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.38.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.38
+
+From the tester's log on issue 32:
+
+- **JAWS's Say Next Sentence and Say Prior Sentence read by sentence on web pages.** On a GitHub page in Edge the tester pressed NVDA+N twice, and NVDA said nothing. Each time NVDA's log had an error from NVDA's own command for the next sentence. The tester's migration had "When NVDA already uses a keystroke for something else, use the JAWS command instead" checked, so JAWS's Laptop layout keystroke Caps Lock+N, Say Next Sentence, took NVDA+N on web pages, and Caps Lock+Y, Say Prior Sentence, took NVDA+Y. In the Desktop layout they are Alt+NumPadPlus and Alt+NumPadMinus. JAWS's virtual cursor reads by sentence in Edge, Chrome, Firefox and PDFs. NVDA knows sentences only in documents such as Word's; on a web page its command failed before it moved or said anything. Now, where a document in browse mode has no sentences, the assistant finds them itself. A sentence ends at a full stop, question mark, exclamation mark or ellipsis followed by a space, and a paragraph always ends one. The next-sentence key moves to the next sentence and says it, going on to the next paragraph with text, and the prior-sentence key moves to the sentence before. At the end or start of the page, the sentence you are on is said again, as NVDA does. When a page has just opened and NVDA has held back its first line, the next-sentence key says the first sentence, as JAWS goes from the page's title to it. Word documents, and every other key, are as before.
+- **The MS Edge Discard Announcements add-on's category stays in NVDA's Settings while Edge runs.** 1.36's notes sent the tester to NVDA's Settings, "Microsoft Edge discard announcements" category, to hear Edge's "Going back". They couldn't find it, and it wasn't there. That add-on adds its category when NVDA meets an Edge process, and takes it out when that process ends. But Edge runs many processes. The Open dialog the tester had just used to attach their log was one, and as it closed, NVDA's log said "application msedge closed" and the category was gone while Edge still ran, until Edge or NVDA was started again. Now, each time NVDA lets go of a program that ended, the assistant puts the category back while Edge is still running. Nothing else about the add-on changes, and nothing happens without it.
+- **Tested with NVDA 2026.2's own code.** The tests run NVDA's own commands for the next and prior sentence and its caret movement, on NVDA's own text code for a web page. With 1.37, NVDA+N raises the error in the tester's log; with 1.38, it reads the reddit post from issue 32 sentence by sentence, forward and back, past blank lines, and says the last sentence again at the end. The key planner, run on JAWS 2026's own keystrokes, gives NVDA+N the next sentence only when JAWS commands take NVDA's keys, as the tester's log shows. NVDA's own clean-up of programs that ended runs with the add-on's own code: it takes the category away as in the tester's log, and with 1.38 the category comes back.
+
+From the tester's report on issue 36:
+
+- **Opening the Speech History, or the update dialog, no longer reads out everything in it.** The tester pressed NVDA+Shift+J, then H, and NVDA said "Speech History, dialog", then the whole history, oldest first, one typed letter at a time: "space, h, e, a, r, period, …". Their older log shows NVDA reading all of 1.36's release notes the same way as the update dialog opened. NVDA reads a dialog's text and its one-line read-only fields as the dialog opens, and leaves out a box of several lines. Both of these are boxes of several lines, but NVDA took them for one line. The cause was the assistant's own fix in 1.15 for Enhanced Control Support, which the tester has. To decide whether Enhanced Control Support should check a text field 20 times a second, it asked for the field's states while NVDA was still putting the field together, before NVDA knew the field had several lines, and NVDA kept that answer. Now the assistant tells a box of several lines from its window, and leaves NVDA's answer alone. NVDA says "Speech History" and the most recent line, as JAWS does, and the update dialog says its first line and the notes' first line, from where the arrow keys read on. The same happened with a read-only box of several lines in any program's dialog, and that's fixed too. Enhanced Control Support now really leaves such boxes, like NVDA's Log Viewer, to NVDA, as 1.15 meant. The unit tests run NVDA 2026.2's own code for making objects, keeping their properties and reading a dialog's text, with Enhanced Control Support 1.2.2's own code. With 1.37's check they give, word for word, the release notes the tester's log shows NVDA reading; with 1.38's, only the dialog's own text.
+- **The JAWS keystroke helper says when Insert was let go too soon.** For Insert+Space, the tester pressed NVDA+Shift+J, then K, then what they meant as Insert+Space, and heard "In JAWS, Space runs Virtual Spacebar…". NVDA's log shows it got Space alone: Insert wasn't down when Space went down. Now, if Insert or Caps Lock goes down after K and is let go before the next key, the helper says so first: "You let go of Insert before you pressed space, so NVDA got space by itself. For Insert+space, hold Insert down while you press space." Then it says what that key does alone. Held down, Insert+Space gets 1.36's answer about JAWS's layered keystrokes.
 
 ## What's new in 1.37
 
@@ -620,6 +634,8 @@ To learn NVDA, use the JAWS keystroke helper: press NVDA+Shift+J, then K, then a
 
 Insert+Space, which starts JAWS's layered keystrokes, is explained too: the helper says that NVDA+Shift+J starts the assistant's own layer, which has JAWS's speech history keys and question mark for its help.
 
+Hold the JAWS key down while you press the rest of the keystroke, as in JAWS. If you press Insert or Caps Lock and let it go before the next key, NVDA gets that key by itself, and the helper says so first: "You let go of Insert before you pressed space, so NVDA got space by itself. For Insert+space, hold Insert down while you press space." Then it tells you what that key does alone.
+
 ## The assistant's own commands
 
 Press NVDA+Shift+J, then:
@@ -657,7 +673,7 @@ NVDA+Shift+J plays the sound JAWS plays when a layered keystroke such as Insert+
 
 As JAWS does, the assistant keeps the last 500 things NVDA said, one line for each time NVDA spoke, in the order it said them. The keys after NVDA+Shift+J are JAWS's keys after Insert+Space:
 
-- **H** opens them in a window called Speech History, on the line of the most recent one. Up Arrow goes back through what NVDA said, and you can select any of it and copy it with Control+C. Copy all copies everything in the window, Clear empties it, and Escape closes it. Press H again and the window shows what NVDA said since.
+- **H** opens them in a window called Speech History, on the line of the most recent one. NVDA says "Speech History" and that line, as JAWS does, not the whole history. Up Arrow goes back through what NVDA said, and you can select any of it and copy it with Control+C. Copy all copies everything in the window, Clear empties it, and Escape closes it. Press H again and the window shows what NVDA said since.
 - **Control+H** copies the whole speech history to the clipboard, without opening anything. NVDA says "Copy speech history to clipboard", as JAWS does.
 - **Shift+H** clears it. NVDA says "Speech history cleared", and those words aren't kept either.
 
@@ -748,7 +764,7 @@ The migration's Add-ons step lists each one:
 | Custom Notifications | How notifications are read: full text, just the application, speech or braille | NVDA keeps reading every notification in full |
 | Control Usage Assistant | Tells you how to use the control you are on, like JAWS's screen-sensitive help (Insert+F1); for people new to computers, Windows or NVDA | You look up how to use a control in NVDA's user guide |
 
-Enhanced Control Support, as it comes, checks the control you are on 20 times a second. In a document that means reading all of its text each time, which froze NVDA in a large Notepad file, so while the assistant runs, Enhanced Control Support leaves documents and multi-line text fields to NVDA (see [What's new in 1.15](#whats-new-in-115)).
+Enhanced Control Support, as it comes, checks the control you are on 20 times a second. In a document that means reading all of its text each time, which froze NVDA in a large Notepad file, so while the assistant runs, Enhanced Control Support leaves documents and multi-line text fields to NVDA (see [What's new in 1.15](#whats-new-in-115)). Up to version 1.37, the way the assistant checked for a multi-line text field kept NVDA from knowing that a Win32 text field had several lines, so NVDA read the whole text of such a field as a dialog opened, such as the Speech History and the update dialog's release notes, and Enhanced Control Support went on checking those fields (see [What's new in 1.38](#whats-new-in-138)).
 
 The add-ons you choose are, after the migration and its backup:
 
@@ -873,6 +889,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - The Insert keystrokes of the Laptop layout, JAWS's rule for times, the silent exit, "Unloading NVDA" as NVDA exits, saying a control's type and state once, saying a system tray icon only when you move to it, saying what quick navigation moves to without what it is in, leaving out a list item's row and column, saying what Backspace deletes in a slow program, browse mode on a web page's tabs and toolbar buttons, the focus going back to Outlook after NVDA waits for it, NVDA's Elements List on a page that is still changing and its key kept from the program, and the focus going back to your window when NVDA starts on the taskbar need the assistant: they stop when it is uninstalled or disabled.
 - The first time NVDA needs Outlook after Outlook starts, NVDA still moves the focus to its "Waiting for Outlook..." window for a moment, as it does without add-ons: Outlook offers what NVDA reads only after it has lost the focus once.
 - Quick navigation leaves out what it moves into on web pages read through IAccessible2 (Edge, Chrome and Firefox), and for headings and edit fields everywhere. Elsewhere, such as in Word, K, B, F and the other quick navigation keys still say the landmark or list they move into, as NVDA says it. The arrow keys and Tab say them everywhere, as JAWS does.
+- JAWS's Say Next Sentence and Say Prior Sentence work in browse mode only: on web pages and in PDFs, and in Word's browse mode. NVDA has no command for them it can use in an edit field, an Outlook message or a Word document you are editing, so they aren't given keys there. With JAWS commands taking NVDA's keys, NVDA+N there is still NVDA's menu. The assistant finds a web page's sentences by their punctuation, so an abbreviation such as "Mr." ends a sentence.
 - Backspace is said once the program has deleted, up to half a second after the key. A program slower than that is still silent, as NVDA is without the assistant; the text itself is never changed. While NVDA waits, it can't do anything else.
 - Only tabs, and buttons and check boxes in toolbars, keep browse mode. When you Tab to a list, a radio button, a menu or an edit field on a web page, NVDA goes to focus mode there, as it does without the assistant, so letters you type there reach the page. A toolbar button you reach by clicking, or with the arrow keys in focus mode, gets NVDA's own focus mode too.
 - NVDA can't tell what changed a system tray icon. A change within a moment of a key you press on the icon is said, whatever made it. Any other change isn't said until you move to the icon again or press NVDA+Tab.

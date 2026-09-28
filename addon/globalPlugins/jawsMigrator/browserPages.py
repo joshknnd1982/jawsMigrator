@@ -66,8 +66,9 @@ first, "Skip to, heading level 2", and on BBC News Tab went to "Open menu", wher
 while the caret is still where it was when NVDA held that line back: the Down Arrow says the first line, as JAWS's
 does, and leaves the caret there, so the next Down Arrow reads the second line; a quick navigation key or Tab goes to
 an element that starts where the caret is (CursorManager._caretMovementScriptHelper, BrowseModeTreeInterceptor.
-_quickNavScript and BrowseModeDocumentTreeInterceptor._tabOverride, put on the same classes as the event). Anything
-else, and the same keys once the caret has moved, are as NVDA has them.
+_quickNavScript and BrowseModeDocumentTreeInterceptor._tabOverride, put on the same classes as the event), and JAWS's
+Say Next Sentence says the line's first sentence (see browseSentences). Anything else, and the same keys once the
+caret has moved, are as NVDA has them.
 """
 
 from __future__ import annotations
@@ -603,6 +604,11 @@ def _forget(page) -> None:
 			setattr(page, UNSAID, None)
 	except Exception:
 		pass
+
+
+def forgetFirstLine(page) -> None:
+	"""Forget the first line NVDA held back as ``page`` opened, once another key has read from it (browseSentences)."""
+	_forget(page)
 
 
 def unsaidFirstLine(page):

@@ -61,7 +61,10 @@ landmark browse mode's cursor was already in (see formFields);
 Edge's and Chrome's windows and pages are said as JAWS says them, by their
 titles, without "window", "document", the page's address or Edge's frame
 around the page, and not the page of a tab you are leaving, nor a page's first
-line the first time you come to it (see browserPages); regions, groups, lists
+line the first time you come to it (see browserPages); JAWS's Say Next Sentence
+and Say Prior Sentence read by sentence on web pages, which NVDA's browse mode
+can't (see browseSentences); the MS Edge Discard Announcements add-on's category
+stays in NVDA's Settings while Edge runs (see edgeAnnouncements); regions, groups, lists
 and articles on web pages are said with JAWS's words, "main region", "group",
 "list of 2 items" and "main region end" (see webRegions);
 NVDA started with its desktop shortcut's key comes up in the window you were
@@ -107,6 +110,10 @@ except Exception:
 	pass
 
 CATEGORY = TITLE
+
+#: The keys NVDA can have as its NVDA key, by virtual key code (VK_INSERT, also the numeric pad's; VK_CAPITAL), as JAWS
+#: names them for its JAWS key.
+NVDA_KEY_NAMES = {0x2D: "Insert", 0x14: "Caps Lock"}
 
 #: Commands available after NVDA+Shift+J: ``(gestures, script, key name, what the layer's help says it does)``.
 #: The keys and the help both come from here, so a command added to the layer is in its help (issue 33).
@@ -218,6 +225,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("go back to the window you were in when NVDA starts on the taskbar", self._backFromTaskbar),
 			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
 			("keep NVDA's Elements List working while a web page changes", self._guardElementsList),
+			("read by sentence on web pages, as JAWS's virtual cursor does", self._readBySentence),
+			("keep the MS Edge Discard Announcements add-on's category in NVDA's Settings", self._keepEdgeAnnouncements),
 			("note the keys a program types late or not at all", self._watchTyping),
 			("follow NVDA's configuration reloads", self._followConfigResets),
 			("schedule the automatic update check", self.updater.scheduleAutomaticCheck),
@@ -257,6 +266,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		# Not a JAWS setting: NVDA+F7 on a page that is still changing left NVDA's dialog half made, unseen, with the focus in it.
 		elementsList.register()
 		self._elementsList = elementsList
+
+	def _readBySentence(self):
+		from . import browseSentences
+
+		# JAWS's Say Next Sentence and Say Prior Sentence become NVDA's commands for them, which NVDA can't do in a
+		# browse mode document without sentences, such as a web page: NVDA+N said nothing, with an error (issue 32).
+		browseSentences.register()
+
+	def _keepEdgeAnnouncements(self):
+		from . import edgeAnnouncements
+
+		# Not a JAWS setting: that add-on took its category out of NVDA's Settings whenever an Edge process ended, as a
+		# file dialog's does, though Edge still ran (issue 32).
+		edgeAnnouncements.register()
 
 	def _watchTyping(self):
 		from . import typingWatch
@@ -410,6 +433,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import elementsList
 
 			elementsList.unregister()
+		except Exception:
+			pass
+		try:
+			from . import browseSentences
+
+			browseSentences.unregister()
+		except Exception:
+			pass
+		try:
+			from . import edgeAnnouncements
+
+			edgeAnnouncements.unregister()
 		except Exception:
 			pass
 		self._linksList = None
@@ -1767,26 +1802,42 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message("No JAWS key map was found on this computer.")
 			return
 		ui.message(f"Press a {keymap[0].displayName} keystroke to hear what it does in NVDA, or Escape to cancel.")
+		self._helperNVDAKey = None
 		inputCore.manager._captureFunc = self._captureKeystroke
 
 	def _captureKeystroke(self, gesture):
 		if gesture.isModifier:
+			if getattr(gesture, "isNVDAModifierKey", False):
+				# Insert or Caps Lock went down; held, it is one of the modifiers of the key pressed with it.
+				self._helperNVDAKey = (getattr(gesture, "vkCode", None), getattr(gesture, "isExtended", None))
 			return True
 		inputCore.manager._captureFunc = None
+		letGo = self._nvdaKeyLetGo(gesture)
 		identifiers = [identifier.lower() for identifier in gesture.normalizedIdentifiers]
 		if "kb:escape" in identifiers:
 			wx.CallAfter(ui.message, "Cancelled")
 			return False
-		wx.CallAfter(self._describeKeystroke, gesture)
+		wx.CallAfter(self._describeKeystroke, gesture, letGo)
 		return False
 
-	def _describeKeystroke(self, gesture):
+	def _nvdaKeyLetGo(self, gesture):
+		"""The name of the NVDA key (Insert or Caps Lock) pressed for the helper but let go before ``gesture``'s key,
+		or None. NVDA then gets the key alone: a tester pressing Insert+Space heard what Space does (issue 36)."""
+		key, self._helperNVDAKey = getattr(self, "_helperNVDAKey", None), None
+		if key is None or key in (getattr(gesture, "modifiers", None) or ()):
+			return None
+		return NVDA_KEY_NAMES.get(key[0], "the NVDA key")
+
+	def _describeKeystroke(self, gesture, letGo=None):
 		jaws, reverseMap, docs, _layout, layerStarts = self._jawsKeymap()
 		keyName = gesture.displayName
 		matches = keyPlan.describeJawsKeystroke(gesture, reverseMap)
 		identifiers = [identifier.lower() for identifier in getattr(gesture, "normalizedIdentifiers", ()) or ()]
 		layerStart = None if matches else next((layerStarts[identifier] for identifier in identifiers if identifier in layerStarts), None)
 		parts = []
+		if letGo:
+			parts.append(f"You let go of {letGo} before you pressed {keyName}, so NVDA got {keyName} by itself. For {letGo}+{keyName}, hold {letGo} down while you press {keyName}.")
+			debugLog.note(f"the JAWS keystroke helper got {keyName} after {letGo} was let go")
 		if layerStart:
 			# JAWS's key map has only the keys after it, such as Insert+Space&H.
 			parts.append(f"In JAWS, {layerStart} starts a layered keystroke: you press it, then another key.")
