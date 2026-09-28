@@ -16,6 +16,7 @@ from gui.settingsDialogs import SettingsPanel
 
 from .. import (
 	autoFormsMode,
+	backForward,
 	backspaceEcho,
 	browserPages,
 	documentPolling,
@@ -79,11 +80,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		)
 		self.backFromTaskbar.SetValue(startupFocus.wanted(state.load()))
 		# NVDA's H says "main landmark" before a heading in the page's main part; JAWS's H says the heading alone. JAWS's
-		# E says the edit field alone, and "blank, placeholder" and the placeholder for an empty one.
+		# E says the edit field alone, and "blank, placeholder" and the placeholder for an empty one. On a web page, JAWS's
+		# other quick keys (B, C, G, L, I, R, T...) say the element alone too (issue 35).
 		self.headingAlone = helper.addItem(
 			wx.CheckBox(
 				self,
-				label='When &quick navigation moves to a heading or an edit field, don\'t say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field',
+				label='When &quick navigation moves to a heading, a button or anything else, don\'t say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field',
 			),
 		)
 		self.headingAlone.SetValue(quickNavHeadings.wanted(state.load()))
@@ -249,6 +251,14 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.webRegionsAsJaws.SetValue(webRegions.wanted(state.load()))
+		# NVDA said nothing after Alt+Left on reddit (issue 32); JAWS said "Back", then the line its cursor was on.
+		self.backForwardAsJaws = helper.addItem(
+			wx.CheckBox(
+				self,
+				label='Say "Back" and "Forward" for Alt+Left and Alt+Right in web browsers, and read the line a page comes back to, as JAWS does',
+			),
+		)
+		self.backForwardAsJaws.SetValue(backForward.wanted(state.load()))
 		# JAWS keeps the last 500 things it said for Insert+Space, then H; the assistant's layer has the same keys.
 		self.keepSpeechHistory = helper.addItem(
 			wx.CheckBox(self, label="Keep what NVDA says, for NVDA+Shift+J then H, as JAWS's speech history"),
@@ -354,6 +364,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
 		self._shownBrowserPagesAsJaws = self.browserPagesAsJaws.GetValue()
 		self._shownWebRegionsAsJaws = self.webRegionsAsJaws.GetValue()
+		self._shownBackForwardAsJaws = self.backForwardAsJaws.GetValue()
 		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
@@ -452,6 +463,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[browserPages.STATE_KEY] = self.browserPagesAsJaws.GetValue()
 		if self.webRegionsAsJaws.GetValue() != self._shownWebRegionsAsJaws:
 			updates[webRegions.STATE_KEY] = self.webRegionsAsJaws.GetValue()
+		if self.backForwardAsJaws.GetValue() != self._shownBackForwardAsJaws:
+			updates[backForward.STATE_KEY] = self.backForwardAsJaws.GetValue()
 		if self.keepSpeechHistory.GetValue() != self._shownKeepSpeechHistory:
 			updates[speechHistory.STATE_KEY] = self.keepSpeechHistory.GetValue()
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:

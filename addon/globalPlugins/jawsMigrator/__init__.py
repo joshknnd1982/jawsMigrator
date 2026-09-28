@@ -50,8 +50,11 @@ Emoticons add-on holds NVDA up each time NVDA switches configuration profiles,
 as Alt+Tab into or out of a program with its own profile does, which had keys
 such as Insert+F7 go through to the program (see profileSwitches);
 a link on a web page is said as JAWS says it: "same page" only for a link to
-a place on the page, without its title, and "link" after the heading it is in
-when quick navigation moves to the heading (see linkSpeech);
+a place on the page, without its title, "link" after the heading it is in
+when quick navigation moves to the heading, and without its description in
+quick navigation (see linkSpeech); Alt+Left and Alt+Right in a web browser say
+"Back" and "Forward", and a page that comes back without loading, as reddit's
+does, is read at the caret (see backForward);
 an empty edit field on a web page is said as JAWS says it, "edit, blank,
 placeholder" and its placeholder, without "multi line" and without the
 landmark browse mode's cursor was already in (see formFields);
@@ -104,56 +107,46 @@ except Exception:
 
 CATEGORY = TITLE
 
-#: Commands available after NVDA+Shift+J.
-LAYER_GESTURES = {
-	"kb:m": "openAssistant",
-	"kb:o": "openImportSettings",
-	"kb:g": "openInputGestures",
-	"kb:p": "toggleJawsProfile",
-	"kb:k": "jawsKeystrokeHelp",
-	"kb:s": "toggleJawsSounds",
-	"kb:a": "copyJawsSounds",
-	"kb:c": "installClassicSpeech",
-	"kb:r": "openReport",
-	"kb:b": "restoreBackup",
-	"kb:u": "checkForUpdates",
-	"kb:i": "systemSummary",
-	"kb:l": "saveLogForIssue",
+#: Commands available after NVDA+Shift+J: ``(gestures, script, key name, what the layer's help says it does)``.
+#: The keys and the help both come from here, so a command added to the layer is in its help (issue 33).
+LAYER_COMMANDS = (
+	(("kb:m",), "openAssistant", "M", "open the migration assistant."),
+	(("kb:o",), "openImportSettings", "O", "JAWS Migration Assistant settings: choose which JAWS items to import."),
+	(("kb:g",), "openInputGestures", "G", "open NVDA's Input Gestures dialog."),
+	(("kb:p",), "toggleJawsProfile", "P", "turn the JAWS settings profile on or off."),
+	(("kb:k",), "jawsKeystrokeHelp", "K", "hear what a JAWS keystroke does in NVDA."),
+	(("kb:s",), "toggleJawsSounds", "S", "JAWS sounds in place of NVDA's own, on or off, through ClassicSpeech."),
+	(("kb:a",), "copyJawsSounds", "A", "copy all JAWS sounds into ClassicSpeech."),
+	(("kb:c",), "installClassicSpeech", "C", "install ClassicSpeech, or update it to its newest version."),
+	(("kb:r",), "openReport", "R", "open the last migration report."),
+	(("kb:b",), "restoreBackup", "B", "restore NVDA settings from a backup."),
+	(("kb:u",), "checkForUpdates", "U", "check for updates."),
+	(("kb:i",), "systemSummary", "I", "JAWS, Windows and NVDA versions on this computer."),
+	(("kb:l",), "saveLogForIssue", "L", "save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue."),
 	# JAWS's Insert+Control+V, once and twice, and Control+Insert+Windows+V.
-	"kb:v": "sayAppVersion",
-	"kb:shift+v": "showVersionDetails",
-	"kb:control+v": "copyVersionDetails",
+	(("kb:v",), "sayAppVersion", "V", "the name and version of the program you are in, as JAWS's Insert+Control+V."),
+	(("kb:shift+v",), "showVersionDetails", "Shift+V", "the version details, to read and copy."),
+	(("kb:control+v",), "copyVersionDetails", "Control+V", "copy the version details to the clipboard."),
 	# JAWS's own keys after Insert+Space (Default.JKM): H, Control+H and Shift+H for the speech history, and ? for help.
-	"kb:h": "showSpeechHistory",
-	"kb:control+h": "copySpeechHistory",
-	"kb:shift+h": "clearSpeechHistory",
-	"kb:shift+/": "layerHelp",
-	"kb:f1": "layerHelp",
-}
-
-LAYER_HELP = (
-	"JAWS Migration Assistant commands, after NVDA+Shift+J: "
-	"M, open the migration assistant. "
-	"O, JAWS Migration Assistant settings: choose which JAWS items to import. "
-	"G, open NVDA's Input Gestures dialog. "
-	"P, turn the JAWS settings profile on or off. "
-	"K, hear what a JAWS keystroke does in NVDA. "
-	"S, JAWS sounds in place of NVDA's own, on or off, through ClassicSpeech. "
-	"A, copy all JAWS sounds into ClassicSpeech. "
-	"C, install ClassicSpeech, or update it to its newest version. "
-	"R, open the last migration report. "
-	"B, restore NVDA settings from a backup. "
-	"U, check for updates. "
-	"I, JAWS, Windows and NVDA versions on this computer. "
-	"L, save NVDA's log in Documents as a zip file, small enough to attach to a GitHub issue. "
-	"V, the name and version of the program you are in, as JAWS's Insert+Control+V. "
-	"Shift+V, the version details, to read and copy. "
-	"Control+V, copy the version details to the clipboard. "
-	"H, what NVDA said, the most recent last, as JAWS's speech history. "
-	"Control+H, copy the speech history to the clipboard. "
-	"Shift+H, clear the speech history. "
-	"Question mark or F1, this help. Escape leaves the layer."
+	(("kb:h",), "showSpeechHistory", "H", "what NVDA said, the most recent last, as JAWS's speech history."),
+	(("kb:control+h",), "copySpeechHistory", "Control+H", "copy the speech history to the clipboard."),
+	(("kb:shift+h",), "clearSpeechHistory", "Shift+H", "clear the speech history."),
+	(("kb:shift+/", "kb:f1"), "layerHelp", "Question mark or F1", "this help."),
 )
+
+LAYER_GESTURES = {gesture: script for gestures, script, _key, _words in LAYER_COMMANDS for gesture in gestures}
+#: The key after NVDA+Shift+J for each of the layer's commands, as the JAWS keystroke helper names it.
+LAYER_KEYS = {script: key for _gestures, script, key, _words in LAYER_COMMANDS}
+
+#: The layer's help, a line each, as JAWS's Insert+Space, question mark shows its layer's in the Results Viewer.
+LAYER_HELP_TITLE = "JAWS Migration Assistant Layer Help"
+LAYER_HELP_LINES = (
+	"JAWS Migration Assistant commands, after NVDA+Shift+J:",
+	*(f"{key}, {words}" for _gestures, _script, key, words in LAYER_COMMANDS),
+	"Escape leaves the layer.",
+)
+#: The same, said in one go where no window can show it.
+LAYER_HELP = " ".join(LAYER_HELP_LINES)
 
 
 def _log():
@@ -502,6 +495,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import backForward
+
+			backForward.unregister()
+		except Exception:
+			pass
+		try:
 			from . import typingWatch
 
 			typingWatch.unregister()
@@ -837,6 +836,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				webRegions.unregister()
 		except Exception:
 			debugLog.error("could not have NVDA say regions, groups, lists and articles on web pages with JAWS's words")
+		try:
+			from . import backForward
+
+			# Not a JAWS setting: JAWS's scripts for Edge, Chrome and Firefox bind Alt+LeftArrow to GoBack and
+			# Alt+RightArrow to GoForward (IA2Browser.jss), which say "Back" and "Forward" and turn forms mode off.
+			if backForward.wanted(data):
+				backForward.register()
+			else:
+				backForward.unregister()
+		except Exception:
+			debugLog.error("could not say Back and Forward in web browsers as JAWS does")
 		try:
 			from . import speechHistory
 
@@ -1376,7 +1386,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				return
 		except Exception:
 			pass
-		messageBox(LAYER_HELP, TITLE)
+		messageBox("\n".join(LAYER_HELP_LINES), TITLE)
 
 	# -- sleeping where JAWS slept ----------------------------------------------------------
 
@@ -1507,7 +1517,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self.bindGestures(self._GlobalPlugin__gestures)
 
 	@script(
-		description="Starts a layer of JAWS Migration Assistant commands; press question mark or F1 after it to hear them",
+		description="Starts a layer of JAWS Migration Assistant commands; press question mark or F1 after it to see them",
 		gesture="kb:NVDA+shift+j",
 	)
 	def script_commandLayer(self, gesture):
@@ -1627,9 +1637,25 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def script_copyVersionDetails(self, gesture):
 		self.copyVersionDetails()
 
-	@script(description="Lists the commands of the JAWS Migration Assistant layer")
+	@script(description="Shows the commands of the JAWS Migration Assistant layer in a window, a line each, as JAWS's Insert+Space, question mark does")
 	def script_layerHelp(self, gesture):
-		ui.message(LAYER_HELP)
+		self.showLayerHelp()
+
+	def showLayerHelp(self) -> bool:
+		"""The layer's commands in a window to read with the arrow keys, as JAWS shows its layer's help in its Results
+		Viewer. Said in one go when the window can't open."""
+		text = "\n".join(LAYER_HELP_LINES)
+		try:
+			try:
+				ui.browseableMessage(text, LAYER_HELP_TITLE, copyButton=True, closeButton=True)
+			except TypeError:
+				# An NVDA whose window has no buttons.
+				ui.browseableMessage(text, LAYER_HELP_TITLE)
+		except Exception:
+			debugLog.error("could not show the layer's help")
+			ui.message(LAYER_HELP)
+			return False
+		return True
 
 	# -- the JAWS keystroke helper ----------------------------------------------------------
 
@@ -1670,7 +1696,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		return None if source is None else (source[1], source[2])
 
 	def _jawsKeymap(self):
-		"""JAWS's merged default key map, its keyboard layout and script descriptions, cached."""
+		"""JAWS's installation, the reverse of its merged default key map, script descriptions, its keyboard layout and
+		the keystrokes that start its layered keystrokes, cached."""
 		if self._keymapCache is not None:
 			return self._keymapCache
 		source = self._jawsKeymapSource()
@@ -1682,7 +1709,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		migrated = state.get("lastMigration") or {}
 		layouts = migrated.get("keyboardLayouts") if isinstance(migrated, dict) else None
 		docs = jawsDocs.readJsd([os.path.join(jaws.sharedScriptsLanguageDir(language), "default.jsd")])
-		self._keymapCache = (jaws, keyPlan.buildReverseMap(jkm, layout, layouts or None), docs, layout)
+		self._keymapCache = (
+			jaws,
+			keyPlan.buildReverseMap(jkm, layout, layouts or None),
+			docs,
+			layout,
+			keyPlan.layerStarts(jkm, layout, layouts or None),
+		)
 		return self._keymapCache
 
 	def _startKeystrokeHelp(self):
@@ -1709,11 +1742,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		return False
 
 	def _describeKeystroke(self, gesture):
-		jaws, reverseMap, docs, _layout = self._jawsKeymap()
+		jaws, reverseMap, docs, _layout, layerStarts = self._jawsKeymap()
 		keyName = gesture.displayName
 		matches = keyPlan.describeJawsKeystroke(gesture, reverseMap)
+		identifiers = [identifier.lower() for identifier in getattr(gesture, "normalizedIdentifiers", ()) or ()]
+		layerStart = None if matches else next((layerStarts[identifier] for identifier in identifiers if identifier in layerStarts), None)
 		parts = []
-		if not matches:
+		if layerStart:
+			# JAWS's key map has only the keys after it, such as Insert+Space&H.
+			parts.append(f"In JAWS, {layerStart} starts a layered keystroke: you press it, then another key.")
+			layer = self._layerKeystroke()
+			if layer:
+				parts.append(
+					f"In NVDA, {layer} starts the JAWS Migration Assistant's layer of commands. It has JAWS's speech history keys, "
+					"H, Control+H and Shift+H, and question mark for its help."
+				)
+		elif not matches:
 			parts.append(f"{keyName} does nothing special in JAWS.")
 		for jawsKey, jawsScript, _section in matches[:2]:
 			parts.append(f"In JAWS, {jawsKey} runs {jawsDocs.describe(docs, jawsScript)}.")
@@ -1724,6 +1768,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				from . import nvdaApply
 
 				gestures = nvdaApply.gesturesForScript(module, className, nvdaScript)
+				if module == jawsKeyMap.ASSISTANT_MODULE and nvdaScript in LAYER_KEYS:
+					# The assistant's own commands are in its layer too, whatever keys a migration gave them.
+					layer = self._layerKeystroke()
+					if layer:
+						gestures = gestures[:2] + [f"{layer}, then {LAYER_KEYS[nvdaScript]}"]
 				where = f" Press {', or '.join(gestures[:3])}." if gestures else " It has no keystroke yet; assign one in NVDA's Input Gestures dialog."
 				parts.append(f"In NVDA: {description}.{where}")
 			else:
@@ -1734,6 +1783,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			nvdaScript = None
 		if nvdaScript is not None and getattr(nvdaScript, "__doc__", None):
 			parts.append(f"In NVDA, {keyName} now does: {nvdaScript.__doc__.strip()}")
-		elif matches:
+		elif matches or layerStart:
 			parts.append(f"In NVDA, {keyName} has no command of its own.")
 		ui.message(" ".join(parts))
+
+	def _layerKeystroke(self):
+		"""The keystroke that starts the assistant's layer (NVDA+Shift+J unless changed in NVDA's Input Gestures dialog),
+		as NVDA names it, or None when it has none."""
+		from . import nvdaApply
+
+		try:
+			found = nvdaApply.gesturesForScript(jawsKeyMap.ASSISTANT_MODULE, jawsKeyMap.ASSISTANT_CLASS, "commandLayer")
+		except Exception:
+			debugLog.error("could not find the keystroke of the assistant's layer")
+			return None
+		return found[0] if found else None

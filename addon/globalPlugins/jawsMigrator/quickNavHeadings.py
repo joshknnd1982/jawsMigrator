@@ -41,6 +41,24 @@ mode says an empty field's placeholder where its value goes, without either word
 "edit"), say an edit field without the containers around it, and an empty one with "blank", then
 "placeholder" and its placeholder, after its type and states. A field with text in it is said as NVDA
 says it.
+
+Every other quick navigation key does the same on a web page (issue 35). The tester asked for tests on
+several sites. JAWS 2026 and NVDA 2026.2 with the assistant 1.35 (and the settings a migration from JAWS
+gives) were run on copies of Amazon's home page and search results, Wikipedia, BBC News and GitHub, with the
+same keys. JAWS's quick keys say the element alone: B "Delivering to Williamstown 17098 Update location,
+Button", C "Search in, Combo box, collapsed", G "Wikipedia The Free Encyclopedia, Link, Graphic", I "Link,
+Donate", L "list of 3 items", R "Primary navigation region", T "table with 3 columns and 8 rows". NVDA's said
+every landmark, region and list the move entered first: "banner region, Primary, navigation region,
+Delivering to Williamstown 17098, Update location, button", "banner region, Primary, navigation region,
+search region, Search in, combo box, collapsed", "banner region, Personal tools, navigation region, list of 3
+items, Donate, link", "main region, Folders and files, table, with 8 rows and 3 columns". So on a web page
+read through IAccessible2 (Edge, Chrome, Firefox), quick navigation to anything (B, C, X, G, L, I, K, U, V,
+F, D, T, O and the rest, and Move to in the Elements List) leaves out the containers and table cells around
+what it moves to. What it moves to is said as NVDA says it, with what is in it: L still says the list and
+its first line, D the landmark and its first line, T the table and its first cell, and a link or heading
+around a graphic is still said. The item is told apart from what is around it by the page's own identifier
+for it (``VirtualBufferQuickNavItem.vbufFieldIdentifier``, the field's "controlIdentifier_docHandle" and
+"controlIdentifier_ID"). Anything else, such as quick navigation in Word, is said as NVDA says it.
 """
 
 from __future__ import annotations
@@ -82,8 +100,9 @@ _replaced: list = []
 _quickNav = None
 _headingRole = None
 _editRole = None
-#: For each thread: the reports going on, innermost last (``reports``: [the role of what is reported, whether it is an
-#: empty edit field]), and what they left out (``leftOut``).
+#: For each thread: the reports going on, innermost last (``reports``: [the role of what is reported (None for another
+#: element), whether it is an empty edit field, and another element's identifier (None for a heading or edit field)]),
+#: and what they left out (``leftOut``).
 _local = threading.local()
 
 
@@ -105,7 +124,7 @@ def _failure(what: str) -> None:
 
 
 def wanted(stateData: dict) -> bool:
-	"""Whether quick navigation says a heading or an edit field without what it is in: on unless the user turned it off."""
+	"""Whether quick navigation says what it moves to without what it is in: on unless the user turned it off."""
 	return isinstance(stateData, dict) and bool(stateData.get(STATE_KEY, True))
 
 
@@ -121,6 +140,31 @@ def isHeading(item) -> bool:
 def isEditField(item) -> bool:
 	"""Whether the quick navigation item ``item`` is an edit field: "edit", what E moves to."""
 	return getattr(item, "itemType", None) == EDIT
+
+
+def itemField(item):
+	"""The page's identifier for the element quick navigation moved to, ``(docHandle, ID)``, or None where NVDA has none
+	(a quick navigation item outside a virtual buffer, such as in Word)."""
+	identifier = getattr(item, "vbufFieldIdentifier", None)
+	if not isinstance(identifier, tuple) or len(identifier) != 2:
+		return None
+	try:
+		return (int(identifier[0]), int(identifier[1]))
+	except (TypeError, ValueError):
+		return None
+
+
+def fieldIdentifier(attrs):
+	"""A field's identifier on its page, ``(docHandle, ID)``, as ``itemField`` gives it, or None."""
+	if not hasattr(attrs, "get"):
+		return None
+	docHandle, fieldID = attrs.get("controlIdentifier_docHandle"), attrs.get("controlIdentifier_ID")
+	if docHandle is None or fieldID is None:
+		return None
+	try:
+		return (int(docHandle), int(fieldID))
+	except (TypeError, ValueError):
+		return None
 
 
 def _isEmpty(item) -> bool:
@@ -151,7 +195,7 @@ def register() -> None:
 			if _replace(speech, FIELD_SPEECH, _fieldSpeechGuarded):
 				_replace(browseMode.TextInfoQuickNavItem, REPORT, _reportGuarded)
 	except Exception:
-		_failure("can't have quick navigation say a heading or an edit field without what it is in")
+		_failure("can't have quick navigation say what it moves to without what it is in")
 
 
 def unregister() -> None:
@@ -197,7 +241,7 @@ def _replace(owner, name: str, guarded) -> bool:
 	installed = guarded(current)
 	setattr(owner, name, installed)
 	_replaced.append((owner, name, installed, current))
-	_log().debug(f"jawsMigrator: quick navigation says a heading or an edit field without the landmark, region or list it is in ({getattr(owner, '__name__', owner)}.{name})")
+	_log().debug(f"jawsMigrator: quick navigation says what it moves to without the landmark, region or list it is in ({getattr(owner, '__name__', owner)}.{name})")
 	return True
 
 
@@ -212,13 +256,17 @@ def _argument(args: tuple, kwargs: dict, name: str, index: int, default=None):
 	return args[index] if len(args) > index else default
 
 
-def _isAround(attrs, ancestorAttrs, args: tuple, kwargs: dict, role) -> bool:
-	"""Whether the field ``attrs`` is a container or table cell around the heading or edit field (``role``) quick
-	navigation reports."""
+def _isAround(attrs, ancestorAttrs, args: tuple, kwargs: dict, role, field=None) -> bool:
+	"""Whether the field ``attrs`` is a container or table cell around what quick navigation reports: the heading or edit
+	field (``role``), or the element whose identifier is ``field``."""
 	if _argument(args, kwargs, "reason", 2) != _quickNav or not hasattr(attrs, "getPresentationCategory"):
 		return False
-	# The heading or edit field, and whatever is in it, are said. So is a link or button around it, which isn't a container.
-	if _hasRole(attrs, role) or any(_hasRole(ancestor, role) for ancestor in ancestorAttrs or ()):
+	# What quick navigation moved to, and whatever is in it, are said. So is a link or button around it, which isn't a
+	# container.
+	if field is not None:
+		if fieldIdentifier(attrs) == field or any(fieldIdentifier(ancestor) == field for ancestor in ancestorAttrs or ()):
+			return False
+	elif _hasRole(attrs, role) or any(_hasRole(ancestor, role) for ancestor in ancestorAttrs or ()):
 		return False
 	formatConfig = _argument(args, kwargs, "formatConfig", 0)
 	if not formatConfig:
@@ -271,8 +319,8 @@ def withBlank(sequence, attrs, reason) -> list:
 
 
 def _fieldSpeechGuarded(original):
-	"""NVDA's speech for a field: nothing for a container around a heading or edit field quick navigation reports, and
-	an empty edit field it reports as JAWS says it."""
+	"""NVDA's speech for a field: nothing for a container around a heading, an edit field or another element on a web page
+	that quick navigation reports, and an empty edit field it reports as JAWS says it."""
 
 	@functools.wraps(original)
 	def getControlFieldSpeech(attrs, ancestorAttrs, fieldType, *args, **kwargs):
@@ -280,7 +328,7 @@ def _fieldSpeechGuarded(original):
 		reports = getattr(_local, "reports", None)
 		if not sequence or not _enabled or not reports:
 			return sequence
-		role, empty = reports[-1]
+		role, empty, field = reports[-1]
 		if empty and fieldType in REPORTED and _hasRole(attrs, role) and _argument(args, kwargs, "reason", 2) == _quickNav:
 			try:
 				said = withBlank(sequence, attrs, _quickNav)
@@ -295,9 +343,9 @@ def _fieldSpeechGuarded(original):
 		if fieldType not in AROUND:
 			return sequence
 		try:
-			around = _isAround(attrs, ancestorAttrs, args, kwargs, role)
+			around = _isAround(attrs, ancestorAttrs, args, kwargs, role, field)
 		except Exception:
-			_failure("could not tell what a heading or edit field is in")
+			_failure("could not tell what a heading, edit field or other element is in")
 			around = False
 		if not around:
 			return sequence
@@ -310,18 +358,22 @@ def _fieldSpeechGuarded(original):
 
 
 def _reportGuarded(original):
-	"""NVDA's report of what quick navigation moved to, which says a heading or an edit field without what it is in."""
+	"""NVDA's report of what quick navigation moved to, which says it without what it is in."""
 
 	@functools.wraps(original)
 	def report(item, *args, **kwargs):
 		if not _enabled:
 			return original(item, *args, **kwargs)
 		if isHeading(item):
-			reported = (_headingRole, False)
+			reported = (_headingRole, False, None)
 		elif isEditField(item):
-			reported = (_editRole, _isEmpty(item))
+			reported = (_editRole, _isEmpty(item), None)
 		else:
-			return original(item, *args, **kwargs)
+			# Anything else on a web page: the element itself, told apart from what is around it by its identifier.
+			field = itemField(item)
+			if field is None:
+				return original(item, *args, **kwargs)
+			reported = (None, False, field)
 		reports = getattr(_local, "reports", None)
 		if not reports:
 			reports = _local.reports = []
@@ -332,7 +384,12 @@ def _reportGuarded(original):
 		finally:
 			reports.pop()
 			if not reports and _local.leftOut:
-				what = "a heading" if reported[0] == _headingRole else "an edit field"
+				if reported[0] == _headingRole:
+					what = "a heading"
+				elif reported[0] == _editRole:
+					what = "an edit field"
+				else:
+					what = "an element"
 				try:
 					_log().debug(
 						f"jawsMigrator: quick navigation moved to {what} ({item.itemType}), so NVDA doesn't say what it is in: {'; '.join(_local.leftOut)}",

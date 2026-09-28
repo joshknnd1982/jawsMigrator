@@ -56,6 +56,18 @@ line. So the first time NVDA comes into an Edge or Chrome page in browse mode, w
 its caret on the first line, NVDA says the title and not that line, which it says as you come into a page
 (browseMode.BrowseModeDocumentTreeInterceptor.event_treeInterceptor_gainFocus). A page whose caret starts further
 down, coming back to a page, focus mode, "Automatic Say All on page load" and every other program are as before.
+
+Since then that first line was never said at all (found running JAWS and NVDA side by side on six sites, issue 35):
+NVDA's caret stayed on it, so the first Down Arrow read the second line, where JAWS's first Down Arrow goes from the
+title to the first line ("same page link Skip to content" on BBC News). And NVDA's H, K, B and the other quick
+navigation keys, and Tab, look for the next element after the caret, so an element the first line starts with was
+skipped: on Amazon, H after the page opened went to the second heading, "Keyboard shortcuts", where JAWS's H said the
+first, "Skip to, heading level 2", and on BBC News Tab went to "Open menu", where JAWS's went to "Skip to content". Now,
+while the caret is still where it was when NVDA held that line back: the Down Arrow says the first line, as JAWS's
+does, and leaves the caret there, so the next Down Arrow reads the second line; a quick navigation key or Tab goes to
+an element that starts where the caret is (CursorManager._caretMovementScriptHelper, BrowseModeTreeInterceptor.
+_quickNavScript and BrowseModeDocumentTreeInterceptor._tabOverride, put on the same classes as the event). Anything
+else, and the same keys once the caret has moved, are as NVDA has them.
 """
 
 from __future__ import annotations
@@ -95,6 +107,18 @@ PAGE_CLASSES = (
 	("NVDAObjects.IAccessible.chromium", "ChromeVBuf"),
 	("NVDAObjects.UIA.chromium", "ChromiumUIATreeInterceptor"),
 )
+#: What moves browse mode's caret by a line (cursorManager.CursorManager, the Down Arrow), what moves it to the next
+#: element of a kind (browseMode.BrowseModeTreeInterceptor, the quick navigation keys) and what Tab does in browse mode
+#: (browseMode.BrowseModeDocumentTreeInterceptor). The assistant puts its own on the same classes, for the page's first
+#: line NVDA held back as the page opened (no other part of the assistant changes these).
+CARET_MOVEMENT = "_caretMovementScriptHelper"
+QUICK_NAV = "_quickNavScript"
+TAB = "_tabOverride"
+#: Where the page keeps the start of the first line NVDA held back, until its caret moves.
+UNSAID = "_jawsMigratorUnsaidFirstLine"
+#: Quick navigation's kinds that aren't elements of the page (NVDA finds them another way): its first line is said as NVDA
+#: says it for them.
+TEXT_ITEM_TYPES = frozenset(("notLinkBlock", "textParagraph", "verticalParagraph", "sameStyle", "differentStyle"))
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
@@ -115,6 +139,8 @@ _query = None
 _caret = None
 _line = None
 _first = None
+#: textInfos.POSITION_CARET, once known.
+_caretPosition = None
 #: The window's name and the page's title NVDA was last asked to say, with the commands NVDA's speech manager keeps
 #: with them until they are said: {WINDOW or PAGE: (name, commands)}.
 _lastSaid: dict = {}
@@ -155,6 +181,7 @@ def wanted(stateData: dict) -> bool:
 def register() -> None:
 	"""Have NVDA say Edge's and Chrome's windows and pages as JAWS says them, from now on."""
 	global _enabled, _windowRole, _regionRole, _documentRole, _focus, _focusEntered, _query, _caret, _line, _first
+	global _caretPosition
 	if _enabled:
 		return
 	try:
@@ -166,6 +193,7 @@ def register() -> None:
 		_focus, _focusEntered, _query = OutputReason.FOCUS, OutputReason.FOCUSENTERED, OutputReason.QUERY
 		_caret, _line = getattr(OutputReason, "CARET", None), getattr(textInfos, "UNIT_LINE", None)
 		_first = getattr(textInfos, "POSITION_FIRST", None)
+		_caretPosition = getattr(textInfos, "POSITION_CARET", None)
 		with _lock:
 			if not _replace(speech):
 				return
@@ -175,7 +203,8 @@ def register() -> None:
 				except Exception:
 					# Not in this NVDA: its pages are said as before.
 					continue
-				_addGainFocus(owner)
+				if _addGainFocus(owner) and _caretPosition is not None:
+					_addFirstLineKeys(owner)
 	except Exception:
 		_failure("can't say Edge's and Chrome's windows and pages as JAWS says them, so NVDA says them as it does")
 		return
@@ -450,19 +479,35 @@ def _guarded(original):
 # -- a page's first line --------------------------------------------------------------------------------------------
 
 
-def _addGainFocus(owner) -> None:
+def _addGainFocus(owner) -> bool:
 	"""Give ``owner``, the class of Edge's and Chrome's pages, the assistant's event for a page NVDA comes into, which
-	does what the one it comes from does, and holds back the page's first line the first time."""
+	does what the one it comes from does, and holds back the page's first line the first time. True when it is there."""
 	current = vars(owner).get(GAIN_FOCUS)
 	if _isOurs(current):
-		return
+		return True
 	if current is not None:
 		# The class has one of its own (another add-on's): the page's first line is said as it says it.
 		_debug(f"jawsMigrator: {getattr(owner, '__name__', owner)} has its own {GAIN_FOCUS}, so a page's first line is said as before")
-		return
+		return False
 	installed = _gainFocusGuarded(owner)
 	setattr(owner, GAIN_FOCUS, installed)
 	_replaced.append((owner, GAIN_FOCUS, installed, None))
+	return True
+
+
+def _addFirstLineKeys(owner) -> None:
+	"""Give ``owner`` the assistant's Down Arrow, quick navigation and Tab for the first line NVDA held back, which do
+	what the ones it comes from do otherwise. A class with one of its own (another add-on's) keeps it."""
+	for name, guarded in ((CARET_MOVEMENT, _caretMovementGuarded), (QUICK_NAV, _quickNavGuarded), (TAB, _tabGuarded)):
+		current = vars(owner).get(name)
+		if _isOurs(current):
+			continue
+		if current is not None or not callable(getattr(owner, name, None)):
+			_debug(f"jawsMigrator: {getattr(owner, '__name__', owner)} has its own {name}, or none, so it is as before")
+			continue
+		installed = guarded(owner)
+		setattr(owner, name, installed)
+		_replaced.append((owner, name, installed, None))
 
 
 def isFirstLine(page, info, args: tuple, kwargs: dict) -> bool:
@@ -529,6 +574,7 @@ def _gainFocusGuarded(owner):
 					text = held[0].text
 				except Exception:
 					text = ""
+				_keepFirstLine(self, held[0])
 				_debug(
 					f"jawsMigrator: NVDA came into the page for the first time with its caret on the first line, so it says the page's title without that line, as JAWS, whose cursor starts on the title: {text[:80]!r}",
 				)
@@ -536,3 +582,161 @@ def _gainFocusGuarded(owner):
 	event_treeInterceptor_gainFocus.__name__ = GAIN_FOCUS
 	setattr(event_treeInterceptor_gainFocus, MARK, _TOKEN)
 	return event_treeInterceptor_gainFocus
+
+
+# -- the first line NVDA held back -------------------------------------------------------------------------------------
+
+
+def _keepFirstLine(page, line) -> None:
+	"""Keep where the first line NVDA held back starts, on ``page``, until its caret moves."""
+	try:
+		start = line.copy()
+		start.collapse()
+		setattr(page, UNSAID, start)
+	except Exception:
+		_failure("could not keep where a page's first line starts, so the keys after it are as NVDA has them")
+
+
+def _forget(page) -> None:
+	try:
+		if vars(page).get(UNSAID) is not None:
+			setattr(page, UNSAID, None)
+	except Exception:
+		pass
+
+
+def unsaidFirstLine(page):
+	"""Where the first line NVDA held back as ``page`` opened starts, while browse mode's caret is still there; else None
+	(and the page forgets it)."""
+	try:
+		start = vars(page).get(UNSAID)
+	except TypeError:
+		return None
+	if start is None:
+		return None
+	try:
+		still = not getattr(page, "passThrough", False) and page.makeTextInfo(_caretPosition).compareEndPoints(start, "startToStart") == 0
+	except Exception:
+		still = False
+	if not still:
+		_forget(page)
+		return None
+	return start
+
+
+def _startsAt(item, start) -> bool:
+	try:
+		return item.textInfo.compareEndPoints(start, "startToStart") == 0
+	except Exception:
+		return False
+
+
+def _firstOfKind(page, itemType):
+	"""The first element of ``itemType`` on ``page`` (NVDA's search from the top, as its Elements List does), or None."""
+	try:
+		return next(page._iterNodesByType(itemType, "next", None))
+	except (StopIteration, NotImplementedError):
+		return None
+	except Exception:
+		_failure(f"could not find the first {itemType} on a page, so the key is as NVDA has it")
+		return None
+
+
+def _caretMovementGuarded(owner):
+	"""Browse mode's caret movement: the Down Arrow on the first line NVDA held back says that line, as JAWS's goes from
+	the title to it; anything else as NVDA has it."""
+
+	def _caretMovementScriptHelper(self, gesture, unit, direction=None, *args, **kwargs):
+		base = getattr(super(owner, self), CARET_MOVEMENT)
+		start = unsaidFirstLine(self) if _enabled else None
+		if start is None:
+			return base(gesture, unit, direction, *args, **kwargs)
+		_forget(self)
+		if unit != _line or direction != 1 or args or kwargs:
+			return base(gesture, unit, direction, *args, **kwargs)
+		from scriptHandler import isScriptWaiting, willSayAllResume
+
+		if isScriptWaiting():
+			# As NVDA's own: with more keys waiting, nothing is said or moved.
+			return None
+		import speech
+
+		info = self.makeTextInfo(_caretPosition)
+		info.expand(_line)
+		if not willSayAllResume(gesture):
+			speech.speakTextInfo(info, unit=_line, reason=_caret)
+		_debug("jawsMigrator: the Down Arrow said the page's first line, which NVDA held back as the page opened, as JAWS's goes from the title to it")
+		return None
+
+	_caretMovementScriptHelper.__name__ = CARET_MOVEMENT
+	setattr(_caretMovementScriptHelper, MARK, _TOKEN)
+	return _caretMovementScriptHelper
+
+
+def _quickNavGuarded(owner):
+	"""Browse mode's quick navigation: from the first line NVDA held back, an element that starts where the caret is is
+	the next one, as it is for JAWS, whose cursor is on the title above it; anything else as NVDA has it."""
+
+	def _quickNavScript(self, gesture, itemType, direction, *args, **kwargs):
+		base = getattr(super(owner, self), QUICK_NAV)
+		start = unsaidFirstLine(self) if _enabled else None
+		if start is None:
+			return base(gesture, itemType, direction, *args, **kwargs)
+		_forget(self)
+		if direction != "next" or itemType in TEXT_ITEM_TYPES:
+			return base(gesture, itemType, direction, *args, **kwargs)
+		item = _firstOfKind(self, itemType)
+		if item is None or not _startsAt(item, start):
+			return base(gesture, itemType, direction, *args, **kwargs)
+		readUnit = kwargs.get("readUnit", args[1] if len(args) > 1 else None)
+		from scriptHandler import willSayAllResume
+
+		# As NVDA's _quickNavScript does with the item it finds.
+		if not gesture or not willSayAllResume(gesture):
+			item.report(readUnit=readUnit)
+		item.moveTo()
+		_debug(f"jawsMigrator: quick navigation went to the {itemType} the page's first line starts with, which NVDA held back as the page opened")
+		return None
+
+	_quickNavScript.__name__ = QUICK_NAV
+	setattr(_quickNavScript, MARK, _TOKEN)
+	return _quickNavScript
+
+
+def _tabGuarded(owner):
+	"""Browse mode's Tab: from the first line NVDA held back, an element that can take the focus and starts where the
+	caret is gets it, as it does for JAWS, whose cursor is on the title above it; anything else as NVDA has it."""
+
+	def _tabOverride(self, direction, *args, **kwargs):
+		base = getattr(super(owner, self), TAB)
+		start = unsaidFirstLine(self) if _enabled else None
+		if start is None:
+			return base(direction, *args, **kwargs)
+		_forget(self)
+		if direction != "next" or getattr(self, "_lastCaretMoveWasFocus", False):
+			return base(direction, *args, **kwargs)
+		item = _firstOfKind(self, "focusable")
+		if item is None or not _startsAt(item, start):
+			return base(direction, *args, **kwargs)
+		import api
+
+		obj = item.obj
+		# As NVDA's _tabOverride does with the element it finds.
+		if obj == api.getFocusObject():
+			import speech
+
+			newCaret = item.textInfo.copy()
+			newCaret.collapse()
+			self._set_selection(newCaret, reason=_focus)
+			if self.passThrough:
+				obj.event_gainFocus()
+			else:
+				speech.speakTextInfo(item.textInfo, reason=_focus)
+		else:
+			obj.setFocus()
+		_debug("jawsMigrator: Tab went to the element the page's first line starts with, which NVDA held back as the page opened")
+		return True
+
+	_tabOverride.__name__ = TAB
+	setattr(_tabOverride, MARK, _TOKEN)
+	return _tabOverride

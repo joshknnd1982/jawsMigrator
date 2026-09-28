@@ -465,7 +465,7 @@ class QuickNavHeadingsTests(unittest.TestCase):
 			with self.assertLogs("nvda", level="DEBUG") as logged:
 				said = self.press("heading", "Welcome to AppleVis")
 		self.assertEqual(said, ["main landmark", "Welcome to AppleVis", "heading", "level 1"], "NVDA's own words")
-		self.assertTrue(any("could not tell what a heading or edit field is in" in line for line in logged.output), logged.output)
+		self.assertTrue(any("could not tell what a heading, edit field or other element is in" in line for line in logged.output), logged.output)
 
 	def test_aHeadingOnAnotherThreadChangesNothingHere(self):
 		quickNavHeadings.register()
@@ -508,7 +508,7 @@ class QuickNavHeadingsTests(unittest.TestCase):
 			self.fresh()
 			self.press("link", "Giants Claim Camilo Doval")
 		lines = [line for line in logged.output if "jawsMigrator" in line]
-		self.assertEqual(sum("quick navigation says a heading or an edit field without the landmark, region or list it is in" in line for line in lines), 2, lines)
+		self.assertEqual(sum("quick navigation says what it moves to without the landmark, region or list it is in" in line for line in lines), 2, lines)
 		moved = [line for line in lines if "quick navigation moved to a heading" in line]
 		self.assertEqual(len(moved), 3, lines)
 		self.assertIn("so NVDA doesn't say what it is in: Community actions region", moved[0])

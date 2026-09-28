@@ -478,7 +478,8 @@ def main():
 		from jawsMigrator import speechHistory
 
 		preSpeech = sys.modules["speech.extensions"].pre_speech
-		check(speechHistory.isRegistered() and list(preSpeech.handlers) == [speechHistory._onSpeech], "what NVDA says is kept, through pre_speech")
+		# backForward listens there too, for what NVDA says after Back and Forward.
+		check(speechHistory.isRegistered() and list(preSpeech.handlers).count(speechHistory._onSpeech) == 1, "what NVDA says is kept, through pre_speech")
 		preSpeech.notify(speechSequence=["Items View", "list"], symbolLevel=None, priority=0)
 		check(speechHistory.entries() == ["Items View  list"], f"one line each time NVDA speaks: {speechHistory.entries()}")
 		layerKeys = jawsMigrator.LAYER_GESTURES
@@ -492,6 +493,24 @@ def main():
 			and all(callable(getattr(plugin, f"script_{name}", None)) for name in ("sayAppVersion", "showVersionDetails", "copyVersionDetails")),
 			"NVDA+Shift+J then V, Shift+V and Control+V: the program's version and the version details, as JAWS's Insert+Control+V",
 		)
+		# Question mark shows every command of the layer in a window, a line each, as JAWS's Insert+Space, question mark does.
+		ui = sys.modules["ui"]
+		shown = []
+		before = getattr(ui, "browseableMessage", None)
+		ui.browseableMessage = lambda message, title=None, **kwargs: shown.append((message, title, kwargs))
+		try:
+			plugin.script_layerHelp(None)
+		finally:
+			if before is None:
+				del ui.browseableMessage
+			else:
+				ui.browseableMessage = before
+		check(
+			shown == [("\n".join(jawsMigrator.LAYER_HELP_LINES), "JAWS Migration Assistant Layer Help", {"copyButton": True, "closeButton": True})]
+			and len(jawsMigrator.LAYER_HELP_LINES) == len(jawsMigrator.LAYER_COMMANDS) + 2
+			and all(layerKeys.get(gesture) == script for gestures, script, _key, _words in jawsMigrator.LAYER_COMMANDS for gesture in gestures),
+			"NVDA+Shift+J then ? shows each of the layer's commands in a window, a line each, as JAWS's Insert+Space, question mark",
+		)
 		plugin.showSpeechHistory()
 		viewer = speechHistory._viewer
 		check(viewer is not None and viewer.GetTitle() == "Speech History" and viewer.text.GetValue() == "Items View  list", "H shows it")
@@ -501,10 +520,10 @@ def main():
 		check(speechHistory.entries() == [] and nvdaStubs.spoken == ["Speech history cleared"], f"Shift+H clears it: {nvdaStubs.spoken}")
 		jawsMigrator.state.set(speechHistory.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
-		check(not speechHistory.isRegistered() and not list(preSpeech.handlers), "turned off in the Settings panel, nothing is kept")
+		check(not speechHistory.isRegistered() and speechHistory._onSpeech not in list(preSpeech.handlers), "turned off in the Settings panel, nothing is kept")
 		jawsMigrator.state.set(speechHistory.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
-		check(speechHistory.isRegistered() and list(preSpeech.handlers) == [speechHistory._onSpeech], "and on again, once")
+		check(speechHistory.isRegistered() and list(preSpeech.handlers).count(speechHistory._onSpeech) == 1, "and on again, once")
 		# Quick navigation says a heading without what it is in, a list item has no row and column, and a web page's
 		# tabs and toolbar buttons stay in browse mode: NVDA's field speech, quick navigation report, what NVDA may say
 		# about an object, and its choice of mode.
@@ -1186,6 +1205,29 @@ def main():
 		jawsMigrator.state.set(webRegions.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(webRegions.isRegistered() and webRegionsInPlace(), "and on again, wrapped once")
+		# Alt+Left and Alt+Right in a web browser say "Back" and "Forward", as JAWS's GoBack and GoForward do; every key
+		# still goes on to the program (see backForward).
+		from jawsMigrator import backForward
+
+		check(
+			backForward.isRegistered()
+			and decider.handlers.count(backForward.decideGesture) == 1
+			and list(preSpeech.handlers).count(backForward.heard) == 1
+			and decider.decide(gesture="kb:alt+leftArrow"),
+			"Alt+Left and Alt+Right in web browsers say Back and Forward, the key goes on to the browser, and what NVDA says after them is heard",
+		)
+		jawsMigrator.state.set(backForward.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(
+			not backForward.isRegistered() and backForward.decideGesture not in decider.handlers and backForward.heard not in list(preSpeech.handlers),
+			"turned off in the Settings panel, NVDA leaves the keys alone",
+		)
+		jawsMigrator.state.set(backForward.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(
+			backForward.isRegistered() and decider.handlers.count(backForward.decideGesture) == 1 and list(preSpeech.handlers).count(backForward.heard) == 1,
+			"and on again, once",
+		)
 		# NVDA+Shift+J: JAWS's layered keystroke sound, when this computer has JAWS, or a beep.
 		from jawsMigrator import jawsDetect, layerSound
 
@@ -1311,6 +1353,10 @@ def main():
 			"and NVDA's saying of an object, and of a page it comes into",
 		)
 		check(not webRegions.isRegistered() and webRegionsNvdasOwn(), "and NVDA's speech for a web page's fields and an object's properties")
+		check(
+			not backForward.isRegistered() and backForward.decideGesture not in decider.handlers and backForward.heard not in list(preSpeech.handlers),
+			"and Alt+Left and Alt+Right in web browsers",
+		)
 		# Version 1.5 imported a module NVDA's own Python doesn't have, and NVDA didn't load the assistant at all:
 		# nothing in the Tools or Preferences menus, no NVDA+Shift+J, nothing in Input Gestures. A module that
 		# can't load, or a step of the assistant's start that fails, now costs only that one feature.
@@ -1353,6 +1399,7 @@ def main():
 			"formFields",
 			"browserPages",
 			"webRegions",
+			"backForward",
 			"outlookFocus",
 			"elementsList",
 			"startupFocus",

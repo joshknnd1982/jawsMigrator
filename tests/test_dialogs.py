@@ -546,7 +546,7 @@ class SettingsPanelTests(unittest.TestCase):
 
 		self._checkBoxIsSavedAndApplied(
 			self.dialog.panel.headingAlone,
-			'When &quick navigation moves to a heading or an edit field, don\'t say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field',
+			'When &quick navigation moves to a heading, a button or anything else, don\'t say the landmark, region or list it is in, and say "blank, placeholder" for an empty edit field',
 			quickNavHeadings.STATE_KEY,
 			"quick navigation says what a heading or an edit field is in again, at once",
 		)

@@ -2695,7 +2695,9 @@ class TesterPageTests(unittest.TestCase):
 		self.assertEqual(self.focus("headlines"), ["HEADLINES", "same page", "link", "Homepage", "heading", "level 3"])
 		self.assertEqual(self.press("headlines", itemType="link"), ["HEADLINES", "same page", "link", "Homepage", "heading", "level 3"])
 		linkSpeech.register()
-		self.assertEqual(self.focus("headlines"), ["HEADLINES", "link", "heading", "level 3"], "Tab")
+		# Since 1.36, Tab says the title, as JAWS 2026 does when the focus moves to a link (run live on a copy of
+		# Wikipedia, issue 35: "Create account Link | You are encouraged to create an account and log in; ...").
+		self.assertEqual(self.focus("headlines"), ["HEADLINES", "link", "Homepage", "heading", "level 3"], "Tab")
 		self.assertEqual(self.press("headlines", itemType="link"), ["HEADLINES", "link", "heading", "level 3"], "K")
 
 	def test_otherDescriptionsAreSaid(self):
@@ -2705,15 +2707,22 @@ class TesterPageTests(unittest.TestCase):
 		}
 		linkSpeech.register()
 		self.assertEqual(self.focus("aria", pages), ["Scores", "link", "Opens a new window"])
-		self.assertEqual(self.press("described", pages=pages), ["My only regret joining Visible", "heading", "level 2", "link", "Author: u/Fuspo14 11 hr. ago"])
+		self.assertEqual(self.focus("described", pages), ["My only regret joining Visible", "link", "Author: u/Fuspo14 11 hr. ago", "heading", "level 2"], "Tab")
+		# Since 1.36 (issue 32), quick navigation says no description, as JAWS's virtual cursor doesn't (Default.jcf
+		# [VirtualCursorVerbosity] DescribedBy off at Medium): the tester's JAWS said no "Author: ..." on H.
+		self.assertEqual(self.press("described", pages=pages), ["My only regret joining Visible", "heading", "level 2", "link"])
 
 	def test_firefoxCantTellATitle(self):
-		# Firefox gives no "description-from": NVDA can't tell a title from aria-describedby, so it is said as before.
+		# Firefox gives no "description-from": NVDA can't tell a title from aria-describedby, so Tab says it as before.
+		# Quick navigation says no description at all since 1.36 (issue 32), as JAWS's virtual cursor doesn't.
 		linkSpeech.register()
 		self.assertEqual(
 			self.press("headlines", textInfoClass=GeckoVBufTextInfo),
-			["HEADLINES", "heading", "level 3", "link", "Homepage"],
+			["HEADLINES", "heading", "level 3", "link"],
 		)
+		spoken.clear()
+		self.speech.speakTextInfo(GeckoVBufTextInfo(self.page, FOOTBALL["headlines"]), reason=OutputReason.FOCUS)
+		self.assertEqual(spoken[0], ["HEADLINES", "link", "Homepage", "heading", "level 3"])
 
 	def test_theFieldNvdaKeepsIsntChanged(self):
 		linkSpeech.register()

@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Josh Kennedy
 # This file is covered by the GNU General Public License, version 2 or later.
 
-"""Links on web pages are said as JAWS says them: "same page" only for a link to a place on the page, no link titles,
-and "link" after the heading a link is in.
+"""Links on web pages are said as JAWS says them: "same page" only for a link to a place on the page, no link titles
+but on Tab, "link" after the heading a link is in, and, in quick navigation, no description.
 
 A tester pressed H on profootballrumors.com. JAWS said "HEADLINES, heading level 3, Link", "Pro Football Rumors,
 heading level 1, Link" and "Vikings To Sign P Johnny Hekker, heading level 2, Link". NVDA said "HEADLINES, same page,
@@ -21,15 +21,26 @@ title="Homepage">Headlines</a></h3>``, and on reddit.com JAWS said "Feels to goo
   ("description-from" tooltip), and NVDA says descriptions when it reads a field for the focus or for quick
   navigation (Object Presentation, "Report object descriptions"). JAWS says a link's text: its option for how text
   links are shown (LinkText) is 1, "Screen Text", as JAWS comes, not "Title". So when NVDA says a link it reads in a
-  document (``textInfos.TextInfo.getControlFieldSpeech``), a description from its title isn't said; a description from
-  aria-describedby or aria-description still is. Firefox doesn't tell NVDA where a description comes from, so there a
-  title is still said.
+  document (``textInfos.TextInfo.getControlFieldSpeech``), a description from its title isn't said. Firefox doesn't
+  tell NVDA where a description comes from, so there a title is said as any other description. When the focus moves
+  to a link (Tab), NVDA says its title again since 1.36: JAWS 2026 says it then, run live on a copy of Wikipedia
+  (issue 35): "Create account Link | You are encouraged to create an account and log in; however, it is not
+  mandatory".
 - The order. NVDA says a heading and a link in it text first (``speech._shouldSpeakContentFirst``), and after the text
   it names the innermost field first: "link" comes before "heading, level 3". When quick navigation reports a heading
   on a web page (H, Shift+H, 1 to 9, Move to in the Elements List: ``virtualBuffers.VirtualBufferQuickNavItem.report``)
   that holds a link from its start to its end, or is in one, NVDA now says the text, the link's states ("visited",
   "same page"), the heading and its level, then "link" and whatever NVDA says after it. A link that ends before the
   heading does is said where NVDA says it. K, Tab and the arrow keys say a link in a heading as NVDA does.
+- A description, in quick navigation. The tester pressed H on reddit.com (issue 32), and NVDA said "What Phones Work
+  Best On Visible?, visited, heading, level 2, link, Author: u/Pikachufourtytwo 2 hr. ago". JAWS said the same without
+  "Author: ...", which is the link's description (reddit's aria-describedby). NVDA says a description for the focus and
+  for quick navigation (Object Presentation, "Report object descriptions"). JAWS's virtual cursor says none: in its
+  Default.jcf, [VirtualCursorVerbosity] has DescribedBy=1|0|0 and ElementDescription=0|0|0, off at the Medium
+  verbosity JAWS comes with, and Alt+Insert+R (SayDescribedByText) reads a description when asked. So when quick
+  navigation moves to a link or a heading on a web page (H, K, 1 to 9, Move to in the Elements List), its description
+  isn't said, whatever it comes from. Tab says it, as JAWS says a link's description when the focus moves to it, and so
+  does NVDA+Tab on a link with the focus.
 
 None of these is what another part of the assistant changes (quickNavHeadings changes ``speech.getControlFieldSpeech``
 and ``browseMode.TextInfoQuickNavItem.report``), so each gives NVDA its own back when it is turned off. It works while
@@ -73,8 +84,10 @@ _lock = threading.RLock()
 #: What the assistant put in the place of NVDA's own: [(owner, attribute name, the assistant's, NVDA's)]. NVDA's is None
 #: where the class had none of its own and took it from the class it comes from.
 _replaced: list = []
-#: NVDA's OutputReason.QUICKNAV, Role.LINK, Role.HEADING, State.INTERNAL_LINK and DescriptionFrom.TOOLTIP, once known.
+#: NVDA's OutputReason.QUICKNAV and FOCUS, Role.LINK, Role.HEADING, State.INTERNAL_LINK and DescriptionFrom.TOOLTIP,
+#: once known.
 _quickNav = None
+_focus = None
 _linkRole = None
 _headingRole = None
 _samePage = None
@@ -85,6 +98,7 @@ _local = threading.local()
 #: What the log has named already.
 _loggedTitles: set = set()
 _loggedAddresses: set = set()
+_loggedDescriptions: set = set()
 
 
 def _log():
@@ -125,7 +139,7 @@ def isPlaceOnPage(url) -> bool:
 
 def register() -> None:
 	"""Have NVDA say links as JAWS says them, from now on."""
-	global _enabled, _quickNav, _linkRole, _headingRole, _samePage, _fromTitle
+	global _enabled, _quickNav, _focus, _linkRole, _headingRole, _samePage, _fromTitle
 	if _enabled:
 		return
 	_enabled = True
@@ -134,7 +148,7 @@ def register() -> None:
 		import textInfos
 		from controlTypes import DescriptionFrom, OutputReason, Role, State
 
-		_quickNav = OutputReason.QUICKNAV
+		_quickNav, _focus = OutputReason.QUICKNAV, OutputReason.FOCUS
 		_linkRole, _headingRole = Role.LINK, Role.HEADING
 		_samePage = State.INTERNAL_LINK
 		_fromTitle = DescriptionFrom.TOOLTIP
@@ -275,6 +289,44 @@ def withoutTitle(attrs):
 	return field
 
 
+# -- a description, in quick navigation ------------------------------------------------------------------------------
+
+
+def _hasDescription(attrs) -> bool:
+	"""Whether the field ``attrs`` is a link or a heading with a description NVDA would say (not its content)."""
+	return (
+		hasattr(attrs, "get")
+		and attrs.get("role") in (_linkRole, _headingRole)
+		and bool(attrs.get("description"))
+		and not attrs.get("descriptionIsContent", False)
+	)
+
+
+def withoutDescription(attrs):
+	"""The link or heading field ``attrs`` without its description, as JAWS's virtual cursor says it: a copy."""
+	if not _hasDescription(attrs):
+		return attrs
+	field = copy.copy(attrs)
+	description = field.pop("description", None)
+	_noteOnce(
+		_loggedDescriptions,
+		str(description),
+		f"jawsMigrator: quick navigation doesn't say a link's or heading's description, as JAWS's virtual cursor doesn't: {description!r}",
+	)
+	return field
+
+
+def asJaws(attrs, reason):
+	"""The field ``attrs`` as JAWS says it: for the focus (Tab), as NVDA says it, with a link's title and description;
+	in quick navigation, a link or heading without its description, whatever it comes from; otherwise a link without its
+	title."""
+	if reason is not None and reason == _focus:
+		return attrs
+	if reason is not None and reason == _quickNav:
+		return withoutDescription(attrs)
+	return withoutTitle(attrs)
+
+
 # -- the order after a heading ---------------------------------------------------------------------------------------
 
 
@@ -328,14 +380,15 @@ def _together(original, info, attrs, ancestorAttrs, fieldType, args, kwargs, ind
 	"""The speech of a heading and a link after their text, both at once: the link's states, the heading, then the rest
 	of the link. ``attrs`` is the inner of the two, and ``ancestorAttrs[index]`` the outer, which NVDA asks for next."""
 	outer = ancestorAttrs[index]
-	inner = list(original(info, withoutTitle(attrs), ancestorAttrs, fieldType, *args, **kwargs) or ())
-	outerSpeech = list(original(info, withoutTitle(outer), list(ancestorAttrs[:index]), fieldType, *args, **kwargs) or ())
+	reason = _argument(args, kwargs, "reason", 2)
+	inner = list(original(info, asJaws(attrs, reason), ancestorAttrs, fieldType, *args, **kwargs) or ())
+	outerSpeech = list(original(info, asJaws(outer, reason), list(ancestorAttrs[:index]), fieldType, *args, **kwargs) or ())
 	_local.said.add(id(outer))
 	if _role(attrs) == _linkRole:
 		link, linkSpeech, headingSpeech = attrs, inner, outerSpeech
 	else:
 		link, linkSpeech, headingSpeech = outer, outerSpeech, inner
-	states, rest = _splitAfterStates(linkSpeech, _stateWords(link, _argument(args, kwargs, "reason", 2)))
+	states, rest = _splitAfterStates(linkSpeech, _stateWords(link, reason))
 	if not headingSpeech or not rest:
 		# Nothing to put in between: said as NVDA says it.
 		return inner + outerSpeech
@@ -344,8 +397,8 @@ def _together(original, info, attrs, ancestorAttrs, fieldType, args, kwargs, ind
 
 
 def _fieldSpeechGuarded(original):
-	"""NVDA's speech for a field of a document's text: a link without its title, and, as quick navigation reports a
-	heading on a web page, the heading before "link"."""
+	"""NVDA's speech for a field of a document's text: a link without its title, in quick navigation a link or heading
+	without its description, and, as quick navigation reports a heading on a web page, the heading before "link"."""
 
 	@functools.wraps(original)
 	def getControlFieldSpeech(self, attrs, ancestorAttrs, fieldType, *args, **kwargs):
@@ -362,9 +415,9 @@ def _fieldSpeechGuarded(original):
 			except Exception:
 				_failure("could not say a heading before the link in it")
 		try:
-			field = withoutTitle(attrs)
+			field = asJaws(attrs, _argument(args, kwargs, "reason", 2))
 		except Exception:
-			_failure("could not leave a link's title out")
+			_failure("could not leave a link's title or description out")
 			field = attrs
 		return original(self, field, ancestorAttrs, fieldType, *args, **kwargs)
 

@@ -22,7 +22,9 @@ Every key is decided separately for each NVDA keyboard layout NVDA will use:
   becomes an ``InsertKey``, which the assistant runs itself while Insert is held.
 - Keystrokes NVDA already uses for the same command are left alone. A keystroke NVDA uses
   for something else is only taken over when asked; in browse mode, quick navigation
-  letters take over NVDA's letters when the JAWS letters are wanted.
+  letters take over NVDA's letters when the JAWS letters are wanted. NVDA's quit
+  (``jawsKeyMap.MOVED_TO_JAWS_KEYS``) gives up NVDA+Q to JAWS's Insert+Q whenever the plan
+  gives it JAWS's Insert+F4, so a JAWS user's Insert+Q says the program instead of quitting.
 - A common keystroke becomes a ``kb:`` gesture when it works the same in both NVDA layouts,
   and a ``kb(desktop):`` or ``kb(laptop):`` gesture when it only may in one.
 
@@ -70,12 +72,15 @@ class GestureBinding:
 	#: ``(module, class)`` whose own binding of this gesture must be removed (a ``None`` binding in the
 	#: user's gesture map) so this binding runs: classes NVDA asks before ``globalCommands``.
 	unbind: list = field(default_factory=list)
+	#: NVDA's commands in ``replaces`` that another JAWS keystroke of the plan runs: script -> that gesture.
+	moved: dict = field(default_factory=dict)
 
 	@property
 	def label(self) -> str:
 		text = f"{self.jawsKey}: {self.description}"
 		if self.replaces:
-			text += " (replaces NVDA's " + ", ".join(self.replaces) + ")"
+			names = [f"{name}, which {describeGesture(self.moved[name])} runs, as in JAWS" if name in self.moved else name for name in self.replaces]
+			text += " (replaces NVDA's " + ", ".join(names) + ")"
 		return text
 
 
@@ -365,8 +370,27 @@ def _userEntryWins(entry: _Bound, target: tuple) -> bool:
 	return True
 
 
-def _decide(target: tuple, entries: list, layout: str, overrideAllowed: bool) -> _Decision:
-	"""What to do with ``target`` in one NVDA keyboard layout, given what is bound there already."""
+def _nvdasOwn(entry: _Bound) -> bool:
+	"""Whether a binding is NVDA's own: its class's, or its language's gesture map."""
+	return entry.source in ("class", "locale")
+
+
+def _movable(decision: _Decision) -> bool:
+	"""Whether a keystroke is kept only for NVDA commands that give up their keystroke to JAWS's once they have JAWS's
+	own keystroke too (``jawsKeyMap.MOVED_TO_JAWS_KEYS``)."""
+	return (
+		decision.kind == "conflict"
+		and bool(decision.others)
+		and all(_nvdasOwn(entry) and (entry.module, entry.className, entry.script) in jawsKeyMap.MOVED_TO_JAWS_KEYS for entry in decision.others)
+	)
+
+
+def _decide(target: tuple, entries: list, layout: str, overrideAllowed: bool, moved=frozenset()) -> _Decision:
+	"""What to do with ``target`` in one NVDA keyboard layout, given what is bound there already.
+
+	``moved`` holds the ``(module, class, script)`` of NVDA's commands the plan gives another JAWS keystroke in this
+	layout; of ``jawsKeyMap.MOVED_TO_JAWS_KEYS``, their keystroke goes to ``target`` even when NVDA's are kept.
+	"""
 	here = [entry for entry in entries if entry.layout in (None, layout)]
 	# An inactive unbinding took the keystroke from an add-on, not from NVDA.
 	inactive = [entry for entry in here if entry.source == INACTIVE and entry.script is not None]
@@ -382,7 +406,9 @@ def _decide(target: tuple, entries: list, layout: str, overrideAllowed: bool) ->
 		return _Decision("bind")
 	# A running add-on's keystroke is still its own; NVDA's own under an inactive binding was taken from NVDA before.
 	if not overrideAllowed and not (inactive and all(entry.source != "addon" for entry in current)):
-		return _Decision("conflict", current)
+		conflict = _Decision("conflict", current)
+		if not (_movable(conflict) and all((entry.module, entry.className, entry.script) in moved for entry in current)):
+			return conflict
 	unbind = []
 	if tuple(target[:2]) == _GLOBAL_COMMANDS:
 		# NVDA asks browse mode documents and the focused control before globalCommands: remove their
@@ -561,11 +587,16 @@ def planKeys(
 
 	claimed: dict = {}
 	insertCandidates: list = []
+	reached: dict = {}
+	deferred: list = []
 	for record in records:
 		if isinstance(record, SkippedKey):
 			plan.skipped.append(record)
 		else:
-			_planLine(plan, record, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, insertCandidates)
+			_planLine(plan, record, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, insertCandidates, reached, deferred)
+	# NVDA's quit gives up NVDA+Q to JAWS's Insert+Q only where the plan gives it JAWS's Insert+F4 (or it has that already).
+	for line in deferred:
+		_planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, None, reached)
 	# Once every Caps Lock keystroke is planned, it is known what NVDA+key does for Caps Lock.
 	planned: set = set()
 	for line, name, winner in insertCandidates:
@@ -679,8 +710,15 @@ def _addonName(module: str) -> str:
 	return parts[1] if len(parts) > 1 and parts[0] == "globalPlugins" else str(module)
 
 
-def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, insertCandidates=None) -> None:
-	"""Add the bindings or the skipped entry for one keystroke."""
+def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scriptExists, overrideConflicts, claimed, insertCandidates=None, reached=None, deferred=None) -> None:
+	"""Add the bindings or the skipped entry for one keystroke.
+
+	``reached`` collects ``(NVDA layout, (module, class, script))`` -> gesture for the NVDA commands this plan gives a
+	JAWS keystroke, or finds one already running. A keystroke kept only for NVDA's quit (see ``_movable``) goes to
+	``deferred`` when given, to be planned again once every other keystroke is, with ``reached`` complete.
+	"""
+	if reached is None:
+		reached = {}
 
 	def skip(reason: str, kind: str):
 		plan.skipped.append(SkippedKey(line.key, line.script, line.section.name, reason, kind))
@@ -707,6 +745,18 @@ def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scri
 		if reason:
 			skip(reason, SKIP_DUPLICATE)
 		return
+	if deferred is not None and not (overrideConflicts or line.quickNav):
+		entries = _boundEntries(boundScripts, line.gesture)
+		for module, className, nvdaScript, _description in line.targets:
+			if scriptExists is None or scriptExists(module, className, nvdaScript):
+				if any(_movable(_decide((module, className, nvdaScript), entries, name, False)) for name in won):
+					# Whether NVDA's command has JAWS's keystroke for it is known once the others are planned.
+					deferred.append(line)
+					return
+
+	def movedIn(name: str) -> set:
+		return {command for layout, command in reached if layout == name}
+
 	entries = None
 	for module, className, nvdaScript, description in line.targets:
 		if scriptExists is not None and not scriptExists(module, className, nvdaScript):
@@ -716,7 +766,13 @@ def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scri
 			entries = _boundEntries(boundScripts, line.gesture)
 		target = (module, className, nvdaScript)
 		overrideAllowed = overrideConflicts or line.quickNav
-		decisions = {name: _decide(target, entries, name, overrideAllowed) for name in won}
+		decisions = {name: _decide(target, entries, name, overrideAllowed, movedIn(name)) for name in won}
+		for name in line.nvdaLayouts:
+			# NVDA runs the command on this keystroke already, in a layout NVDA uses or one this keystroke would decide.
+			if name in won or (name not in inUse and winners.get((line.group, name, line.keys)) is line):
+				decision = decisions.get(name) or _decide(target, entries, name, overrideAllowed, movedIn(name))
+				if decision.kind == "same":
+					reached.setdefault((name, target), line.gesture if line.prefix in ("kb", f"kb({name})") else f"kb({name}):{line.main}")
 		binds = [name for name in NVDA_LAYOUTS if name in decisions and decisions[name].kind == "bind"]
 		if binds and line.prefix == "kb":
 			# Keep a kb: gesture where the NVDA layout that won't be used would get just the same binding.
@@ -726,7 +782,7 @@ def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scri
 					continue
 				if other is not line and jawsKeyMap.normalizeScriptName(other.script) != jawsKeyMap.normalizeScriptName(line.script):
 					continue
-				decision = _decide(target, entries, name, overrideAllowed)
+				decision = _decide(target, entries, name, overrideAllowed, movedIn(name))
 				if decision.kind == "bind" and all(_sameBinding(decision, decisions[bound]) for bound in binds):
 					decisions[name] = decision
 					binds = [layout for layout in NVDA_LAYOUTS if layout in binds or layout == name]
@@ -743,6 +799,12 @@ def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scri
 					skip(f"{first.section} already uses this keystroke for {first.jawsScript}", SKIP_DUPLICATE)
 				continue
 			others = [entry for name in names for entry in decisions[name].others]
+			moved = {}
+			for name in names:
+				for entry in decisions[name].others:
+					command = (entry.module, entry.className, entry.script)
+					if command in jawsKeyMap.MOVED_TO_JAWS_KEYS and (name, command) in reached:
+						moved.setdefault(entry.script, reached[(name, command)])
 			binding = GestureBinding(
 				gesture=gesture,
 				module=module,
@@ -754,10 +816,12 @@ def _planLine(plan, line, winners, inUse, capsLock, deciding, boundScripts, scri
 				section=line.section.name,
 				replaces=sorted({entry.script for entry in others if entry.script}),
 				unbind=sorted({location for name in names for location in decisions[name].unbind}),
+				moved=moved,
 			)
 			plan.bindings.append(binding)
 			for name in names:
 				claimed.setdefault(slot, {})[name] = binding
+				reached.setdefault((name, target), gesture)
 		kept = [name for name in won if decisions[name].kind in ("conflict", "blocked")]
 		if kept:
 			skip(_keptReason(decisions, kept, qualify=len(kept) < len(layouts)), SKIP_CONFLICT)
@@ -786,11 +850,15 @@ def applicationKeyMaps(files: list) -> dict:
 
 
 def describeJawsKeystroke(gesture, jawsBindings: dict) -> list:
-	"""JAWS bindings matching an NVDA gesture's identifiers: ``[(jawsKey, script, section), ...]``."""
+	"""JAWS bindings matching an NVDA gesture's identifiers: ``[(jawsKey, script, section), ...]``, one for each JAWS
+	script: JAWS binds many twice, as JAWSKey+V and Insert+V, or LeftArrow and ExtendedLeftArrow, and the keystroke
+	helper said such a command twice (issue 33)."""
 	found = []
+	scripts = set()
 	for identifier in getattr(gesture, "normalizedIdentifiers", ()) or ():
 		for entry in jawsBindings.get(identifier.lower(), ()):
-			if entry not in found:
+			if entry[1].lower() not in scripts:
+				scripts.add(entry[1].lower())
 				found.append(entry)
 	return found
 
@@ -802,6 +870,47 @@ def buildReverseMap(jkm: jawsFiles.IniFile, keyboardLayout: str, layouts=None) -
 	A layout's own keystrokes come first, the layout in use first, because they replace the common ones.
 	"""
 	result: dict = {}
+	for section, kind in _keystrokeSections(jkm, keyboardLayout, layouts):
+		for key, script in section.items():
+			gesture, _reason = jawsKeyMap._convertKey(key, kind)
+			if gesture is None:
+				continue
+			for variant in _gestureVariants(gesture):
+				result.setdefault(variant, [])
+				entry = (key, script, section.name)
+				if entry not in result[variant]:
+					result[variant].append(entry)
+	return result
+
+
+def layerStarts(jkm: jawsFiles.IniFile, keyboardLayout: str, layouts=None) -> dict:
+	"""``{normalized NVDA gesture: JAWS key}`` for the keystrokes that start JAWS's layered keystrokes, such as Insert+Space.
+
+	JAWS's key map has no entry for Insert+Space itself, only for the keys pressed after it (``Insert+Space&H``), so
+	without these the JAWS keystroke helper said Insert+Space does nothing special in JAWS (issue 33).
+	The sections are buildReverseMap's. Where JAWS has the same keys as JAWSKey+Space and Insert+Space, the key is named
+	as JAWS's help names it, Insert+Space.
+	"""
+	result: dict = {}
+	for section, kind in _keystrokeSections(jkm, keyboardLayout, layouts):
+		for key, _script in section.items():
+			first, layered, _rest = key.partition("&")
+			if not layered:
+				continue
+			gesture, _reason = jawsKeyMap._convertKey(first, kind)
+			if gesture is None:
+				continue
+			first = first.strip()
+			for variant in _gestureVariants(gesture):
+				known = result.get(variant)
+				if known is None or (known.lower().startswith("jawskey") and not first.lower().startswith("jawskey")):
+					result[variant] = first
+	return result
+
+
+def _keystrokeSections(jkm: jawsFiles.IniFile, keyboardLayout: str, layouts=None):
+	"""``(section, kind)`` for the sections of keystrokes buildReverseMap reads, in its order; kind is ``desktop``,
+	``laptop`` or ``common``, the layout jawsKeyMap._convertKey takes."""
 	current = layoutId(keyboardLayout)
 	wanted = {current} if layouts is None else {layoutId(name) for name in layouts} | {current}
 	sections = _sectionsInOrder(jkm, current)
@@ -814,16 +923,7 @@ def buildReverseMap(jkm: jawsFiles.IniFile, keyboardLayout: str, layouts=None) -
 			kind = _sectionKind(section.name)
 			if kind is None or kind in ("desktop", "laptop"):
 				continue
-		for key, script in section.items():
-			gesture, _reason = jawsKeyMap._convertKey(key, kind if kind in ("desktop", "laptop") else "common")
-			if gesture is None:
-				continue
-			for variant in _gestureVariants(gesture):
-				result.setdefault(variant, [])
-				entry = (key, script, section.name)
-				if entry not in result[variant]:
-					result[variant].append(entry)
-	return result
+		yield section, kind if kind in ("desktop", "laptop") else "common"
 
 
 def _gestureVariants(gesture: str) -> list[str]:

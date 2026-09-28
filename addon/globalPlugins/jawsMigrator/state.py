@@ -127,8 +127,11 @@ DEFAULTS = {
 	"quickProfileSwitches": True,
 	#: A link on a web page is said as JAWS says it: "same page" only for a link to a place on the page (a "#" in its
 	#: address), without the title NVDA says as its description, and, when quick navigation moves to a heading, "link"
-	#: after the heading and its level (see linkSpeech).
+	#: after the heading and its level; quick navigation says no description of a link or heading (see linkSpeech).
 	"sayLinksAsJaws": True,
+	#: Alt+Left and Alt+Right in Edge, Chrome and Firefox say "Back" and "Forward" and leave focus mode, as JAWS's GoBack
+	#: and GoForward do, and a page that comes back without loading is read at the caret (see backForward).
+	"backForwardAsJaws": True,
 	#: An edit field on a web page is said as JAWS says it: an empty one as "edit, blank, placeholder" and its
 	#: placeholder, no "multi line" for any edit field, and nothing again of what browse mode's cursor was in when the
 	#: focus moves there (see formFields).

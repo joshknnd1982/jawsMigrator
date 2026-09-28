@@ -25,6 +25,12 @@ and 1.31 kept such a keystroke as yours all the same. The tester had given Inser
 Version and turned that add-on off, so the key still opened NVDA's speech settings (issue 29). So once after the update to
 1.32, the commands those versions planned (RECHECKED) are planned again, and a keystroke is added only where such a
 binding still holds it. What else they left out stays as they decided, and may since be yours.
+
+A JAWS command can also be listed here when the assistant learns to plan its keystroke differently. Up to 1.35, JAWS's
+Insert+Q (ScriptFileName, the program you are in) was kept for NVDA's quit unless the migration could take NVDA's
+keystrokes, while the same migration gave NVDA's quit JAWS's Insert+F4. So Insert+Q quit NVDA, at once when JAWS's exit
+confirmation was off, and never said the program (issue 34). From 1.36 NVDA's quit gives up Insert+Q wherever it has
+Insert+F4 (keyPlan, jawsKeyMap.MOVED_TO_JAWS_KEYS), so ScriptFileName is planned again once after the update.
 """
 
 from __future__ import annotations
@@ -33,13 +39,16 @@ import threading
 
 from . import debugLog, jawsKeyMap, keyPlan, nvdaEnv
 
-#: The JAWS commands the assistant learned since its first migrations: their name (lower case) -> the version that
-#: brought them, and what NVDA says their keystroke now does.
+#: The JAWS commands the assistant learned since its first migrations, or learned to plan anew: their name (lower case)
+#: -> the version that brought them, and what NVDA says their keystroke now does.
 NEW_SCRIPTS = {
 	"sayappversion": ("1.30", "the name and version of the program you are in; twice, the version details"),
 	"showversiondetails": ("1.30", "the version details"),
 	"putversiondetailsonclipboard": ("1.30", "copy the version details"),
+	"scriptfilename": ("1.36", "the program you are in, as JAWS's Insert+Q"),
 }
+#: What NVDA's commands in jawsKeyMap.MOVED_TO_JAWS_KEYS do, for saying where a keystroke that took theirs left them.
+_MOVED_WORDS = {"quit": "exits NVDA"}
 #: The JAWS commands of NEW_SCRIPTS that are done: their keystrokes added, or none to add (state.json).
 STATE_KEY = "newKeysAdded"
 #: The commands versions 1.30 and 1.31 planned while an inactive binding still kept a keystroke (see the module's help).
@@ -139,6 +148,8 @@ def announcement(bindings: list) -> str:
 	order = list(NEW_SCRIPTS)
 	for binding in sorted(bindings, key=lambda binding: order.index(jawsKeyMap.normalizeScriptName(binding.jawsScript))):
 		what = NEW_SCRIPTS.get(jawsKeyMap.normalizeScriptName(binding.jawsScript), ("", binding.description))[1]
+		for script, where in sorted((getattr(binding, "moved", None) or {}).items()):
+			what += f"; it no longer {_MOVED_WORDS.get(script, 'runs ' + script)}: {keyPlan.describeGesture(where)} does"
 		parts.append(f"{keyPlan.describeGesture(binding.gesture)}, {what}")
 	count = len(bindings)
 	return f"JAWS Migration Assistant: {count} more JAWS {'keystroke works' if count == 1 else 'keystrokes work'} in NVDA. " + ". ".join(parts) + "."
@@ -213,6 +224,8 @@ def _start(keymapFiles, announce, finished) -> bool:
 		added, failed = nvdaApply.addGestures(plan.bindings)
 		for binding in plan.bindings:
 			text = f"{binding.gesture} -> {binding.module}.{binding.className}.{binding.script} (JAWS {binding.jawsKey}={binding.jawsScript}, [{binding.section}])"
+			for script, where in sorted(binding.moved.items()):
+				text += f"; NVDA's {script} stays on {where}, JAWS's keystroke for it"
 			if passed.get(id(binding)):
 				text += f"; gestures.ini also gives it to {', '.join(passed[id(binding)])}, which NVDA passes over: its add-on is off or removed"
 			debugLog.note(text)

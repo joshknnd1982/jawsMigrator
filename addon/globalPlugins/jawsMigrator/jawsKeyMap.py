@@ -16,6 +16,8 @@ Contents:
   of a functionally equivalent NVDA script. ``COMMAND_KEY_TARGETS`` replaces a quick navigation target
   for keystrokes that are not quick navigation keys. ``ADDITIONAL_TARGETS`` can list extra classes for
   a command. ``getNvdaTargets()`` looks a JAWS script up in all of them.
+- ``MOVED_TO_JAWS_KEYS``: NVDA commands whose keystroke a JAWS keystroke takes once the command has JAWS's own
+  keystroke for it (NVDA's quit: Insert+Q says the program, Insert+F4 quits).
 - ``SENDS_KEYSTROKE_CLASSES`` / ``SENDS_KEYSTROKE_SCRIPTS``: NVDA scripts that pass the pressed
   keystroke on to the application. No map may point at them; ``getNvdaTargets()`` drops them.
 - ``PASSTHROUGH_SCRIPTS`` / ``isPassThroughBinding()``: JAWS scripts that only pass a standard Windows
@@ -1190,6 +1192,12 @@ COMMAND_KEY_TARGETS = {
 # NVDA's editable text versions of commands (editableText.EditableText's caret_nextSentence...) are not
 # usable here: they send the pressed keystroke on to the application (see SENDS_KEYSTROKE_CLASSES).
 ADDITIONAL_TARGETS = {}
+
+# NVDA commands whose own keystroke a JAWS keystroke takes even when NVDA's keystrokes are kept, once the same plan gives
+# the command a JAWS keystroke of its own in that NVDA keyboard layout (see keyPlan.planKeys). NVDA's quit is NVDA+Q,
+# where JAWS's Insert+Q (ScriptFileName) says the program you are in; JAWS quits with Insert+F4 (ShutDownJAWS), which
+# NVDA doesn't use. Kept for NVDA, Insert+Q quit NVDA, at once when JAWS's exit confirmation was off (issue 34).
+MOVED_TO_JAWS_KEYS = frozenset({("globalCommands", "GlobalCommands", "quit")})
 
 # NVDA scripts that pass the pressed keystroke on to the application (gesture.send()), at least in some
 # cases. Bound to a JAWS keystroke they would send that keystroke, NVDA key included: in an edit field
