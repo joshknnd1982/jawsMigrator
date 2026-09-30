@@ -76,6 +76,16 @@ JAWS 2026's own Outlook.jcf has on, so a JAWS as it comes reads a message you op
 turns it off. A migration now takes it into the first setting, the user's Outlook.jcf over JAWS's own, as JAWS reads it
 (settingsMap.mapOutlookSettings), so NVDA reads a message as it opens where JAWS did, and not where it didn't.
 
+Then the tester checked "Messages Automatically Read" in QuickSettings (issue 40), and the message he opened was not read.
+His log: the setting was saved and the hook above went in, and the message opened five seconds later with Outlook First Line
+Silence 1.0.30 "silencing event_treeInterceptor_gainFocus", the same lines as before the setting was on, and no line from the
+assistant. That add-on also drops everything said for 1.5 seconds after such an event (its trailing gate, opened by
+``_hookDocumentEvent`` and closed by ``_closeGate``, which a key press calls), so the start of Say All would be dropped
+too. So now: ``readMessage`` opens that gate first (``letSpeechThrough``); ``readWhenFocused``, called from the plugin's
+gainFocus event, reads a message that took the focus and wasn't read as browse mode came into it (other add-ons change the
+same NVDA event, and the log could not say why the first way was not reached), once for each message (``READ_MARK``); and
+the debug log says once for each message what became of it (``_noteOpening``).
+
 Since 1.49 a link with no text in a message you read is named as JAWS names it, and not said as "link" alone (issue 46; see
 unlabeledLinks): NVDA's field for the link gets a name as its content, and NVDA's Elements List labels it with that name in
 the place of "Unlabeled". It works with the same setting as the rest (``STATE_KEY``).
@@ -86,6 +96,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import re
+import sys
 import threading
 
 #: The assistant's setting (state.json) that turns saying messages as JAWS does on or off: links, lists and headings.
@@ -110,6 +121,16 @@ ROLE_TEXT = "roleText"
 ROLE_TEXT_BRAILLE = "roleTextBraille"
 #: NVDA's browse mode event for a document it comes into, where it reads a document that has just opened.
 GAIN_FOCUS = "event_treeInterceptor_gainFocus"
+#: Set on a message's browse mode once the assistant has read it (or seen it, with reading turned off), so it is read once;
+#: and once the debug log has said what became of it.
+READ_MARK = "_jawsMigratorMessageRead"
+NOTED_MARK = "_jawsMigratorMessageNoted"
+#: Outlook First Line Silence, the add-on the tester runs: its module, and its function that lets speech through again
+#: after it dropped the speech of a message opening (it does that itself when a key is pressed).
+SILENCE_MODULE = "globalPlugins.outlookFirstLineSilence"
+SILENCE_OPEN_GATE = "_closeGate"
+#: How long, in milliseconds, after a message took the focus it is read, when it wasn't as browse mode came into it.
+READ_DELAY = 150
 #: NVDA's text of a Word document read through UI Automation: its formatting for a range, and its field for an element.
 TEXT_INFO = "WordDocumentTextInfo"
 FORMAT_AT_RANGE = "_getFormatFieldAtRange"
@@ -320,16 +341,22 @@ def inOutlook(thing) -> bool:
 # -- Reading a message from the top when it opens -----------------------------------------------------------------
 
 
-def isOpeningMessage(treeInterceptor) -> bool:
-	"""Whether NVDA's browse mode ``treeInterceptor`` is an Outlook message you read, coming into it for the first time.
+def isMessageYouReadIn(treeInterceptor) -> bool:
+	"""Whether NVDA's browse mode ``treeInterceptor`` is an Outlook message you read.
 
 	NVDA reads an Outlook message in browse mode only when it is one you read (appModules.outlook,
 	``shouldCreateTreeInterceptor`` is ``isReadonlyViewer``); a message you write has no browse mode.
 	"""
-	if getattr(treeInterceptor, "_hadFirstGainFocus", True):
-		return False
 	root = getattr(treeInterceptor, "rootNVDAObject", None)
 	return inOutlook(root) and getattr(root, "isReadonlyViewer", False) is True
+
+
+def isOpeningMessage(treeInterceptor) -> bool:
+	"""Whether NVDA's browse mode ``treeInterceptor`` is an Outlook message you read, coming into it for the first time,
+	and not one the assistant has read already."""
+	if getattr(treeInterceptor, "_hadFirstGainFocus", True) or getattr(treeInterceptor, READ_MARK, False):
+		return False
+	return isMessageYouReadIn(treeInterceptor)
 
 
 def _argument(args: tuple, kwargs: dict, name: str, index: int, default=None):
@@ -370,6 +397,22 @@ def _firstLineHeldBack(treeInterceptor, held: list):
 			speech.speakTextInfo = current
 
 
+def letSpeechThrough() -> bool:
+	"""Open the gate of Outlook First Line Silence, if the tester runs it, so what is said next is heard. True when it was.
+
+	That add-on drops what NVDA says as a message opens, to keep the window, "document" and the first line quiet as JAWS
+	does, and for 1.5 seconds after the message opened it drops everything, on purpose. Reading the message from the top
+	is said right after, so the add-on dropped the start of it (issue 40: the tester turned "Messages Automatically Read"
+	on in Outlook, and a message he opened was not read). JAWS says nothing of the window and the first line, then reads
+	the message; the add-on lets speech through again when a key is pressed, and so does this."""
+	module = sys.modules.get(SILENCE_MODULE)
+	openGate = getattr(module, SILENCE_OPEN_GATE, None)
+	if not callable(openGate):
+		return False
+	openGate()
+	return True
+
+
 def readMessage(treeInterceptor) -> bool:
 	"""Read the message from the caret, as NVDA's "Automatic Say All on page load" does. True when it is read."""
 	from speech import sayAll
@@ -377,11 +420,28 @@ def readMessage(treeInterceptor) -> bool:
 	if getattr(treeInterceptor, "passThrough", False):
 		# Focus mode came on as the message opened: NVDA reads nothing from the caret then.
 		return False
+	# A message is read once, whichever way it is found opening (see readWhenFocused).
+	setattr(treeInterceptor, READ_MARK, True)
+	released = letSpeechThrough()
 	sayAll.SayAllHandler.readText(sayAll.CURSOR.CARET)
 	_log().debug(
-		"jawsMigrator: an Outlook message you opened is read from the top, as JAWS reads it, where NVDA said its first line",
+		"jawsMigrator: an Outlook message you opened is read from the top, as JAWS reads it, where NVDA said its first line"
+		+ (" (Outlook First Line Silence's gate opened first, which would have dropped it)" if released else ""),
 	)
 	return True
+
+
+def _noteOpening(treeInterceptor, opening: bool) -> None:
+	"""Note in the debug log, once for each message, what became of it as browse mode came into it, so a message that isn't
+	read says why."""
+	if getattr(treeInterceptor, NOTED_MARK, False) or not isMessageYouReadIn(treeInterceptor):
+		return
+	setattr(treeInterceptor, NOTED_MARK, True)
+	_log().debug(
+		"jawsMigrator: browse mode came into an Outlook message you read: "
+		f"first time {not getattr(treeInterceptor, '_hadFirstGainFocus', True)}, read already {bool(getattr(treeInterceptor, READ_MARK, False))}, "
+		f"{'read from the top' if opening else 'not read from the top'}",
+	)
 
 
 def _gainFocusGuarded(original):
@@ -393,6 +453,7 @@ def _gainFocusGuarded(original):
 			return original(self, *args, **kwargs)
 		try:
 			opening = isOpeningMessage(self)
+			_noteOpening(self, opening)
 		except Exception:
 			_failure("could not tell whether an Outlook message had just opened, so NVDA says its first line")
 			opening = False
@@ -415,9 +476,63 @@ def _gainFocusGuarded(original):
 				import speech
 
 				speech.speakTextInfo(held[0], reason=_caret, unit=_line)
+		else:
+			# NVDA read the message itself ("Automatic Say All on page load"), or something other than speakTextInfo took its
+			# first line. Whichever it was, readWhenFocused looks once more when the message takes the focus.
+			_log().debug("jawsMigrator: NVDA did not say the first line of the Outlook message through speakTextInfo, so the focus event looks once more")
 		return result
 
 	return event_treeInterceptor_gainFocus
+
+
+def readWhenFocused(obj) -> bool:
+	"""Called from the gainFocus event, after NVDA and the other add-ons have handled it: read an Outlook message you read
+	that has taken the focus for the first time and has not been read, as the message opens. True when it will be.
+
+	This is for when NVDA's browse mode coming into the message (``event_treeInterceptor_gainFocus``) was not where
+	the assistant saw it: other add-ons change that event too, and in the tester's setup it was never reached (issue 40).
+	A message is read once, so when the first way read it, this does nothing. A message that took the focus while reading
+	on opening was turned off is noted as seen, so it is not read when it is turned on and you come back to it."""
+	if not inOutlook(obj):
+		return False
+	treeInterceptor = getattr(obj, "treeInterceptor", None)
+	if treeInterceptor is None or getattr(treeInterceptor, READ_MARK, False) or not isMessageYouReadIn(treeInterceptor):
+		return False
+	if not _reading:
+		setattr(treeInterceptor, READ_MARK, True)
+		return False
+	if getattr(treeInterceptor, "passThrough", False):
+		return False
+	setattr(treeInterceptor, READ_MARK, True)
+	from speech import sayAll
+
+	if sayAll.SayAllHandler.isRunning():
+		# NVDA reads it already ("Automatic Say All on page load").
+		return False
+	_later(functools.partial(_readFocusedMessage, treeInterceptor))
+	return True
+
+
+def _later(function) -> None:
+	"""Run ``function`` once the events of the message taking the focus are done."""
+	try:
+		import core
+
+		core.callLater(READ_DELAY, function)
+	except Exception:
+		function()
+
+
+def _readFocusedMessage(treeInterceptor) -> None:
+	import api
+
+	try:
+		if getattr(api.getFocusObject(), "treeInterceptor", None) is not treeInterceptor:
+			_log().debug("jawsMigrator: the focus left the Outlook message before it could be read from the top")
+			return
+		readMessage(treeInterceptor)
+	except Exception:
+		_failure("could not read an Outlook message from the top when it took the focus")
 
 
 # -- "send mail link" -------------------------------------------------------------------------------------------

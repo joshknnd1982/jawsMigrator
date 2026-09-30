@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.49
+- Version: 1.50
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.50](#whats-new-in-150)
 - [What's new in 1.49](#whats-new-in-149)
 - [What's new in 1.48](#whats-new-in-148)
 - [What's new in 1.46](#whats-new-in-146)
@@ -101,10 +102,21 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.49.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.50.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.50
+
+From the tester's answer on issue 40, "Pressing insert V doesn't bring up quick settings for that program", about the QuickSettings of 1.42, with NVDA's log from NVDA 2026.2, the assistant 1.42, Outlook First Line Silence 1.0.30 and classic Outlook 2024: "This doesn't work. A few observations. I changed it to automatically read a message it didn't. Also with Jaws pressing spacebar on something will toggle that choice. I had to tab in NVDA's implementation."
+
+- **Space in QuickSettings' tree changes the setting you are on, as it does in JAWS's tree.** A check box is checked or not checked; a setting with several choices goes to the next choice, and from the last to the first. NVDA says what it is now, and the row says it too, so you no longer have to Tab to the check box or the list first (you still can). The log shows what 1.42 did: Space on "Messages Automatically Read: not checked" did nothing, and so did Down Arrow, Enter and Right Arrow after it, until the tester pressed Tab to the check box. Space with Shift or Control, and Space on a category, are left to the tree. The tester's word is for the check box. I haven't watched JAWS go to the next choice with Space on a setting with several choices, so if JAWS does something else there, please say what.
+- **A message you open is read from the top when "Messages Automatically Read" is checked, also where Outlook First Line Silence is installed.** The log shows the choice was saved (the assistant's setting went on at 12:10:39, and its part of NVDA's browse mode went in), but the message the tester opened five seconds later was not read, and the assistant's line for a message it reads is not in the log. What the log does show is Outlook First Line Silence 1.0.30 silencing the message as it opened, as it does every time, with or without the setting. Its code (read from version 1.0.30) drops everything NVDA says for 1.5 seconds after a message opened, on purpose, so that the window, "document" and the first line stay quiet as in JAWS. Reading a message from the top starts right then, so the start of it, and with it the lines that keep Say All going, would be dropped. Three changes:
+  - Before the assistant reads the message, it lets that add-on's speech through, as a key press does in that add-on. (Without that add-on, nothing changes.)
+  - A message that took the focus and was not read as NVDA's browse mode came into it is read when it takes the focus, a moment after NVDA and the other add-ons are done with the event. The first way worked in NVDA's own code; other add-ons change the same NVDA code, and the log could not tell me why it was not reached in the tester's NVDA. A message is read once, the first time it takes the focus, never when you come back to it, and never one that was already open when you turned the setting on.
+  - NVDA's debug log now says, once for each message you read in Outlook, what became of it: 'browse mode came into an Outlook message you read: first time True, read already False, read from the top'. If a message still is not read, press NVDA+Shift+J, then L, and attach the zip: that line says which condition stopped it.
+- **Tested with NVDA 2026.2's own browse mode code, and Outlook First Line Silence's gate as its code and the tester's log show it, not inside NVDA and not in classic Outlook.** Classic Outlook isn't installed on the computer this was made on. The Space key was tested with real wx windows.
 
 ## What's new in 1.49
 
@@ -921,8 +933,8 @@ JAWS's Insert+V (Caps Lock+V in the Laptop layout) opens QuickSettings, the sett
 The window is called "QuickSettings - " and JAWS's name for the program, from JAWS's ConfigNames.ini: notepad, msedge, Outlook, Outlook Modern (new Outlook, olk.exe). Without JAWS on the computer, it is the program's own name. It has JAWS's parts:
 
 - **Search** filters the tree to the settings that have what you typed in their name.
-- **Settings** is a tree with a row for each setting inside its category, JAWS's order and JAWS's words. Each row says what the setting is now, as "Progress Bars: Spoken" or "Use Sound: checked", so arrowing through them says it. Categories can be folded with Left Arrow and opened with Right Arrow.
-- **The setting you are on**, after the tree: a check box, or a list with JAWS's choices.
+- **Settings** is a tree with a row for each setting inside its category, JAWS's order and JAWS's words. Each row says what the setting is now, as "Progress Bars: Spoken" or "Use Sound: checked", so arrowing through them says it. Categories can be folded with Left Arrow and opened with Right Arrow. **Space** changes the setting you are on, as in JAWS (1.50): it checks or unchecks a check box, and goes to the next choice of a list, from the last to the first; NVDA says what it is now.
+- **The setting you are on**, after the tree (Tab): a check box, or a list with JAWS's choices.
 - **What this does in NVDA** says what the choice you are on sets in NVDA, in NVDA's words: "Punctuation level: all".
 - **Apply** saves and stays, **OK** saves and closes, **Cancel** (and Escape) closes without saving. Only what you changed is saved.
 

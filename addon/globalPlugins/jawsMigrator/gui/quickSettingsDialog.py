@@ -7,6 +7,9 @@
 As JAWS's window has it: a Search box, a tree called Settings with a row for each setting, the control of the setting you
 are on (a check box or a list) and what it does, and the buttons Apply, OK and Cancel. What it holds and saves is in
 quickSettings.
+
+As in JAWS's tree, Space on a setting changes it without a Tab to its control: a check box is checked or not, a list goes to
+the next choice (issue 40).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ class QuickSettingsDialog(wx.Dialog):
 		self.search.Bind(wx.EVT_TEXT, self._onSearch)
 		self.tree = labeled(self, sizer, "S&ettings:", wx.TreeCtrl, style=wx.TR_HAS_BUTTONS | wx.TR_HIDE_ROOT | wx.TR_SINGLE, size=(TEXT_SIZE[0], 260), proportion=1)
 		self.tree.Bind(wx.EVT_TREE_SEL_CHANGED, self._onSelect)
+		self.tree.Bind(wx.EVT_KEY_DOWN, self._onTreeKey)
 		self.check = wx.CheckBox(self, label="")
 		self.check.Bind(wx.EVT_CHECKBOX, self._onChecked)
 		sizer.Add(self.check, flag=wx.TOP, border=8)
@@ -141,25 +145,51 @@ class QuickSettingsDialog(wx.Dialog):
 		if item is None:
 			if category is not None:
 				count = len(quickSettings.items((category,)))
-				text = f"{category.name}: {count} setting{'' if count == 1 else 's'}. Arrow down to a setting, then Tab to change it."
+				text = f"{category.name}: {count} setting{'' if count == 1 else 's'}. Arrow down to a setting, then press Space to change it, or Tab to its control."
 			else:
 				text = "No setting has that in its name."
 			self.effect.SetValue(text)
 		else:
-			value = self.session.chosen.get(item.id)
+			self._fillControl(item)
 			if item.isCheckBox:
-				self.check.SetLabel(item.name)
-				self.check.SetValue(value == "1")
 				self._sizer.Show(self.check, True)
 			else:
-				self.listLabel.SetLabel(f"{item.name}:")
-				self.list.Set([choice.label for choice in item.choices])
-				index = next((number for number, choice in enumerate(item.choices) if choice.value == value), wx.NOT_FOUND)
-				self.list.SetSelection(index)
 				self._sizer.Show(self.listLabel, True)
 				self._sizer.Show(self.list, True)
 			self.effect.SetValue(self.session.effect(item))
 		self.Layout()
+
+	def _fillControl(self, item) -> None:
+		"""Have the check box or the list say what is chosen for ``item`` now."""
+		value = self.session.chosen.get(item.id)
+		if item.isCheckBox:
+			self.check.SetLabel(item.name)
+			self.check.SetValue(value == "1")
+		else:
+			self.listLabel.SetLabel(f"{item.name}:")
+			self.list.Set([choice.label for choice in item.choices])
+			index = next((number for number, choice in enumerate(item.choices) if choice.value == value), wx.NOT_FOUND)
+			self.list.SetSelection(index)
+
+	def _onTreeKey(self, event) -> None:
+		"""Space on a setting in the tree changes it, as in JAWS's tree, where it toggles a check box with no Tab to it
+		first (issue 40): a check box is checked or not, and a setting with several choices goes to the next, from the
+		last round to the first."""
+		item = self.current
+		if event.GetKeyCode() != wx.WXK_SPACE or event.HasAnyModifiers() or item is None:
+			event.Skip()
+			return
+		if item.isCheckBox:
+			value = "0" if self.session.chosen.get(item.id) == "1" else "1"
+		else:
+			values = [choice.value for choice in item.choices]
+			chosen = self.session.chosen.get(item.id)
+			value = values[(values.index(chosen) + 1) % len(values)] if chosen in values else values[0]
+		self._chosen(value)
+		self._fillControl(item)
+		# The row's new text is what a screen reader would say as the row changes; say the new choice too, as the check
+		# box does when you press Space on it.
+		speak(self.session.valueText(item))
 
 	def _chosen(self, value: str) -> None:
 		item = self.current

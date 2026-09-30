@@ -1738,6 +1738,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				formFields.afterFocus(heard)
 		if changeRepeats is not None:
 			changeRepeats.afterFocus(obj, activation)
+		try:
+			from . import outlookMessages
+
+			# An Outlook message that took the focus and wasn't read as browse mode came into it (issue 40): read now.
+			outlookMessages.readWhenFocused(obj)
+		except Exception:
+			debugLog.error("could not look at whether an Outlook message should be read from the top")
 		# NVDA is starting: "NVDA is ready." is said after what NVDA has just queued for the focus, before the curtain (see
 		# startMessage).
 		startMessage = getattr(self, "_startMessage", None)
