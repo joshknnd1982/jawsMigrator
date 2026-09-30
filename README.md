@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.45
+- Version: 1.46
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.46](#whats-new-in-146)
 - [What's new in 1.45](#whats-new-in-145)
 - [What's new in 1.44](#whats-new-in-144)
 - [What's new in 1.43](#whats-new-in-143)
@@ -98,10 +99,21 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.45.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.46.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.46
+
+From the tester's issue 47, "address picker isn't accessible". The tester then wrote, on the issue about NVDA's start-up message, that the address problem was not fixed, with a log from version 1.43: this is the first version that has the fix, which 1.43, 1.44 and 1.45 don't.
+
+- **The suggestions an edit field on a web page shows can be reached with Down Arrow and chosen with Enter.** On [visible.com's home internet page](https://www.visible.com/shop/home-internet) the tester typed an address and couldn't get to the suggested addresses with NVDA. The page shows them in a list after the field, and its script does three things: Down Arrow in the field moves the focus to the first suggestion; the field closes the list 150 milliseconds after it loses the focus, so the suggestion that just got the focus is hidden and the focus falls back to the page; and a suggestion is chosen when the mouse button goes down on it, not when it is clicked. NVDA 2026.2 moved the focus to a suggestion when browse mode's cursor came to it, and again when you pressed Enter on it, so the list closed. Where it did press one, it sent a click alone, which chooses nothing. Now, for the suggestions of the edit field that has the focus (a field of one line that says it has autocomplete and isn't a combo box):
+  - Down Arrow in the field goes on in browse mode to the first suggestion, and NVDA says it, as JAWS's Auto Forms Mode arrows past a field of one line. The key isn't sent to the page. Down Arrow and Up Arrow move from one suggestion to the next.
+  - Browse mode's cursor on a suggestion leaves the focus in the field, so the list stays open. That is also so after Escape, then Down Arrow.
+  - Enter or Space on a suggestion presses it with the mouse, as NVDA does for a control it can't activate any other way: the pointer goes to it, presses and lets go, and goes back. NVDA says the address and "selected".
+  - A combo box, and a field that says it is expanded or collapsed, keep NVDA's own way, as its page handles its keys. To have NVDA do as it did for all of them, uncheck 'Reach the suggestions an edit field on a web page shows with Down Arrow, and choose one with Enter' in NVDA's Settings, JAWS Migration Assistant.
+- **What was checked.** The page's script was read and run in Chromium: Down Arrow moved the focus to the first suggestion and the list closed within 150 milliseconds; a click on a suggestion did nothing, and the mouse button going down on it filled the field. A real mouse press on a suggestion, the press NVDA sends, filled the field, left the focus in it and closed the list, and its mouse-up and click landed on nothing that does anything. The tester's 1.43 log shows the same in NVDA itself, twice: in focus mode, Down Arrow in the field made NVDA say "Address suggestions, list, 241 W PINE ST, 1 of 20", and then the field had the focus again and the list was gone. The tests run NVDA 2026.2's own browse mode code, word for word, against a copy of that script, with the assistant on and off. It hasn't been tried in a running NVDA on the live page yet, so please try it on visible.com and say what NVDA says.
 
 ## What's new in 1.45
 

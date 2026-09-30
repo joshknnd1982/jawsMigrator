@@ -112,6 +112,10 @@ DEFAULTS = {
 	#: An arrow key at the start or end of an edit field on a web page stays in the field, in focus mode, as in JAWS's Auto
 	#: Forms Mode; only Up or Down Arrow in a field of one line goes on in browse mode (see fieldEdges).
 	"stayInFieldsAtTheirEdges": True,
+	#: The suggestions an edit field on a web page shows, such as the addresses visible.com offers, can be reached with Down
+	#: Arrow and chosen with Enter: browse mode leaves the focus in the field, so the page doesn't close the list, and
+	#: presses the suggestion with the mouse (see suggestionLists).
+	"chooseWebSuggestions": True,
 	#: In Outlook's message list, the message you leave isn't said again, with the status of the one you move to; JAWS
 	#: says only the message you move to (see outlookRows).
 	"quietLeftOutlookMessage": True,

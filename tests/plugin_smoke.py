@@ -823,6 +823,17 @@ def main():
 		jawsMigrator.state.set(fieldEdges.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		del sys.modules["config"]
+		# The suggestions an edit field on a web page shows (visible.com's addresses): Down Arrow in the field goes on in
+		# browse mode to them, and Enter presses one. Turned off, Down Arrow goes to the page, as NVDA does.
+		from jawsMigrator import suggestionLists
+
+		check(suggestionLists.isRegistered() and plugin._suggestionLists is suggestionLists, "the suggestions an edit field shows can be reached and chosen")
+		check(plugin.getScript(types.SimpleNamespace(mainKeyName="downArrow", modifiers=set())) is None, "and Down Arrow outside a field with suggestions goes to NVDA")
+		jawsMigrator.state.set(suggestionLists.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not suggestionLists.isRegistered(), "turned off in the Settings panel, NVDA does as it does with a page's suggestions")
+		jawsMigrator.state.set(suggestionLists.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
 		# In Outlook's message list, End left NVDA's focus on the message the tester left, and Outlook named it anew:
 		# it isn't said, as UI Automation's focus is on the message moved to. Turned off, NVDA says it as it does.
 		from jawsMigrator import outlookRows
@@ -1425,6 +1436,7 @@ def main():
 		check(not documentValues.isRegistered() and uiaIsNvdas(), "and NVDA's choice of a focused document's UI Automation events")
 		del sys.modules["UIAHandler"]
 		check(not fieldEdges.isRegistered() and plugin._fieldEdges is None, "and the arrow keys at the edges of a field")
+		check(not suggestionLists.isRegistered() and plugin._suggestionLists is None, "and the suggestions of an edit field")
 		check(not outlookRows.isRegistered() and plugin._outlookRows is None, "and the Outlook message you leave")
 		check(not outlookPages.isRegistered() and vars(WordText)["getTextWithFields"] is nvdasWordText, "and NVDA's text of a Word document")
 		check(not outlookPictures.isRegistered() and vars(PictureText)["getTextWithFields"] is nvdasPictureText, "and NVDA's text of a Word document with pictures")

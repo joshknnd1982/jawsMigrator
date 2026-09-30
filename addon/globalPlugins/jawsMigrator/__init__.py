@@ -92,7 +92,9 @@ Screen turns NVDA's screen curtain on or off the same way, saying "Screen curtai
 or "Screen curtain off", Shift+F11 says whether it is on, Control+F11 keeps it on each
 time NVDA starts, and NVDA started with the curtain on says so after it says where you
 are (see screenShade). Where JAWS says "JAWS" as it starts, NVDA says "NVDA is ready."
-after it says where you are, and no key stops it (see startMessage).
+after it says where you are, and no key stops it (see startMessage). The suggestions an
+edit field on a web page shows, such as the addresses on visible.com, are reached with Down
+Arrow and chosen with Enter, which NVDA closed by moving the focus to them (see suggestionLists).
 """
 
 from __future__ import annotations
@@ -228,6 +230,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pageReady = None
 		#: The fieldEdges module, once loaded: a caret key that can't move in an edit field goes through it before browse mode.
 		self._fieldEdges = None
+		#: The suggestionLists module, once loaded: Down Arrow in an edit field with suggestions goes through it first.
+		self._suggestionLists = None
 		#: The outlookRows module, once loaded: a change of name of an Outlook message goes through it before NVDA.
 		self._outlookRows = None
 		#: The formFields module, once loaded: it notes what browse mode's cursor is in before NVDA handles a focus event.
@@ -518,6 +522,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import fieldEdges
 
 			fieldEdges.unregister()
+		except Exception:
+			pass
+		self._suggestionLists = None
+		try:
+			from . import suggestionLists
+
+			suggestionLists.unregister()
 		except Exception:
 			pass
 		self._outlookRows = None
@@ -852,6 +863,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._fieldEdges = fieldEdges
 		except Exception:
 			debugLog.error("could not apply keeping the arrow keys in an edit field at its edges")
+		try:
+			from . import suggestionLists
+
+			# Not a JAWS setting: NVDA's browse mode moved the focus to a suggestion (visible.com's addresses), which took it
+			# from the field and closed the list, and pressed it with a click alone, which chooses nothing there.
+			if suggestionLists.wanted(data):
+				suggestionLists.register()
+			else:
+				suggestionLists.unregister()
+			self._suggestionLists = suggestionLists
+		except Exception:
+			debugLog.error("could not apply reaching and choosing an edit field's suggestions on a web page")
 		try:
 			from . import outlookRows
 
@@ -1792,6 +1815,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				# Insert+J and Caps Lock+J are both NVDA+J: with Insert, the JAWS Insert keystroke's command
 				# runs; with Caps Lock, NVDA goes on to find the command as usual (see insertKeys).
 				found = insertKeys.scriptFor(gesture, self._insertKeys)
+				if found is not None:
+					return found
+			# Down Arrow in an edit field that has suggestions goes on in browse mode, to them, instead of to a page
+			# that would close the list (see suggestionLists).
+			suggestionLists = getattr(self, "_suggestionLists", None)
+			if suggestionLists is not None:
+				found = suggestionLists.scriptFor(gesture)
 				if found is not None:
 					return found
 			return super().getScript(gesture)

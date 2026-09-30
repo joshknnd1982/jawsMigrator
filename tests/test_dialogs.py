@@ -641,6 +641,17 @@ class SettingsPanelTests(unittest.TestCase):
 			"the arrow keys leave a field at its edges as NVDA's do again, at once",
 		)
 
+	def test_chooseWebSuggestionsIsSavedAndApplied(self):
+		# The address suggestions on visible.com: NVDA moved the focus to one, which closed the list (issue 47).
+		from jawsMigrator import suggestionLists
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.chooseSuggestions,
+			"Reach the suggestions an edit field on a web page shows with Down Arrow, and choose one with Enter",
+			suggestionLists.STATE_KEY,
+			"NVDA moves the focus to a suggestion and presses it with a click again, at once",
+		)
+
 	def test_quietLeftOutlookMessageIsSavedAndApplied(self):
 		from jawsMigrator import outlookRows
 

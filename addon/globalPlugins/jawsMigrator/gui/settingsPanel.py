@@ -47,6 +47,7 @@ from .. import (
 	speechHistory,
 	startMessage,
 	startupFocus,
+	suggestionLists,
 	state,
 	trayChanges,
 	webRegions,
@@ -175,6 +176,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.stayInFields.SetValue(fieldEdges.wanted(state.load()))
+		# An address field on visible.com shows suggestions NVDA moved the focus to, which closed the list, and pressed with a
+		# click alone, which chose nothing (issue 47).
+		self.chooseSuggestions = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Reach the suggestions an edit field on a web page shows with Down Arrow, and choose one with Enter",
+			),
+		)
+		self.chooseSuggestions.SetValue(suggestionLists.wanted(state.load()))
 		# End or Down Arrow in Outlook's message list made NVDA say the message left, as unread, before the one moved to;
 		# JAWS says only the message you move to.
 		self.outlookLeftMessage = helper.addItem(
@@ -393,6 +403,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownListKeysJaws = self.listKeysJaws.GetValue()
 		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
 		self._shownStayInFields = self.stayInFields.GetValue()
+		self._shownChooseSuggestions = self.chooseSuggestions.GetValue()
 		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
 		self._shownOutlookNoPages = self.outlookNoPages.GetValue()
 		self._shownOutlookPictures = self.outlookPictures.GetValue()
@@ -487,6 +498,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[emptyAlerts.STATE_KEY] = self.quietEmptyAlerts.GetValue()
 		if self.stayInFields.GetValue() != self._shownStayInFields:
 			updates[fieldEdges.STATE_KEY] = self.stayInFields.GetValue()
+		if self.chooseSuggestions.GetValue() != self._shownChooseSuggestions:
+			updates[suggestionLists.STATE_KEY] = self.chooseSuggestions.GetValue()
 		if self.outlookLeftMessage.GetValue() != self._shownOutlookLeftMessage:
 			updates[outlookRows.STATE_KEY] = self.outlookLeftMessage.GetValue()
 		if self.outlookNoPages.GetValue() != self._shownOutlookNoPages:
