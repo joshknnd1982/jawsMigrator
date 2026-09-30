@@ -1716,6 +1716,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def event_foreground(self, obj, nextHandler):
 		self._checkSleep(obj)
+		try:
+			from . import outlookMessages
+
+			# A window of Outlook came to the front: which message windows are open tells a message that opens (issue 40).
+			outlookMessages.noteForeground(obj)
+		except Exception:
+			debugLog.error("could not note which window of Outlook came to the front")
 		nextHandler()
 
 	def event_gainFocus(self, obj, nextHandler):

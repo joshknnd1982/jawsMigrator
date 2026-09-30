@@ -75,6 +75,8 @@ def resetTheAssistant(test):
 		("_reading", False),
 		("_failed", False),
 		("_replaced", []),
+		("_windows", {}),
+		("_visibleWindows", lambda: []),
 		("_notedStyles", set()),
 		("_notedMailLink", False),
 		("_notedList", False),

@@ -2408,6 +2408,8 @@ class Isolated(unittest.TestCase):
 			mock.patch.object(outlookMessages, "_reading", False),
 			mock.patch.object(outlookMessages, "_failed", False),
 			mock.patch.object(outlookMessages, "_replaced", []),
+			mock.patch.object(outlookMessages, "_windows", {}),
+			mock.patch.object(outlookMessages, "_visibleWindows", lambda: []),
 			mock.patch.object(outlookMessages, "_notedStyles", set()),
 			mock.patch.object(outlookMessages, "_notedMailLink", False),
 			mock.patch.dict(config.conf["documentFormatting"], dict(nvdaDefaults(NVDA_DOCUMENT_FORMATTING_SPEC), **TESTERS_CHANGES)),

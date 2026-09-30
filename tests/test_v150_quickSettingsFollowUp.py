@@ -181,8 +181,8 @@ class SpaceInTheTreeTests(qs.NvdaCase):
 # -- Reading a message when it opens, with Outlook First Line Silence -------------------------------------------------
 
 
-class ReadingOnOpenTests(opening.Isolated):
-	"""The tester's setup: Outlook First Line Silence around NVDA's event, and the message he opened."""
+class WithFirstLineSilence(opening.Isolated):
+	"""The tester's setup: Outlook First Line Silence around NVDA's event, and the message he opened. No tests of its own."""
 
 	def setUp(self):
 		super().setUp()
@@ -239,6 +239,8 @@ class ReadingOnOpenTests(opening.Isolated):
 	def heard(self):
 		return [said for said in self.speech.said if said[0] == "say all"]
 
+
+class ReadingOnOpenTests(WithFirstLineSilence):
 	def test_firstLineSilenceWouldDropTheStartOfTheMessageButItsGateIsOpenedFirst(self):
 		self.turnOnReading()
 		treeInterceptor, _focused = self.messageWindow()

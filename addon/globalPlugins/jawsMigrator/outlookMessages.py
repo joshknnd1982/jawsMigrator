@@ -86,6 +86,19 @@ gainFocus event, reads a message that took the focus and wasn't read as browse m
 same NVDA event, and the log could not say why the first way was not reached), once for each message (``READ_MARK``); and
 the debug log says once for each message what became of it (``_noteOpening``).
 
+Then the tester tried 1.50 (issue 40, his log of 15:50) and the message was not read again. The debug line said "first time False,
+read already True, not read from the top". NVDA made one browse mode for the message window, when it started with a message open
+("Adding new treeInterceptor to runningTable" once in the log), and used it again for each of the six times he opened that
+message in the next three minutes: Outlook hides a message window it closes and shows it again when the message is opened again,
+and NVDA's browse mode goes on living with the window. So the browse mode's first coming into focus (``_hadFirstGainFocus``),
+which 1.50 took for the message opening, was the start of the session and never again, and what 1.50 marked read (``READ_MARK``)
+stayed marked. So now a message opening is a message window (its top-level window, ``windowOf``) the assistant did not know was
+open: each window of Outlook that comes to the front is noted (``noteForeground``), a window that is closed or hidden is
+forgotten when the next window comes to the front, and the windows that are open when NVDA starts, or when reading is turned on,
+count as open. That is how Outlook First Line Silence tells a message you open from one you come back to (``_armMessageOpening``),
+and its log had each of the tester's six openings right. Coming back to an open message (Alt+Tab) is not read again, and a
+message in the reading pane of Outlook's main window is not one that opens.
+
 Since 1.49 a link with no text in a message you read is named as JAWS names it, and not said as "link" alone (issue 46; see
 unlabeledLinks): NVDA's field for the link gets a name as its content, and NVDA's Elements List labels it with that name in
 the place of "Unlabeled". It works with the same setting as the rest (``STATE_KEY``).
@@ -98,6 +111,7 @@ import functools
 import re
 import sys
 import threading
+import time
 
 #: The assistant's setting (state.json) that turns saying messages as JAWS does on or off: links, lists and headings.
 STATE_KEY = "outlookMessagesAsJaws"
@@ -122,9 +136,17 @@ ROLE_TEXT_BRAILLE = "roleTextBraille"
 #: NVDA's browse mode event for a document it comes into, where it reads a document that has just opened.
 GAIN_FOCUS = "event_treeInterceptor_gainFocus"
 #: Set on a message's browse mode once the assistant has read it (or seen it, with reading turned off), so it is read once;
-#: and once the debug log has said what became of it.
+#: and once the debug log has said what became of it. Only for a message whose window is not known: NVDA makes one browse
+#: mode for a message window and uses it again each time Outlook shows the window again, so a mark on it outlasts the opening
+#: (see _windows).
 READ_MARK = "_jawsMigratorMessageRead"
 NOTED_MARK = "_jawsMigratorMessageNoted"
+#: The window class of classic Outlook's top-level windows, its message windows and its main window.
+WINDOW_CLASS = "rctrl_renwnd32"
+#: How long, in seconds, a message window that has just opened is one whose message is read; later, coming to it is coming back.
+OPENING_SECONDS = 10.0
+#: user32's GetAncestor flag for a window's top-level window.
+_GA_ROOT = 2
 #: Outlook First Line Silence, the add-on the tester runs: its module, and its function that lets speech through again
 #: after it dropped the speech of a message opening (it does that itself when a key is pressed).
 SILENCE_MODULE = "globalPlugins.outlookFirstLineSilence"
@@ -169,6 +191,21 @@ _notedList = False
 _itemCounts: dict = {}
 #: For each thread: whether a message's opening is being handled, so a second wrapper of the assistant's passes it on.
 _local = threading.local()
+#: The top-level windows of classic Outlook that are open, while reading is turned on, by window handle: each one's _Window.
+_windows: dict = {}
+#: The assistant's copy of user32, made when it is first needed.
+_privateUser32 = None
+
+
+class _Window:
+	"""What is known of an open window of Outlook: when the assistant first saw it, and whether the message in it is still
+	waiting to be read (it opened while reading was turned on, and has not been read)."""
+
+	__slots__ = ("seen", "unread")
+
+	def __init__(self, seen: float, unread: bool):
+		self.seen = seen
+		self.unread = unread
 
 
 def _log():
@@ -204,6 +241,7 @@ def register(saying: bool = True, reading: bool = False) -> None:
 	when ``reading``. What is asked for and isn't in place yet is put in place, and what isn't asked for is taken out:
 	each part works without the others."""
 	global _enabled, _saying, _reading, _caret, _line, _linkRole, _listRole, _editRole
+	wasReading = _reading
 	try:
 		import textInfos
 		from controlTypes import OutputReason, Role
@@ -258,6 +296,11 @@ def register(saying: bool = True, reading: bool = False) -> None:
 	_reading = reading and (readingInPlace or _reading)
 	_saying = saying and (sayingInPlace or _saying)
 	_enabled = _reading or _saying
+	if _reading and not wasReading:
+		# A message that is open as reading is turned on, or as NVDA starts, is not one that opens.
+		_noteOpenWindows()
+	elif not _reading:
+		_windows.clear()
 
 
 def _restore(*names: str) -> None:
@@ -280,6 +323,7 @@ def unregister() -> None:
 	"""Give NVDA its own functions back, where nothing has been put over the assistant's since."""
 	global _enabled, _saying, _reading
 	_saying = _reading = False
+	_windows.clear()
 	if not _enabled:
 		return
 	_enabled = False
@@ -351,12 +395,166 @@ def isMessageYouReadIn(treeInterceptor) -> bool:
 	return inOutlook(root) and getattr(root, "isReadonlyViewer", False) is True
 
 
+def _user32():
+	"""A copy of user32 of the assistant's own, so NVDA's own function types are never changed."""
+	global _privateUser32
+	if _privateUser32 is None:
+		import ctypes
+		from ctypes import wintypes
+
+		library = ctypes.WinDLL("user32")
+		library.IsWindowVisible.argtypes = [wintypes.HWND]
+		library.IsWindowVisible.restype = wintypes.BOOL
+		library.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+		library.GetAncestor.restype = wintypes.HWND
+		library.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+		library.GetClassNameW.restype = ctypes.c_int
+		library.EnumWindows.restype = wintypes.BOOL
+		_privateUser32 = library
+	return _privateUser32
+
+
+def _rootWindow(window) -> int:
+	"""The top-level window ``window`` is in; 0 when there is no window."""
+	if not window:
+		return 0
+	try:
+		return _user32().GetAncestor(window, _GA_ROOT) or window
+	except Exception:
+		return window
+
+
+def _isVisible(window) -> bool:
+	"""Whether ``window`` is showing. When that can't be told, it is, so a message is not read again for it."""
+	try:
+		return bool(_user32().IsWindowVisible(window))
+	except Exception:
+		return True
+
+
+def _visibleWindows() -> list:
+	"""The top-level windows of classic Outlook that are showing."""
+	import ctypes
+	from ctypes import wintypes
+
+	found = []
+	library = _user32()
+	buffer = ctypes.create_unicode_buffer(256)
+	callbackType = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+	def collect(window, _lParam):
+		try:
+			if library.IsWindowVisible(window) and library.GetClassNameW(window, buffer, 256) and buffer.value == WINDOW_CLASS:
+				found.append(window)
+		except Exception:
+			pass
+		return True
+
+	library.EnumWindows.argtypes = [callbackType, wintypes.LPARAM]
+	callback = callbackType(collect)  # kept alive for the whole call
+	library.EnumWindows(callback, 0)
+	return found
+
+
+def _noteOpenWindows() -> None:
+	"""Count the windows of Outlook that are showing now as open, and only them: a message that was open before reading was
+	turned on (or before NVDA started) is not one that opens when you come back to it."""
+	with _lock:
+		_windows.clear()
+		try:
+			for window in _visibleWindows():
+				_windows[window] = _Window(float("-inf"), False)
+		except Exception:
+			_failure("can't tell which windows of Outlook are open, so a message open before reading was turned on may be read when you come back to it")
+
+
+def _forgetClosedWindows() -> None:
+	"""Forget the windows that are closed, or hidden: Outlook hides a message window you close and shows it again when the
+	message is opened again, so a window that is showing again is a message that opens."""
+	with _lock:
+		for window in list(_windows):
+			if not _isVisible(window):
+				del _windows[window]
+
+
+def _noteWindow(window: int) -> bool:
+	"""Note that ``window`` is open. True when nothing knew it was: it has just opened, or is showing again."""
+	with _lock:
+		if window in _windows:
+			return False
+		_windows[window] = _Window(time.monotonic(), _reading)
+	_log().debug(f"jawsMigrator: a window of Outlook, {window:#x}, is new to the assistant: " + ("a message in it is read from the top when it opens" if _reading else "reading is turned off"))
+	return True
+
+
+def noteForeground(obj) -> None:
+	"""Called as a window comes to the front, before NVDA handles the event: forget the windows that closed, and note the
+	window of Outlook that came to the front, so a message that opens is told from one you come back to.
+
+	A window that closed was closed or hidden before the next window came to the front (Outlook First Line Silence relies on
+	the same), so reopening a message is a window that was forgotten and is noted again."""
+	if not _reading:
+		return
+	_forgetClosedWindows()
+	if not inOutlook(obj):
+		return
+	window = _rootWindow(getattr(obj, "windowHandle", 0))
+	if window:
+		_noteWindow(window)
+
+
+def windowOf(treeInterceptor, focus=None) -> int:
+	"""The top-level window of the message ``treeInterceptor`` is the browse mode of; 0 when that is not known.
+
+	The object that has the focus in the message is asked first (``focus``, or NVDA's): NVDA keeps the browse mode of a message
+	window, and what it was made for is its root object, which may be the window Outlook showed before and not the one it shows now."""
+	if focus is None:
+		try:
+			import api
+
+			focus = api.getFocusObject()
+		except Exception:
+			focus = None
+	if focus is not None and getattr(focus, "treeInterceptor", None) is treeInterceptor:
+		window = _rootWindow(getattr(focus, "windowHandle", 0))
+		if window:
+			return window
+	root = getattr(treeInterceptor, "rootNVDAObject", None)
+	return _rootWindow(getattr(root, "windowHandle", 0))
+
+
+def isOpeningWindow(window: int) -> bool:
+	"""Whether the message in ``window`` has just opened, while reading was turned on, and has not been read."""
+	_noteWindow(window)
+	with _lock:
+		known = _windows.get(window)
+		return known is not None and known.unread and time.monotonic() - known.seen < OPENING_SECONDS
+
+
+def _markRead(treeInterceptor, window: int = 0) -> None:
+	"""Note that the message of ``treeInterceptor``, in ``window`` when that is known, has been read, or is being, so it is read once."""
+	setattr(treeInterceptor, READ_MARK, True)
+	window = window or windowOf(treeInterceptor)
+	if window:
+		with _lock:
+			known = _windows.get(window)
+			if known is not None:
+				known.unread = False
+
+
 def isOpeningMessage(treeInterceptor) -> bool:
-	"""Whether NVDA's browse mode ``treeInterceptor`` is an Outlook message you read, coming into it for the first time,
-	and not one the assistant has read already."""
-	if getattr(treeInterceptor, "_hadFirstGainFocus", True) or getattr(treeInterceptor, READ_MARK, False):
+	"""Whether NVDA's browse mode ``treeInterceptor`` is an Outlook message you read, in a window that has just opened, and not
+	one the assistant has read already.
+
+	Where the window is not known, the message is opening when browse mode comes into it for the first time; but NVDA keeps
+	the browse mode of a message window that Outlook hides, and uses it again when the window is shown again, so that is only
+	the last resort."""
+	if not isMessageYouReadIn(treeInterceptor):
 		return False
-	return isMessageYouReadIn(treeInterceptor)
+	window = windowOf(treeInterceptor)
+	if window:
+		return isOpeningWindow(window)
+	return not (getattr(treeInterceptor, "_hadFirstGainFocus", True) or getattr(treeInterceptor, READ_MARK, False))
 
 
 def _argument(args: tuple, kwargs: dict, name: str, index: int, default=None):
@@ -421,7 +619,7 @@ def readMessage(treeInterceptor) -> bool:
 		# Focus mode came on as the message opened: NVDA reads nothing from the caret then.
 		return False
 	# A message is read once, whichever way it is found opening (see readWhenFocused).
-	setattr(treeInterceptor, READ_MARK, True)
+	_markRead(treeInterceptor)
 	released = letSpeechThrough()
 	sayAll.SayAllHandler.readText(sayAll.CURSOR.CARET)
 	_log().debug(
@@ -432,16 +630,31 @@ def readMessage(treeInterceptor) -> bool:
 
 
 def _noteOpening(treeInterceptor, opening: bool) -> None:
-	"""Note in the debug log, once for each message, what became of it as browse mode came into it, so a message that isn't
-	read says why."""
-	if getattr(treeInterceptor, NOTED_MARK, False) or not isMessageYouReadIn(treeInterceptor):
+	"""Note in the debug log, each time browse mode comes into an Outlook message you read, what became of it, so a message
+	that isn't read says why: the window and whether the assistant saw it open, and whether the message was read already."""
+	if not isMessageYouReadIn(treeInterceptor):
 		return
-	setattr(treeInterceptor, NOTED_MARK, True)
-	_log().debug(
-		"jawsMigrator: browse mode came into an Outlook message you read: "
-		f"first time {not getattr(treeInterceptor, '_hadFirstGainFocus', True)}, read already {bool(getattr(treeInterceptor, READ_MARK, False))}, "
-		f"{'read from the top' if opening else 'not read from the top'}",
-	)
+	what = "read from the top" if opening else "not read from the top"
+	window = windowOf(treeInterceptor)
+	if not window:
+		# Where the window is not known, once for each browse mode.
+		if getattr(treeInterceptor, NOTED_MARK, False):
+			return
+		setattr(treeInterceptor, NOTED_MARK, True)
+		_log().debug(
+			"jawsMigrator: browse mode came into an Outlook message you read: "
+			f"first time {not getattr(treeInterceptor, '_hadFirstGainFocus', True)}, read already {bool(getattr(treeInterceptor, READ_MARK, False))}, {what}",
+		)
+		return
+	with _lock:
+		known = _windows.get(window)
+		if known is None:
+			seen = "not known to the assistant"
+		elif known.seen == float("-inf"):
+			seen = "open before reading was turned on"
+		else:
+			seen = f"open for {time.monotonic() - known.seen:.1f} seconds, {'not read yet' if known.unread else 'read already'}"
+	_log().debug(f"jawsMigrator: browse mode came into an Outlook message you read: window {window:#x}, {seen}, {what}")
 
 
 def _gainFocusGuarded(original):
@@ -496,14 +709,21 @@ def readWhenFocused(obj) -> bool:
 	if not inOutlook(obj):
 		return False
 	treeInterceptor = getattr(obj, "treeInterceptor", None)
-	if treeInterceptor is None or getattr(treeInterceptor, READ_MARK, False) or not isMessageYouReadIn(treeInterceptor):
+	if treeInterceptor is None or not isMessageYouReadIn(treeInterceptor):
 		return False
-	if not _reading:
-		setattr(treeInterceptor, READ_MARK, True)
-		return False
+	window = windowOf(treeInterceptor, obj)
+	if window:
+		if not _reading or not isOpeningWindow(window):
+			return False
+	else:
+		if getattr(treeInterceptor, READ_MARK, False):
+			return False
+		if not _reading:
+			setattr(treeInterceptor, READ_MARK, True)
+			return False
 	if getattr(treeInterceptor, "passThrough", False):
 		return False
-	setattr(treeInterceptor, READ_MARK, True)
+	_markRead(treeInterceptor, window)
 	from speech import sayAll
 
 	if sayAll.SayAllHandler.isRunning():

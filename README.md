@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.51
+- Version: 1.52
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.52](#whats-new-in-152)
 - [What's new in 1.51](#whats-new-in-151)
 - [What's new in 1.50](#whats-new-in-150)
 - [What's new in 1.49](#whats-new-in-149)
@@ -103,10 +104,24 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.51.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.52.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.52
+
+From the tester's answer on issue 40, "Pressing insert V doesn't bring up quick settings for that program", after 1.50, with NVDA's log from NVDA 2026.2, the assistant 1.50, Outlook First Line Silence 1.0.30 and classic Outlook 2024: "Now I normally have automatically reading turned off. I tested it just to see if it works. it doesn't hear". He had checked "Messages Automatically Read" in QuickSettings, then opened a message, and it was not read.
+
+- **A message you open is read from the top each time it opens, when "Messages Automatically Read" is checked, also the same message again after you closed it.** What the log showed: NVDA had started with a message open, and made one browse mode for that message's window. Each of the six times the tester opened that message afterwards, NVDA used the same browse mode again: Outlook hides a message window you close with Escape and shows it again when you open the message again, and NVDA's browse mode stays with the window. 1.50 took a message to be opening when NVDA's browse mode came into it for the first time, and that was when NVDA started. It had also marked that message as read then, while the setting was off. So the assistant's line at 15:49:13 said "first time False, read already True, not read from the top", and the openings after it had no line at all, because 1.50 said it once for each browse mode. 1.50's own notes were wrong about this: "the first time it takes the focus" is the first time since NVDA started, not each time a message opens.
+- **What counts as opening now is a message window the assistant did not know was open.** It notes each window of Outlook as it comes to the front, and forgets a window that was closed or hidden as soon as the next window comes to the front. Outlook First Line Silence tells a message you open from one you come back to the same way, and its log had each of the tester's six openings right. So:
+  - Opening a message (Enter on it in the list) reads it, each time, including one you opened before and closed.
+  - Coming back to a message window that is still open (Alt+Tab) does not read it again.
+  - A message that was open when NVDA started, or when you checked the setting, is not read until you open it again.
+  - A message shown in the reading pane of Outlook's main window is not a window that opens, and is not read. A message you write is never read.
+  - The message is read only within ten seconds of its window opening; later, coming to it is coming back to it.
+- **NVDA's debug log says more.** Each time browse mode comes into a message you read in Outlook, it says which window, how long the assistant has known it open, and whether the message was read already: 'browse mode came into an Outlook message you read: window 0x3e8, open for 0.0 seconds, not read yet, read from the top'. It also says when it first sees a window of Outlook. If a message still is not read, press NVDA+Shift+J, then L, and attach the zip.
+- **Tested with a replay of the tester's session, not in NVDA or in classic Outlook.** One browse mode is used for every opening of a message (as in the log), with NVDA 2026.2's own browse mode code and Outlook First Line Silence's gate as its code and the log show it: opening, Escape, opening again, Alt+Tab back, two messages at once, a message open when NVDA starts, and the reading pane. The tests fail with 1.50's way of telling an opening. The functions that ask Windows which windows are showing were run against real windows. Classic Outlook isn't installed on the computer this was made on, so the reading itself has not been heard in an NVDA with the tester's add-ons (ClassicSpeech, Outlook First Line Silence): the next log will show.
 
 ## What's new in 1.51
 
