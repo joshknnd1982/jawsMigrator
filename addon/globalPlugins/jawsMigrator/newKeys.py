@@ -46,6 +46,7 @@ NEW_SCRIPTS = {
 	"showversiondetails": ("1.30", "the version details"),
 	"putversiondetailsonclipboard": ("1.30", "copy the version details"),
 	"scriptfilename": ("1.36", "the program you are in, as JAWS's Insert+Q"),
+	"quicksettings": ("1.42", "QuickSettings, the settings of the program you are in that NVDA can do"),
 }
 #: What NVDA's commands in jawsKeyMap.MOVED_TO_JAWS_KEYS do, for saying where a keystroke that took theirs left them.
 _MOVED_WORDS = {"quit": "exits NVDA"}

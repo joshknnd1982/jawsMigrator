@@ -597,8 +597,12 @@ def mapSettings(
 
 	value = r.int("FormsMode", "AutoFormsMode")
 	if value is not None:
+		# 0 Manual Forms Mode; 1 Auto: forms mode as the arrow keys reach a field and as Tab does; 2 Semi-Auto: as Tab does
+		# alone, and you leave it with the PC Cursor key (JAWS 2026, Browser.QSM, AutoFormsMode's help). Quick Settings
+		# (quickSettings) has the same three.
+		caretMove = value != 0 and value != 2
 		add(NVDA, ("virtualBuffers", "autoPassThroughOnFocusChange"), bool(value), f"Automatic focus mode for focus changes: {'on' if value else 'off'}", r.src("FormsMode", "AutoFormsMode"))
-		add(NVDA, ("virtualBuffers", "autoPassThroughOnCaretMove"), bool(value), f"Automatic focus mode for caret movement: {'on' if value else 'off'}", r.src("FormsMode", "AutoFormsMode"))
+		add(NVDA, ("virtualBuffers", "autoPassThroughOnCaretMove"), caretMove, f"Automatic focus mode for caret movement: {'on' if caretMove else 'off'}", r.src("FormsMode", "AutoFormsMode"))
 	value = r.int("FormsMode", "IndicateFormsModeWithSounds")
 	if value is not None:
 		add(NVDA, ("virtualBuffers", "passThroughAudioIndication"), bool(value), f"Audio indication of focus and browse modes: {'on' if value else 'off'}", r.src("FormsMode", "IndicateFormsModeWithSounds"))

@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.41
+- Version: 1.42
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.42](#whats-new-in-142)
 - [What's new in 1.41](#whats-new-in-141)
 - [What's new in 1.40](#whats-new-in-140)
 - [What's new in 1.39](#whats-new-in-139)
@@ -70,6 +71,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 - [Sounds](#sounds)
 - [Keyboard commands](#keyboard-commands)
 - [The assistant's own commands](#the-assistants-own-commands)
+- [QuickSettings](#quicksettings)
 - [Add-ons: always the newest versions](#add-ons-always-the-newest-versions)
 - [Backups and restoring](#backups-and-restoring)
 - [JAWS is never changed](#jaws-is-never-changed)
@@ -93,10 +95,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.41.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.42.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.42
+
+From the tester's issue 40, "Pressing insert V doesn't bring up quick settings for that program":
+
+- **NVDA+V opens QuickSettings, JAWS's window of the settings for the program you are in, as Insert+V does in JAWS.** The tester pressed Insert+V in Outlook with JAWS and with NVDA, and asked: "Should these be added? if so how will you do the live tests? this is a big project I suspect." Yes, and it was a big one, so this first version has the settings NVDA can do, and says plainly which JAWS has that NVDA can't. In JAWS, Insert+V (Caps Lock+V in the Laptop layout) runs its QuickSettings script, which opens a window called "QuickSettings - Outlook", "QuickSettings - notepad" or "QuickSettings - msedge": a Search box, a tree called Settings with a row for each setting, the control of the setting you are on, and Apply, OK and Cancel. Now a migration gives JAWS's key to NVDA+V, and the assistant adds it once, a little after NVDA starts, if you migrated your keystrokes before, as it did for Insert+Control+V. The window is called the same, and has the same parts, categories, names and choices: General Options (User Verbosity, Progress Bars), Reading Options (Language Detect Change, and in Outlook Messages Automatically Read), Editing Options (Typing Echo, Punctuation, Indentation), Braille Options with a braille display (Word Wrap, Flash Messages), and, while a web page or another document is in browse mode or focus mode, as JAWS's virtual cursor or forms mode, Virtual Cursor Options: the Virtual Cursor Verbosity Level, Auto Forms Mode and Use Sound, whether a page is read when it loads, Document Presentation Mode, live regions, Graphics Show, "same page" links, Headings Announce, and the table options. Arrowing through the tree says each setting and what it is now, "Typing Echo: Characters", and Tab goes to its check box or list, with a box under it that says what the choice does in NVDA. Apply saves and stays, OK saves and closes, Cancel doesn't save. It saves for the program alone, as JAWS saves to the program's own settings file: into the NVDA configuration profile that turns on in that program, which is your own if NVDA already turns one on there, and otherwise "JAWS - " and JAWS's name for the program, made and turned on for you as a migration does. See [QuickSettings](#quicksettings).
+- **JAWS's Semi-Auto Forms Mode is Tab alone, not the arrow keys.** A migration made every Auto Forms Mode but Manual turn on both of NVDA's "Automatic focus mode for focus changes" and "Automatic focus mode for caret movement". JAWS's own words for Semi-Auto: it enters forms mode when you tab, and you leave it with the PC Cursor key. Now Auto is both, Manual is neither, and Semi-Auto is focus changes alone, in a migration and in QuickSettings alike.
+- **Tested against JAWS 2026 running, and its own files, as the tester asked.** Claude ran JAWS 2026 (27.6.18) on the maintainer's computer and ran the QuickSettings script through JAWS's programming interface in Notepad, in an Edge page, in Edge's address bar and in new Outlook, read the tree of each window, and pressed Cancel, so no JAWS setting changed. JAWS names new Outlook "Outlook Modern", and shows Virtual Cursor Options only in the page. The tests hold what JAWS showed (`tests/jaws_quicksettings_live.json`, made by `tests/live_jaws_quicksettings.py`, which anyone with JAWS can run again) and check that the assistant's window has that title, and that its categories and settings are in JAWS's window, in JAWS's order, program by program. Every setting is checked against JAWS 2026's own Default.QS, Browser.qs and the scripts of QuickSet.jss: the kind of control, the option it reads and writes, and the words of its choices; and no JAWS option a migration maps to NVDA is left out but by name, with its reason. Every NVDA setting a choice sets is checked against the list of settings of the NVDA installed on the maintainer's computer, with a value it takes. The window's names and labels were read through Windows' UI Automation, as a screen reader reads them. The saving runs against the assistant's imitation of NVDA's profiles, triggers and settings. It hasn't been run inside NVDA itself yet: please tell us if anything there is different from this.
 
 ## What's new in 1.41
 
@@ -621,6 +631,7 @@ The assistant reads JAWS's default key map and turns keystrokes for commands NVD
 - The window title, status line, focus, time and date.
 - The program you are in (Insert+Q), and exiting NVDA (Insert+F4).
 - The program's name and version, and the version details (Insert+Control+V), with the assistant's own commands.
+- The settings of the program you are in (Insert+V, JAWS's QuickSettings), with the assistant's own commands.
 - The elements list and the Find commands.
 - Reading table rows and columns.
 - Speech rate and punctuation level.
@@ -810,6 +821,51 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying "Screen curtain on" after NVDA says where you are, when NVDA starts with the screen curtain on, which NVDA itself says only on a braille display (on unless you turn it off; see [Screen curtain](#screen-curtain));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.
+
+## QuickSettings
+
+JAWS's Insert+V (Caps Lock+V in the Laptop layout) opens QuickSettings, the settings of the program you are in. NVDA+V does, once a migration has given JAWS's key to it, and the assistant adds the key after an update if you migrated your keystrokes before (1.42). Or give **Opens QuickSettings** a key of your own in NVDA's Input Gestures dialog, under JAWS Migration Assistant. NVDA won't open it while NVDA's own Settings dialog is open: OK there saves what it shows, which would undo what you chose.
+
+The window is called "QuickSettings - " and JAWS's name for the program, from JAWS's ConfigNames.ini: notepad, msedge, Outlook, Outlook Modern (new Outlook, olk.exe). Without JAWS on the computer, it is the program's own name. It has JAWS's parts:
+
+- **Search** filters the tree to the settings that have what you typed in their name.
+- **Settings** is a tree with a row for each setting inside its category, JAWS's order and JAWS's words. Each row says what the setting is now, as "Progress Bars: Spoken" or "Use Sound: checked", so arrowing through them says it. Categories can be folded with Left Arrow and opened with Right Arrow.
+- **The setting you are on**, after the tree: a check box, or a list with JAWS's choices.
+- **What this does in NVDA** says what the choice you are on sets in NVDA, in NVDA's words: "Punctuation level: all".
+- **Apply** saves and stays, **OK** saves and closes, **Cancel** (and Escape) closes without saving. Only what you changed is saved.
+
+**Where it is saved.** As JAWS saves to the program's own settings file, NVDA saves for that program alone: into the configuration profile that turns on in it. If NVDA already turns a profile on in that program, yours or a migration's, that one keeps it. Otherwise the assistant makes "JAWS - " and JAWS's name for the program ("JAWS - Outlook", "JAWS - msedge") and turns it on in the program, as a migration does for a JAWS application file, and takes it away again if every choice was what NVDA does already. The normal configuration is never changed. NVDA says where it saved: 'Saved for notepad in the profile "JAWS - notepad".' A setting of the assistant's own (Messages Automatically Read) is saved with the assistant's, and takes effect at once.
+
+**What is in it.** These settings, in the categories JAWS puts them in. Where a setting says "Virtual Cursor Options", it is there only while a web page or another document is in browse mode or in focus mode, as JAWS shows them while its virtual cursor or forms mode is on; Braille Options only with a braille display. Each is what a migration makes of the same JAWS option:
+
+| Setting | JAWS's choices | In NVDA |
+| --- | --- | --- |
+| User Verbosity | Beginner, Intermediate, Advanced | Report shortcut keys, tooltips, notifications and object position, as JAWS's Output Modes table says at that level |
+| Progress Bars | Spoken, Silent | Progress bar output: speak, or off |
+| Language Detect Change | check box | Automatic language switching |
+| Messages Automatically Read (classic Outlook) | check box | Read an Outlook message from the top when it opens (the assistant's setting) |
+| Typing Echo | None, Characters, Words, Both Characters and Words | Speak typed characters and words |
+| Punctuation | None, Some, Most, All | Punctuation level: none, some, most, all |
+| Indentation | Ignore, Indicate | Report line indentation |
+| Virtual Cursor Verbosity Level | Low, Medium, High | Report lists, tables, frames, figures, block quotes, groupings, articles, "clickable" and landmarks, as JAWS's web verbosity table says at that level |
+| Auto Forms Mode | Manual, Auto, SemiAuto | Automatic focus mode for focus changes and for caret movement: neither, both, focus changes alone |
+| Use Sound | check box | Audio indication of focus and browse modes |
+| Document and Web Pages automatically read when loaded | check box | Automatic Say All on page load |
+| Document Presentation Mode | Simple Layout, Screen Layout | Use screen layout |
+| Announce live region updates | check box | Report dynamic content changes |
+| Graphics Show | None, Tagged, All | Report graphics |
+| Links Identify "Same Page" | check box | Report link type |
+| Headings Announce | Off, On, Heading and Level | Report headings |
+| Layout Tables Ignore | check box | Include layout tables (the other way round) |
+| Table Titles | Off, Row, Column, Both Row and Column, Only Marked Headers | Report table row and column headers |
+| Cell Coordinates Announcement | check box | Report table cell coordinates |
+| Word Wrap, Flash Messages (with a braille display) | check boxes | Avoid splitting words when possible; Show messages |
+
+Where two of JAWS's choices are the same thing in NVDA, such as Graphics Show's Tagged and All, the row shows the one you chose last, for as long as NVDA's settings still are what it means. Where NVDA's own setting has no word in JAWS, such as beeps for progress bars, nothing is chosen and the box says so. Where NVDA's own value covers more than one of JAWS's, Indicate for indentation whether NVDA says it, sounds it or both, it counts as that choice.
+
+**What is not in it.** A setting JAWS shows that NVDA has nothing for is left out, not shown to do nothing, as the assistant maps JAWS strictly: Touch Cursor Options, Convenient OCR's languages, Text Analyzer, Smart Word Reading, Custom Labels, Focus Loss Announcement, Interrupt Speech When a Dialog Box Is Created, Use Inferred Access Keys, most of Virtual Cursor Options' others (Element Description, Smart Navigation Mode, Navigation Quick Keys, Access Keys Indicate, Attributes Indicate, Flash Movies, Page Refresh, Link activation, and the rest of the Text, Links and Frame options) and JAWS's Personalize Web Settings, which are for one web site: NVDA switches profiles for programs, not for web sites. Some JAWS could have and NVDA can do, but this first version doesn't: Screen Shade (NVDA+Shift+J, then F11 does it), Screen Echo, Caps Indicate, Braille Mode (JAWS has four, NVDA two), Spelling Options and Numbers Options (ClassicSpeech's), and the settings for Word, Excel, PowerPoint and the rest of Outlook's, which need those programs to test. JAWS's own words for a setting that is only for one program, such as Outlook's Message Status, are left out for the same reason.
+
+**How it was checked.** See [What's new in 1.42](#whats-new-in-142). `tests/live_jaws_quicksettings.py` runs JAWS 2026's QuickSettings script in Notepad, an Edge page, Edge's address bar and new Outlook, and keeps what JAWS showed in `tests/jaws_quicksettings_live.json`, which the tests compare the assistant's window with.
 
 ## Add-ons: always the newest versions
 

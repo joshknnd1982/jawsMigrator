@@ -462,6 +462,14 @@ SCRIPT_MAP = {
 		"copyVersionDetails",
 		"Copy the version details of the active program, NVDA and Windows to the clipboard (a JAWS Migration Assistant command)",
 	),
+	# JAWS's Insert+V: the settings of the program you are in. NVDA's own settings dialogs are one for each kind of
+	# setting; the assistant has JAWS's (see quickSettings).
+	"quicksettings": (
+		ASSISTANT_MODULE,
+		ASSISTANT_CLASS,
+		"quickSettings",
+		"Open QuickSettings, the settings of the program you are in that NVDA can do, saved for that program alone (a JAWS Migration Assistant command)",
+	),
 	# System information.
 	"saysystemtime": (
 		"globalCommands",

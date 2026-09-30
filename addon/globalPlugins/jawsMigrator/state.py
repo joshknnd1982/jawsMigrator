@@ -168,6 +168,9 @@ DEFAULTS = {
 	#: NVDA started with the screen curtain on says "Screen curtain on" after it says where you are; NVDA itself says so
 	#: only on a braille display (see screenShade).
 	"sayScreenCurtainAtStart": True,
+	#: The last choice made in Quick Settings (Insert+V) for each setting, {JAWS's setting ID: JAWS value}, which tells apart
+	#: two of JAWS's choices that are one in NVDA (see quickSettings).
+	"quickSettingsChoices": {},
 }
 
 _lock = threading.RLock()

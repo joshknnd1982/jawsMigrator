@@ -327,7 +327,8 @@ class NewKeysTests(v132.TestersCase, AskToExitOffCase):
 
 	def test_pending(self):
 		self.as135LeftIt()
-		self.assertEqual(newKeys.pending(state.load()), ["scriptfilename"])
+		# ScriptFileName, and QuickSettings, which 1.4x learned (issue 40).
+		self.assertEqual(newKeys.pending(state.load()), ["quicksettings", "scriptfilename"])
 		self.assertEqual(newKeys.toRecheck(state.load()), [])
 
 	def test_theTestersNvda(self):

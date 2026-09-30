@@ -109,7 +109,7 @@ import ui
 import wx
 from scriptHandler import script
 
-from . import debugLog, insertKeys, jawsDetect, jawsDocs, jawsFiles, jawsKeyMap, keyPlan, nvdaEnv, state, systemCheck, updater
+from . import debugLog, insertKeys, jawsDetect, jawsDocs, jawsFiles, jawsKeyMap, keyPlan, nvdaEnv, quickSettings, state, systemCheck, updater
 from .gui.common import TITLE, messageBox, openFile
 
 try:
@@ -199,6 +199,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._secure = nvdaEnv.isSecureMode()
 		self._layerActive = False
 		self._busy = False
+		self._quickSettingsOpen = False
 		self._menu = None
 		self._menuItem = None
 		self._preferencesItem = None
@@ -1149,6 +1150,56 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not say the program's version")
 
+	def _quickSettingsContext(self):
+		"""The program you are in and whether a document is in browse mode there, as JAWS names them in QuickSettings, or None."""
+		import api
+
+		focus = api.getFocusObject()
+		program = str(getattr(getattr(focus, "appModule", None), "appName", "") or "")
+		if not program:
+			return None
+		braille = False
+		try:
+			import braille as nvdaBraille
+
+			braille = getattr(nvdaBraille.handler.display, "name", "noBraille") != "noBraille"
+		except Exception:
+			debugLog.error("could not tell whether a braille display is connected")
+		try:
+			name = quickSettings.jawsNameFor(program, self._jawsConfigNames())
+		except Exception:
+			debugLog.error("could not read JAWS's names for programs, so QuickSettings names the program as NVDA does")
+			name = ""
+		return quickSettings.Context(program, getattr(focus, "treeInterceptor", None) is not None, braille, name)
+
+	def quickSettings(self, context):
+		# JAWS's Insert+V: a window of the settings of the program you were in, saved for that program alone (issue 40).
+		if self._secure or self._quickSettingsOpen:
+			return
+		if self._refuseWhileSettingsOpen("what you choose in QuickSettings"):
+			return
+		self._quickSettingsOpen = True
+		try:
+			from .gui import quickSettingsDialog
+
+			try:
+				jawsSettings = self._jawsDefaultJcf()
+			except Exception:
+				debugLog.error("could not read JAWS's settings for QuickSettings, so JAWS's own tables are used")
+				jawsSettings = None
+			session = quickSettings.Session(context, jawsSettings)
+			quickSettingsDialog.show(session, self._quickSettingsSaved)
+		except Exception:
+			debugLog.error("could not open QuickSettings")
+			ui.message("QuickSettings could not be opened. NVDA's log says why.")
+		finally:
+			self._quickSettingsOpen = False
+
+	def _quickSettingsSaved(self, saved):
+		# The assistant's own settings (Messages Automatically Read) take effect now, as when its Settings panel saves them.
+		if saved.assistant:
+			self.applyRuntimeSettings()
+
 	def showVersionDetails(self):
 		if self._secure:
 			return
@@ -1831,6 +1882,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		repeatCount = scriptHandler.getLastScriptRepeatCount()
 		self.sayAppVersion(0 if self._secure else repeatCount)
 
+	@script(
+		description=(
+			"Opens QuickSettings, the settings of the program you are in that NVDA can do, saved for that program alone, "
+			"as JAWS's Insert+V does"
+		),
+	)
+	def script_quickSettings(self, gesture):
+		if self._secure:
+			return
+		context = self._quickSettingsContext()
+		if context is None:
+			ui.message("NVDA can't tell which program you are in.")
+			return
+		# The program is the one you are in now; the window comes in front of it.
+		wx.CallAfter(self.quickSettings, context)
+
 	@script(description="Shows the version details of the program you are in, NVDA and Windows, to read and copy, as JAWS does")
 	def script_showVersionDetails(self, gesture):
 		self.showVersionDetails()
@@ -1909,6 +1976,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		language = jaws.primaryLanguage or "enu"
 		files = []
 		for path in (os.path.join(jaws.sharedLanguageDir(language), "Default.jcf"), os.path.join(jaws.userLanguageDir(language), "Default.jcf")):
+			if os.path.isfile(path):
+				try:
+					files.append(jawsFiles.readIni(path, inlineComments=True))
+				except OSError:
+					pass
+		return jawsFiles.mergeIni(*files) if files else None
+
+	def _jawsConfigNames(self):
+		"""JAWS's ConfigNames.ini as JAWS runs it, the user's over JAWS's own, or None without JAWS (see quickSettings)."""
+		installations = [j for j in jawsDetect.findJawsInstallations() if j.programInstalled] or jawsDetect.findJawsInstallations()
+		if not installations:
+			return None
+		migrated = (state.get("lastMigration") or {}).get("jaws")
+		jaws = next((j for j in installations if j.displayName == migrated), installations[0])
+		language = jaws.primaryLanguage or "enu"
+		files = []
+		for path in (os.path.join(jaws.sharedLanguageDir(language), "ConfigNames.ini"), os.path.join(jaws.userLanguageDir(language), "ConfigNames.ini")):
 			if os.path.isfile(path):
 				try:
 					files.append(jawsFiles.readIni(path, inlineComments=True))

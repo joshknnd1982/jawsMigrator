@@ -1640,7 +1640,12 @@ class KeyTests(KeysCase):
 		for layout in ("desktop", "laptop"):
 			plan = self.plan(layout=layout, overrideConflicts=True, text=text)
 			versions = sorted((b.gesture, b.script) for b in plan.bindings if b.module == "globalPlugins.jawsMigrator")
-			self.assertEqual(versions, [("kb:NVDA+control+v", "sayAppVersion"), ("kb:NVDA+control+windows+v", "copyVersionDetails")], layout)
+			# And JAWS's Insert+V, QuickSettings (issue 40), which NVDA has no key for.
+			self.assertEqual(
+				versions,
+				[("kb:NVDA+control+v", "sayAppVersion"), ("kb:NVDA+control+windows+v", "copyVersionDetails"), ("kb:NVDA+v", "quickSettings")],
+				layout,
+			)
 
 
 class NewKeysTests(KeysCase):
