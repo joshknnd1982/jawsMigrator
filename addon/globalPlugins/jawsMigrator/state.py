@@ -118,6 +118,9 @@ DEFAULTS = {
 	#: An Outlook message NVDA reads through UI Automation is said without page and section numbers, as JAWS says it and
 	#: as NVDA's Outlook support does through Word's object model (see outlookPages).
 	"outlookWithoutPageNumbers": True,
+	#: A picture in an Outlook message is said with its alternative text, as JAWS says it: NVDA, reading the message through
+	#: UI Automation, said "link" or "blank" for a picture in an e-mail, and no text for it (see outlookPictures).
+	"outlookPictureText": True,
 	#: The Columns Review add-on says nothing at the ends of a list where it would say "List top", "List bottom" or
 	#: "Mono-item list" with the voice; JAWS says the item alone. Its beeps stay (see listBounds).
 	"quietColumnsReviewListBounds": True,

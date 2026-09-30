@@ -975,6 +975,97 @@ def main():
 			jawsMigrator.state.set(outlookMessages.STATE_KEY, True)
 			plugin.applyRuntimeSettings()
 			check(outlookMessages.isRegistered() and wrapsNvdasText() and nvdasOwnOpening(), "and on again")
+		# NVDA's UI Automation text of an e-mail's picture has none of its text, so NVDA said "link" or "blank" for it, where JAWS
+		# says its alternative text (issue 42). Word's object model has it: the assistant asks it for a line of pictures.
+		from jawsMigrator import outlookPictures
+
+		class PictureField(dict):
+			"""NVDA's textInfos.ControlField."""
+
+		class PictureFieldCommand:
+			"""NVDA's textInfos.FieldCommand."""
+
+			def __init__(self, command, field):
+				self.command, self.field = command, field
+
+		class WordPicture:
+			"""Word's InlineShape, as far as the assistant asks."""
+
+			AlternativeText, Title, Range = "Make it Pink", "", types.SimpleNamespace(Start=2)
+
+		class WordCollection:
+			"""A Word collection of one picture, or of none."""
+
+			def __init__(self, items):
+				self.items = items
+				self.count = len(items)
+
+			def __getitem__(self, index):
+				return self.items[index - 1]
+
+		class PictureRange:
+			"""Word's Range at a picture: it holds the picture, and has no link around it."""
+
+			duplicate = property(lambda self: self)
+			InlineShapes = WordCollection([WordPicture()])
+			Hyperlinks = WordCollection([])
+
+			def expand(self, unit):
+				pass
+
+			def moveStart(self, unit, count):
+				pass
+
+		pictureWindow = types.SimpleNamespace(rangeFromPoint=lambda x, y: PictureRange())
+
+		def nvdasPictureText(info, formatConfig=None):
+			return [PictureFieldCommand("formatChange", PictureField()), ""]
+
+		PictureText = type(
+			"WordDocumentTextInfo",
+			(),
+			{"getTextWithFields": nvdasPictureText, "isCollapsed": False, "pointAtStart": types.SimpleNamespace(x=20, y=10)},
+		)
+		pictureModule = types.ModuleType("NVDAObjects.UIA.wordDocument")
+		pictureModule.WordDocumentTextInfo = PictureText
+		pictureTextInfos = types.ModuleType("textInfos")
+		pictureTextInfos.FieldCommand, pictureTextInfos.ControlField, pictureTextInfos.FormatField = PictureFieldCommand, PictureField, PictureField
+		pictureControlTypes = types.ModuleType("controlTypes")
+		pictureControlTypes.Role = types.SimpleNamespace(GRAPHIC="graphic")
+		fakePictures = {
+			"textInfos": pictureTextInfos,
+			"controlTypes": pictureControlTypes,
+			"NVDAObjects": types.ModuleType("NVDAObjects"),
+			"NVDAObjects.UIA": types.ModuleType("NVDAObjects.UIA"),
+			"NVDAObjects.UIA.wordDocument": pictureModule,
+		}
+
+		def pictureLine(appName):
+			info = PictureText()
+			info.obj = types.SimpleNamespace(appModule=types.SimpleNamespace(appName=appName), WinwordWindowObject=pictureWindow)
+			return [item.field["content"] for item in info.getTextWithFields() if getattr(item, "command", "") == "controlStart"]
+
+		with mock.patch.dict(sys.modules, fakePictures):
+			# Only the pictures are wrapped here, so the chain of wrappers is the assistant's alone.
+			jawsMigrator.state.set(outlookPages.STATE_KEY, False)
+			jawsMigrator.state.set(outlookPictures.STATE_KEY, True)
+			plugin.applyRuntimeSettings()
+			check(
+				outlookPictures.isRegistered() and pictureLine("outlook") == ["Make it Pink"] and pictureLine("winword") == [],
+				"a picture in an Outlook message is said with its alternative text from Word, and Word's own is as before",
+			)
+			jawsMigrator.state.set(outlookPictures.STATE_KEY, False)
+			plugin.applyRuntimeSettings()
+			check(
+				not outlookPictures.isRegistered() and vars(PictureText)["getTextWithFields"] is nvdasPictureText and pictureLine("outlook") == [],
+				"turned off in the Settings panel, NVDA says what it did",
+			)
+			jawsMigrator.state.set(outlookPictures.STATE_KEY, True)
+			plugin.applyRuntimeSettings()
+			check(outlookPictures.isRegistered(), "and on again")
+		jawsMigrator.state.set(outlookPages.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+
 		# Insert+Page Down in Outlook's Inbox: NVDA said "Status Bar" and every button in it; JAWS says the status bar's
 		# NetUISimpleButton items (Outlook.jss). The imitation NVDA has no api module until here.
 		from jawsMigrator import outlookStatusBar
@@ -1323,6 +1414,7 @@ def main():
 		check(not fieldEdges.isRegistered() and plugin._fieldEdges is None, "and the arrow keys at the edges of a field")
 		check(not outlookRows.isRegistered() and plugin._outlookRows is None, "and the Outlook message you leave")
 		check(not outlookPages.isRegistered() and vars(WordText)["getTextWithFields"] is nvdasWordText, "and NVDA's text of a Word document")
+		check(not outlookPictures.isRegistered() and vars(PictureText)["getTextWithFields"] is nvdasPictureText, "and NVDA's text of a Word document with pictures")
 		check(not outlookMessages.isRegistered() and outlookMessagesNvdasOwn(), "and NVDA's browse mode coming into a document, and its fields and formatting of Word's text")
 		check(not outlookStatusBar.isRegistered() and vars(statusBarApi)["getStatusBarText"] is nvdasStatusBarText, "and NVDA's text of a status bar")
 		check(

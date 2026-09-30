@@ -38,7 +38,8 @@ the arrow keys stay in an edit field on a web page when they reach its start or
 end, as in JAWS's Auto Forms Mode (see fieldEdges);
 in Outlook's message list, NVDA says the message you move to, not the one you
 leave (see outlookRows), and an Outlook message without page and section
-numbers (see outlookPages); an Outlook message you read is said with "send
+numbers (see outlookPages) and with the alternative text of its pictures, as
+JAWS says them (see outlookPictures); an Outlook message you read is said with "send
 mail link" for an e-mail address, a list where it starts and ends, and no
 heading for the From line of a message it quotes, as JAWS says it, and read
 from the top when it opens only when turned on (see outlookMessages), and
@@ -515,6 +516,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			outlookRows.unregister()
 		except Exception:
 			pass
+		# The last to wrap NVDA's text of a Word document is the first to give it back.
+		try:
+			from . import outlookPictures
+
+			outlookPictures.unregister()
+		except Exception:
+			pass
 		try:
 			from . import outlookPages
 
@@ -844,6 +852,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				outlookPages.unregister()
 		except Exception:
 			debugLog.error("could not apply leaving page and section numbers out of Outlook messages")
+		try:
+			from . import outlookPictures
+
+			# Not a JAWS setting: JAWS says a picture's alternative text in an Outlook message (WordFunc.jss), where NVDA,
+			# reading the message through UI Automation, said "link" or "blank" for a picture in an e-mail (issue 42).
+			if outlookPictures.wanted(data):
+				outlookPictures.register()
+			else:
+				outlookPictures.unregister()
+		except Exception:
+			debugLog.error("could not apply saying the alternative text of pictures in Outlook messages")
 		try:
 			from . import outlookMessages
 

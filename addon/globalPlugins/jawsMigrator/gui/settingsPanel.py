@@ -37,6 +37,7 @@ from .. import (
 	nvdaEnv,
 	outlookMessages,
 	outlookPages,
+	outlookPictures,
 	outlookRows,
 	outlookStatusBar,
 	profileSwitches,
@@ -183,6 +184,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# JAWS says no page or section in Outlook.
 		self.outlookNoPages = helper.addItem(wx.CheckBox(self, label="Don't say page and section numbers in Outlook messages"))
 		self.outlookNoPages.SetValue(outlookPages.wanted(state.load()))
+		# NVDA said "link" or "blank" for each picture in an e-mail made of pictures; JAWS says their alternative text (issue 42).
+		self.outlookPictures = helper.addItem(
+			wx.CheckBox(self, label="Say the alternative text of a picture in an Outlook message, as JAWS does"),
+		)
+		self.outlookPictures.SetValue(outlookPictures.wanted(state.load()))
 		# JAWS said "Send Mail Link" for an address, "list of 3 items" and "list end" around a list, and no heading for
 		# the From line of the message it quoted; NVDA said "link", no list, and "heading level 1, From:".
 		self.outlookAsJaws = helper.addItem(
@@ -379,6 +385,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownStayInFields = self.stayInFields.GetValue()
 		self._shownOutlookLeftMessage = self.outlookLeftMessage.GetValue()
 		self._shownOutlookNoPages = self.outlookNoPages.GetValue()
+		self._shownOutlookPictures = self.outlookPictures.GetValue()
 		self._shownOutlookAsJaws = self.outlookAsJaws.GetValue()
 		self._shownOutlookReadOnOpen = self.outlookReadOnOpen.GetValue()
 		self._shownOutlookStatusBar = self.outlookStatusBar.GetValue()
@@ -473,6 +480,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[outlookRows.STATE_KEY] = self.outlookLeftMessage.GetValue()
 		if self.outlookNoPages.GetValue() != self._shownOutlookNoPages:
 			updates[outlookPages.STATE_KEY] = self.outlookNoPages.GetValue()
+		if self.outlookPictures.GetValue() != self._shownOutlookPictures:
+			updates[outlookPictures.STATE_KEY] = self.outlookPictures.GetValue()
 		if self.outlookAsJaws.GetValue() != self._shownOutlookAsJaws:
 			updates[outlookMessages.STATE_KEY] = self.outlookAsJaws.GetValue()
 		if self.outlookReadOnOpen.GetValue() != self._shownOutlookReadOnOpen:

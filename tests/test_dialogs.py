@@ -661,6 +661,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"NVDA says page and section numbers in Outlook messages again, at once",
 		)
 
+	def test_outlookPictureTextIsSavedAndApplied(self):
+		from jawsMigrator import outlookPictures
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.outlookPictures,
+			"Say the alternative text of a picture in an Outlook message, as JAWS does",
+			outlookPictures.STATE_KEY,
+			"NVDA says what it said for a picture in an Outlook message again, at once",
+		)
+
 	def test_outlookMessagesAsJawsIsSavedAndApplied(self):
 		from jawsMigrator import outlookMessages
 

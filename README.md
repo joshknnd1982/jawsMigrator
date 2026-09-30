@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.43
+- Version: 1.44
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.44](#whats-new-in-144)
 - [What's new in 1.43](#whats-new-in-143)
 - [What's new in 1.42](#whats-new-in-142)
 - [What's new in 1.41](#whats-new-in-141)
@@ -96,10 +97,17 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.43.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.44.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.44
+
+From the tester's issue 42, "Jaws reads an email better then NVDA":
+
+- **A picture in an Outlook message is said with its alternative text, as JAWS says it.** The tester opened a marketing e-mail in classic Outlook and pressed Down Arrow through it: JAWS "will read some titles for the email", and NVDA "will read nothing". Their log shows it: for each of the message's picture lines NVDA said "link" or "blank", and it said words only for the lines that had words, "Web Browser", "Update My Email Preferences" and "Unsubscribe". An e-mail like that is pictures, most of them inside links. Outlook shows messages with Word, and with a recent Office such as the tester's 16.0.20326 NVDA reads Word through UI Automation, which doesn't give NVDA the text of an e-mail's pictures: NVDA's own issues [14217](https://github.com/nvaccess/nvda/issues/14217) ("graphic" with nothing after it) and [18177](https://github.com/nvaccess/nvda/issues/18177) ("link" alone for a picture in a link, still open) show the same. JAWS asks Word's object model and says each picture's alternative text (WordFunc.jss, `GetInlineShapeAlternativeText`). Now, in an Outlook message, when NVDA has a line of pictures and nothing to say for it, the assistant asks Word's object model, as NVDA's own support does to find where a range is, for the picture at the start of the line, and NVDA says "graphic" and its text, inside the link where there is one: "link, graphic, Make it Pink". The alternative text comes first, then the picture's title, then, for a picture in a link, the link's screen tip. Where Word has nothing for the picture either, NVDA says what it said before. A line with words in it, and a picture NVDA already says the text of, are as before. To turn it off, uncheck 'Say the alternative text of a picture in an Outlook message, as JAWS does' in NVDA's Settings, JAWS Migration Assistant.
+- **Not tried in classic Outlook: please tell us how it sounds.** Classic Outlook isn't installed on the computer this was made on, and the tester's message isn't in the issue. The tests run NVDA 2026.2's own speech code over the 36 lines of the tester's log, with Word's object model imitated: 1.43 says them as the log does, and this version says each picture's text (the texts in the tests are made up). If a picture is still silent, NVDA's log at debug level says why: what Word said for the picture, or that it had no alternative text and what NVDA had for the line, or that Word's object model couldn't be asked. That log, and the message saved from Outlook as an HTML file, are what is needed to go on.
 
 ## What's new in 1.43
 
@@ -817,6 +825,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
+- saying the alternative text of a picture in an Outlook message, as JAWS does, where NVDA said "link" or "blank" (on unless you turn it off; see [What's new in 1.44](#whats-new-in-144));
 - saying Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125) and [What's new in 1.26](#whats-new-in-126));
 - reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on, or a migration takes it from that JAWS option; see [What's new in 1.26](#whats-new-in-126) and [What's new in 1.27](#whats-new-in-127));
 - reading Outlook's status bar as JAWS does, with Insert+Page Down: its items, such as Items in View and the zoom, without "Status Bar" and the view and zoom buttons (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
