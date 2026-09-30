@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.42
+- Version: 1.43
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.43](#whats-new-in-143)
 - [What's new in 1.42](#whats-new-in-142)
 - [What's new in 1.41](#whats-new-in-141)
 - [What's new in 1.40](#whats-new-in-140)
@@ -95,10 +96,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.42.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.43.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.43
+
+From the tester's issue 41, "Should we have a starting announcement when NVDA starts?", and the project owner's answer:
+
+- **NVDA says "NVDA is ready." when it starts.** The tester noticed that JAWS says "JAWS" when it starts and NVDA says nothing, and wrote: "Of course this should be a check box just like the exiting NVDA." The owner agreed and chose the words: 'It should say "NVDA is ready."' NVDA says it after it says where you are, so what you hear first is still where you are. JAWS 2026 has no setting for what it says as it starts (its Default.jcf has no option for it, and the start-up code of its Default and JAWS Window scripts doesn't say it), so a migration has nothing to take from JAWS, and the message is on as the assistant comes. Nothing is said when NVDA reloads its plugins, or where speech is off, beeps, on demand or silent. To turn it off, uncheck 'Say "NVDA is ready." when NVDA starts, and don't let a key stop it' in NVDA's Settings, JAWS Migration Assistant.
+- **No key stops it.** The owner wrote: "that announcement should not be interruptable by the user." A key stops NVDA's speech, so does every window change, and the Shift key pauses it, and NVDA has no way to say that one thing must be finished first. So, from the moment the synthesizer starts on "NVDA is ready." until it has said it, the assistant keeps a key, a window change and Shift from stopping or pausing NVDA's speech. It is a second long, and after 4 seconds at the most, even when the synthesizer never says it has finished, NVDA's speech stops as it always does. Before the synthesizer has started on it, while NVDA is still saying where you are, a key stops that as it always does, and takes the message with it; it is then said again a moment later, up to 5 times in all, so you hear it once whatever you press. What you type or do meanwhile is said after it. Both of NVDA's own functions for stopping speech come back once it is said.
+- **Tested with NVDA 2026.2's own code and JAWS 2026's own files.** The tests run NVDA's own speech manager, `speak`, `cancelSpeech` and window foreground event, with a synthesizer that says when it reaches each point, and a key, a window change and Shift while the message is said. They check JAWS 2026's Default.jcf and the scripts that run as JAWS starts.
 
 ## What's new in 1.42
 
@@ -524,6 +533,7 @@ Settings Center options in more detail:
 - A few JAWS defaults would hide information NVDA gives, such as object descriptions, which JAWS gives through its tutor messages. Those only come over when you changed them in JAWS.
 - JAWS plays no sound when it starts or exits, so NVDA's "Play sounds when starting or exiting NVDA" is turned off.
 - JAWS's Insert+F4 says "Unloading JAWS" where JAWS Messages are on at your verbosity level. There, the assistant's own check box has NVDA say "Unloading NVDA" as it exits. NVDA has no setting for JAWS's other JAWS Messages.
+- JAWS says "JAWS" when it starts, with no setting for it. The assistant's own check box has NVDA say "NVDA is ready." when it starts, and no key stops it. It is on unless you turn it off, and a migration doesn't change it.
 - JAWS's Outlook option "Messages Automatically Read" (Quick Settings, Insert+V in Outlook) has no NVDA setting, so it sets the assistant's own check box for reading an Outlook message from the top when it opens.
 
 Dictionary rules in more detail:
@@ -818,6 +828,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying regions, groups, lists and articles on web pages with JAWS's words: "main region", "group", "list of 2 items", "main region end", and, reading, no banner, search, form, complementary or content information region (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134));
 - keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history, without what NVDA dropped before saying it (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129) and [What's new in 1.33](#whats-new-in-133));
 - saying "Unloading NVDA" as NVDA exits, where JAWS says "Unloading JAWS", and exiting once it has been said (off unless you turn it on, or a migration takes it from JAWS's JAWS Messages at your verbosity level; see [What's new in 1.37](#whats-new-in-137));
+- saying "NVDA is ready." when NVDA starts, after it says where you are, as JAWS says "JAWS", with no key, window change or Shift stopping it while it is said (on unless you turn it off; see [What's new in 1.43](#whats-new-in-143));
 - saying "Screen curtain on" after NVDA says where you are, when NVDA starts with the screen curtain on, which NVDA itself says only on a braille display (on unless you turn it off; see [Screen curtain](#screen-curtain));
 - playing JAWS's layered keystroke sound for NVDA+Shift+J, or a beep (JAWS's sound unless you uncheck it);
 - the list of applications where NVDA sleeps.

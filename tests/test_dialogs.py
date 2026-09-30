@@ -780,6 +780,17 @@ class SettingsPanelTests(unittest.TestCase):
 			"what NVDA says is no longer kept, and what was kept is forgotten, at once",
 		)
 
+	def test_sayNvdaIsReadyIsSavedAndApplied(self):
+		# JAWS says "JAWS" as it starts, with no option for it; the owner asked for "NVDA is ready." (issue 41).
+		from jawsMigrator import startMessage
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.sayReady,
+			'Say "NVDA is ready." when NVDA starts, and don\'t let a key stop it',
+			startMessage.STATE_KEY,
+			'NVDA says nothing when it starts, from its next start',
+		)
+
 	def test_sayUnloadingIsOffUnlessTurnedOn(self):
 		# JAWS's Insert+F4 says "Unloading JAWS" where JAWS Messages are on; the tester turns it off in JAWS (issue 34).
 		from jawsMigrator import exitMessage, state

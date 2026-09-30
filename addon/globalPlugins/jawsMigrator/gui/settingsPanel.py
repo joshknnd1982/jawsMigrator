@@ -43,6 +43,7 @@ from .. import (
 	quickNavHeadings,
 	screenShade,
 	speechHistory,
+	startMessage,
 	startupFocus,
 	state,
 	trayChanges,
@@ -272,6 +273,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="Keep the notifications Windows and programs send, for NVDA+Shift+J then N, as JAWS's notification history"),
 		)
 		self.keepNotificationHistory.SetValue(notificationHistory.wanted(state.load()))
+		# JAWS says "JAWS" as it starts, with no option for it; NVDA starts without a word (issue 41).
+		self.sayReady = helper.addItem(
+			wx.CheckBox(self, label='Say "NVDA is ready." when NVDA starts, and don\'t let a key stop it'),
+		)
+		self.sayReady.SetValue(startMessage.wanted(state.load()))
 		# JAWS's Insert+F4 says "Unloading JAWS" where its JAWS Messages are on; NVDA exits without a word (issue 34).
 		self.sayUnloading = helper.addItem(
 			wx.CheckBox(self, label='Say "Unloading NVDA" as NVDA exits, as JAWS says "Unloading JAWS"'),
@@ -385,6 +391,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownBackForwardAsJaws = self.backForwardAsJaws.GetValue()
 		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
 		self._shownKeepNotificationHistory = self.keepNotificationHistory.GetValue()
+		self._shownSayReady = self.sayReady.GetValue()
 		self._shownSayUnloading = self.sayUnloading.GetValue()
 		self._shownSayScreenCurtainAtStart = self.sayScreenCurtainAtStart.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
@@ -490,6 +497,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[speechHistory.STATE_KEY] = self.keepSpeechHistory.GetValue()
 		if self.keepNotificationHistory.GetValue() != self._shownKeepNotificationHistory:
 			updates[notificationHistory.STATE_KEY] = self.keepNotificationHistory.GetValue()
+		if self.sayReady.GetValue() != self._shownSayReady:
+			updates[startMessage.STATE_KEY] = self.sayReady.GetValue()
 		if self.sayUnloading.GetValue() != self._shownSayUnloading:
 			updates[exitMessage.STATE_KEY] = self.sayUnloading.GetValue()
 		if self.sayScreenCurtainAtStart.GetValue() != self._shownSayScreenCurtainAtStart:

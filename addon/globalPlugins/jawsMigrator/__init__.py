@@ -88,7 +88,8 @@ F11 or Print Screen turns Screen Shade on or off; NVDA+Shift+J, then F11 or Prin
 Screen turns NVDA's screen curtain on or off the same way, saying "Screen curtain on"
 or "Screen curtain off", Shift+F11 says whether it is on, Control+F11 keeps it on each
 time NVDA starts, and NVDA started with the curtain on says so after it says where you
-are (see screenShade).
+are (see screenShade). Where JAWS says "JAWS" as it starts, NVDA says "NVDA is ready."
+after it says where you are, and no key stops it (see startMessage).
 """
 
 from __future__ import annotations
@@ -230,6 +231,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._startupFocus = None
 		#: The screenShade module, while NVDA, started with the screen curtain on, is to say so after its first focus.
 		self._screenShade = None
+		#: The startMessage module, while NVDA, as it starts, is to say "NVDA is ready." after its first focus.
+		self._startMessage = None
 		self._startupProfileTimer = self._repairTimer = self._firstRunTimer = None
 		self.updater = updater.UpdateChecker()
 		if self._secure:
@@ -243,6 +246,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("add the settings panel", self._addSettingsPanel),
 			("apply the assistant's own settings", self.applyRuntimeSettings),
 			("go back to the window you were in when NVDA starts on the taskbar", self._backFromTaskbar),
+			('say "NVDA is ready." when NVDA starts', self._readyAtStart),
 			("say that the screen curtain is on when NVDA starts with it on", self._screenCurtainAtStart),
 			("keep the focus in Outlook while NVDA waits for it", self._keepOutlookFocus),
 			("keep NVDA's Elements List working while a web page changes", self._guardElementsList),
@@ -274,6 +278,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			# NVDA reads the focus in that window as it reads the program, not through UI Automation before it can tell.
 			self._startupFocus = startupFocus
 			startupFocus.followUntilSettled()
+
+	def _readyAtStart(self):
+		from . import startMessage
+
+		# Not a JAWS setting: JAWS says "JAWS" as it starts, with no option for it; NVDA says nothing (issue 41). Said after
+		# where you are, and no key stops it.
+		if startMessage.atStart(state.load()):
+			self._startMessage = startMessage
 
 	def _screenCurtainAtStart(self):
 		from . import screenShade
@@ -587,6 +599,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import screenShade
 
 			screenShade.stop()
+		except Exception:
+			pass
+		self._startMessage = None
+		try:
+			from . import startMessage
+
+			startMessage.stop()
 		except Exception:
 			pass
 		try:
@@ -1615,6 +1634,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				formFields.afterFocus(heard)
 		if changeRepeats is not None:
 			changeRepeats.afterFocus(obj, activation)
+		# NVDA is starting: "NVDA is ready." is said after what NVDA has just queued for the focus, before the curtain (see
+		# startMessage).
+		startMessage = getattr(self, "_startMessage", None)
+		if startMessage is not None and not startMessage.afterFocus():
+			self._startMessage = None
 		# NVDA started with the screen curtain on: said after what NVDA has just queued for the focus (see screenShade).
 		screenShade = getattr(self, "_screenShade", None)
 		if screenShade is not None and not screenShade.afterFocus():

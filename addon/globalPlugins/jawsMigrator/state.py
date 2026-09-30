@@ -171,6 +171,9 @@ DEFAULTS = {
 	#: The last choice made in Quick Settings (Insert+V) for each setting, {JAWS's setting ID: JAWS value}, which tells apart
 	#: two of JAWS's choices that are one in NVDA (see quickSettings).
 	"quickSettingsChoices": {},
+	#: NVDA says "NVDA is ready." as it starts, as JAWS says "JAWS", and a key pressed meanwhile doesn't stop it; JAWS has
+	#: no setting for it, so it is on unless the user turns it off (see startMessage).
+	"sayNvdaReady": True,
 }
 
 _lock = threading.RLock()
