@@ -12,8 +12,8 @@ What JAWS 2026 does (read from its own files and run live, see the tests): Inser
 layout, runs the script QuickSettings (Default.JKM). It opens a window called "QuickSettings - <name>", where the name
 is JAWS's for the program you are in: its configuration's (ConfigNames.ini has olk=Outlook Modern), or the program's own
 (notepad, msedge). The window has a Search box, a tree of categories with a row for each setting, and beside the tree
-the controls of the setting you are on: a check box or a list. Apply and OK save what you changed, Cancel doesn't. What
-it shows comes from Default.QS and the program's own .qs file (msedge.qs includes Chrome.qs, which includes Browser.qs
+the controls of the setting you are on: a check box or a list. Apply, OK, Cancel, Escape and closing the window all save what you changed, and ask nothing (watched in JAWS 2026 in
+Notepad: each left a changed Typing Echo in notepad.JCF). What it shows comes from Default.QS and the program's own .qs file (msedge.qs includes Chrome.qs, which includes Browser.qs
 and IA2Browser.qs; Outlook.qs includes Outlook 2007.qs, which includes WORDClassic.qs), each setting with the .jcf option
 it reads and writes, or a script of QuickSet.jss that does. It saves for the program alone: a setting is written to the
 program's own .jcf (FT_CURRENT_JCF). Some categories show only where they apply: Virtual Cursor Options while a web page

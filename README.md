@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.50
+- Version: 1.51
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.51](#whats-new-in-151)
 - [What's new in 1.50](#whats-new-in-150)
 - [What's new in 1.49](#whats-new-in-149)
 - [What's new in 1.48](#whats-new-in-148)
@@ -102,10 +103,18 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.50.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.51.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.51
+
+From the question of what the QuickSettings window should do when you leave it with unsaved choices. JAWS's file for QuickSettings (QuickSettings.exe) holds the text "You have made changes to ... settings. Do you want to save them?", so it looked as if JAWS asks that when you leave with choices unsaved. Claude watched JAWS 2026 (27.6.18) do it, in Notepad, through JAWS's programming interface and the keyboard: Space changed Typing Echo, and then Escape, the Cancel button and the window's Close each closed the window and asked nothing. Each left the change in Notepad's settings file (`notepad.JCF` held `TypingEcho=2`). The question in JAWS's file is for something else, such as switching the program in the window's Application list, which this window doesn't have.
+
+- **Cancel, Escape and closing the window keep what you changed, with no question, as JAWS's window does.** Until 1.50, Cancel and Escape threw the choices away. Now they save them as OK does, and close. Nothing changed, nothing is said. If the save fails, NVDA says so and the window closes all the same, so there is always a way out. Apply and OK are as before.
+- **The same watching confirmed Space.** In JAWS's tree Space toggled a check box, and on Typing Echo it went through None, Characters, Words and Both Characters and Words and round to the first again: what 1.50 does. That was the part 1.50 had not seen JAWS do.
+- **What was not tried:** whether JAWS writes the file when you change a setting or when the window closes (the files were looked at after the window closed), and the question about the program list. The two files the test created in JAWS's settings folder were removed afterwards, and no JAWS setting of the maintainer's was left changed. Not run in NVDA itself.
 
 ## What's new in 1.50
 
@@ -936,7 +945,7 @@ The window is called "QuickSettings - " and JAWS's name for the program, from JA
 - **Settings** is a tree with a row for each setting inside its category, JAWS's order and JAWS's words. Each row says what the setting is now, as "Progress Bars: Spoken" or "Use Sound: checked", so arrowing through them says it. Categories can be folded with Left Arrow and opened with Right Arrow. **Space** changes the setting you are on, as in JAWS (1.50): it checks or unchecks a check box, and goes to the next choice of a list, from the last to the first; NVDA says what it is now.
 - **The setting you are on**, after the tree (Tab): a check box, or a list with JAWS's choices.
 - **What this does in NVDA** says what the choice you are on sets in NVDA, in NVDA's words: "Punctuation level: all".
-- **Apply** saves and stays, **OK** saves and closes, **Cancel** (and Escape) closes without saving. Only what you changed is saved.
+- **Apply** saves and stays, **OK** saves and closes. **Cancel**, Escape and closing the window close it and keep what you changed too, with no question, as JAWS's window does (1.51; see What's new). Only what you changed is saved.
 
 **Where it is saved.** As JAWS saves to the program's own settings file, NVDA saves for that program alone: into the configuration profile that turns on in it. If NVDA already turns a profile on in that program, yours or a migration's, that one keeps it. Otherwise the assistant makes "JAWS - " and JAWS's name for the program ("JAWS - Outlook", "JAWS - msedge") and turns it on in the program, as a migration does for a JAWS application file, and takes it away again if every choice was what NVDA does already. The normal configuration is never changed. NVDA says where it saved: 'Saved for notepad in the profile "JAWS - notepad".' A setting of the assistant's own (Messages Automatically Read) is saved with the assistant's, and takes effect at once.
 

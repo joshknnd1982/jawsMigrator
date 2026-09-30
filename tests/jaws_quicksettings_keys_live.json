@@ -1,0 +1,19 @@
+{
+	"jaws": "27.6.18",
+	"program": "notepad",
+	"how": "JAWS 2026 started, Notepad in front, the script QuickSettings run through FreedomSci.JawsApi, the tree given the keyboard focus with Tab, keys sent with keybd_event, the right-hand controls read with BM_GETCHECK and CB_GETCURSEL, the settings folder looked at after each way of leaving (2026-09-30). The script is not kept: it leaves notepad.JCF and QuickSettings.his in JAWS's settings folder, which had to be deleted by hand.",
+	"space": {
+		"Language Detect Change": {"kind": "check box", "checked after each Space, from checked": [0, 1]},
+		"Typing Echo": {
+			"kind": "list",
+			"choices in the list": ["None", "Characters", "Words", "Both Characters and Words"],
+			"shown after each Space, from Characters": ["Words", "Both Characters and Words", "None", "Characters", "Words"]
+		}
+	},
+	"leaving with Typing Echo changed from Characters to Words": {
+		"Escape": {"asked a question": false, "window closed": true, "notepad.JCF": "[Options]\r\nLanguageDetection=1\r\nTypingEcho=2\r\n"},
+		"Cancel button (BM_CLICK)": {"asked a question": false, "window closed": true, "notepad.JCF": "[Options]\nTypingEcho=2\n"},
+		"Close (Alt+F4)": {"asked a question": false, "window closed": true, "notepad.JCF": "[Options]\nTypingEcho=2\n"}
+	},
+	"not seen": "JAWS's text \"You have made changes to %s's settings. Do you want to save them?\" (and \"... before switching to %s ?\") is in QuickSettings.exe 27.6.18, but no window asked it in any of these. Whether the file is written when a setting changes or when the window closes was not looked at."
+}

@@ -8,6 +8,8 @@ As JAWS's window has it: a Search box, a tree called Settings with a row for eac
 are on (a check box or a list) and what it does, and the buttons Apply, OK and Cancel. What it holds and saves is in
 quickSettings.
 
+Cancel, Escape and closing the window keep what you changed and ask nothing, as JAWS's do (1.51).
+
 As in JAWS's tree, Space on a setting changes it without a Tab to its control: a check box is checked or not, a list goes to
 the next choice (issue 40).
 """
@@ -57,6 +59,9 @@ class QuickSettingsDialog(wx.Dialog):
 		self.ok.Bind(wx.EVT_BUTTON, self._onOk)
 		self.ok.SetDefault()
 		cancel = wx.Button(self, wx.ID_CANCEL, "Cancel")
+		# Cancel, Escape (the escape ID) and closing the window keep what you changed, as they do in JAWS (issue 40).
+		self.Bind(wx.EVT_BUTTON, self._onCancel, id=wx.ID_CANCEL)
+		self.Bind(wx.EVT_CLOSE, self._onCancel)
 		for button in (self.apply, self.ok, cancel):
 			buttons.Add(button, flag=wx.LEFT, border=6)
 		sizer.Add(buttons, flag=wx.ALIGN_RIGHT | wx.TOP, border=10)
@@ -237,6 +242,16 @@ class QuickSettingsDialog(wx.Dialog):
 	def _onOk(self, event) -> None:
 		if self._save():
 			self.EndModal(wx.ID_OK)
+
+	def _onCancel(self, event) -> None:
+		"""Cancel, Escape and closing the window save what you changed and close, with no question, as JAWS's window does.
+
+		Watched in JAWS 2026 (27.6.18) in Notepad: after Space changed Typing Echo, Escape, the Cancel button and the
+		window's Close each closed the window without asking anything, and each left the change in notepad.JCF
+		(TypingEcho=2). JAWS has the text "Do you want to save them?" but showed none of it there. A save that fails is
+		said, and the window closes all the same, so there is always a way out."""
+		self._save()
+		self.EndModal(wx.ID_CANCEL)
 
 
 def show(session: quickSettings.Session, onSaved=None, parent=None) -> int:
