@@ -853,7 +853,7 @@ def unlabeledItemName(item):
 		return None
 	document = getattr(item, "document", None)
 	root = getattr(document, "rootNVDAObject", document)
-	if not inOutlook(root) or getattr(root, "isReadonlyViewer", False) is not True:
+	if not inOutlook(root) or not _isReadOnly(root):
 		return None
 	node = item.obj
 	if node is None:
@@ -925,9 +925,17 @@ _countsFor = None
 
 def isMessageYouRead(textInfo) -> bool:
 	"""Whether ``textInfo`` is the text of an Outlook message you read, not one you write: NVDA's Outlook support reads a
-	message in browse mode only then (appModules.outlook.OutlookUIAWordDocument.isReadonlyViewer)."""
+	message in browse mode only then (appModules.outlook.OutlookUIAWordDocument.isReadonlyViewer). That is a question of UI
+	Automation, asked of a message once each time it takes the focus, and not for each link and list NVDA says (issue 40)."""
 	document = getattr(textInfo, "obj", None)
-	return inOutlook(document) and getattr(document, "isReadonlyViewer", False) is True
+	return inOutlook(document) and _isReadOnly(document)
+
+
+def _isReadOnly(document) -> bool:
+	"""Whether ``document``, NVDA's object for an Outlook message, is one you read: asked once for each time it takes the focus."""
+	from . import outlookLookups
+
+	return outlookLookups.readOnly(document, lambda: getattr(document, "isReadonlyViewer", False) is True)
 
 
 def countListItems(listObject):

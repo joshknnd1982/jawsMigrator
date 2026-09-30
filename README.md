@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.52
+- Version: 1.53
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.53](#whats-new-in-153)
 - [What's new in 1.52](#whats-new-in-152)
 - [What's new in 1.51](#whats-new-in-151)
 - [What's new in 1.50](#whats-new-in-150)
@@ -104,10 +105,24 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.52.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.53.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.53
+
+From the tester's second log on issue 40, "Pressing insert V doesn't bring up quick settings for that program" (NVDA log 2026-09-30 15.51.23: NVDA 2026.2, the assistant 1.50, Outlook First Line Silence 1.0.30, classic Outlook 16.0.20326 through UI Automation): "It is also very slow with the option checked to read the message."
+
+- **NVDA no longer waits seconds on Outlook for each line of a newsletter.** What the log showed: NVDA's watchdog wrote "Recovered from potential freeze after 2.5 seconds", "5.0" and "7.0" and, for a Down Arrow in a message of 73,022 characters with 18 links, "Recovered from freeze after 12.5 seconds", with NVDA's main thread inside a UI Automation call for a line of the message. The assistant's own lines in the same log have five of those seconds between "read the HTML of an Outlook message" (15:51:08.562) and "asked Word's object model for the links of an Outlook message" (15:51:13.621), with nothing but the assistant's code between them. The small message the tester opened first took 0.15 seconds for the same. Outlook answers each question of its object model in about 35 milliseconds there (the 18 links are about 145 questions), a message that size keeps Outlook busy, and NVDA's main thread waits for each answer in the middle of the key press. The assistant asked a lot, and asked it again for each line: for each link with no text, which message is shown (about seven questions) and Word's hyperlinks (six more), and the first time, for each of the 18 hyperlinks, about eight questions, for links whose names the message's HTML had given; for each line of pictures, a range from a point on the screen and up to a dozen questions about it, whether Word had anything for the line before it or not; and for each link and list, whether the message is one you read. Reading a message from the top asks all of that for each of its lines in turn, which is why it was slowest with "Messages Automatically Read" checked.
+- **Each thing is asked of Outlook once for each time a message takes the focus, and for a short time.**
+  - Which message it is, the names its HTML gives its links, the names Word gives them, and whether it is one you read, are asked once and kept while the message has the focus. A message that takes the focus again (you opened it, or came back to it) is asked about again; its HTML and Word's answers are kept for the messages seen last, so that is a few questions, not a hundred and forty. A message whose window has another title is another message.
+  - Word's object model is asked about a message's links for half a second at most, in the order of the message, and only about the links whose names nothing else gave (the HTML names some, and gives others text). Nothing is asked of Word when the HTML names them all. What couldn't be asked is what 1.49 said where neither had a name: where the link goes, as "substack.com".
+  - Word is asked for the text of a picture until one answer is slow (more than a third of a second; a healthy Outlook answers in hundredths). That answer is used, and Word is not asked about the pictures of that message again: NVDA says them as it did before 1.44, which a link with a name from the message's words doesn't need anyway.
+- **What you may hear differently:** in a slow Outlook with a large message, the first links of the message may get a name from Word's object model and the later ones, where the HTML has none, are named by where they go. In a quick Outlook nothing changes: the half second and the third of a second are not reached.
+- **NVDA's debug log says how long Outlook took**, so that the next log shows it: "read the HTML of an Outlook message from Outlook (found by the caption of its window, in 0.31 seconds)"; "asked Word's object model for the links of an Outlook message, in 0.50 seconds: ... the time allowed ran out after 3 of the 18 links asked about"; and "Word's object model took 0.61 seconds to answer about a picture in an Outlook message ... so it isn't asked about the pictures of this message again". Press NVDA+Shift+J, then L, after a message that was slow, and attach the zip.
+- **Tested with a clock, not in classic Outlook.** Outlook's and Word's object models are imitations that count each question and advance a clock by the tester's 35 milliseconds for it. For a message of 18 links like his (two named by the HTML, one by Word, the rest by where they go), 1.50's way takes 4.3 seconds for the first link and 11.6 seconds for the eighteen lines, as his log does (5 and 12.5); this takes 0.8 seconds for the first, asking 23 questions, and nothing for the rest. The tests cover a message that takes the focus again, a window with another title, ten minutes, where NVDA can't tell what has the focus (the old way), Word asked for half a second and no more, Word not asked about links the HTML named, a slow and a quick Word for pictures, and the message asked once whether it is one you read. The whole test suite passes. Classic Outlook isn't installed on the computer this was made on, so how it feels in yours has not been heard: the next log will show.
+- **What this does not change:** the same log shows NVDA waiting about four seconds between Enter and the window of a message of 96 KB taking the focus (15:50:34.880 to 15:50:39.028), with nothing of the assistant's in between: that is Outlook opening a large message. Outlook First Line Silence, which steps through a message by its links, also asks Word for each arrow key, and its own lines in the log are 0.1 to 0.4 seconds apart for one key in a small message. Those can still feel slow.
 
 ## What's new in 1.52
 
@@ -934,6 +949,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying the alternative text of a picture in an Outlook message, as JAWS does, where NVDA said "link" or "blank" (on unless you turn it off; see [What's new in 1.44](#whats-new-in-144));
 - saying Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125) and [What's new in 1.26](#whats-new-in-126));
 - naming a link with no text in an Outlook message, as JAWS names one: by the alt text of its picture, or where it goes, in speech, braille and the Elements List (on unless you turn it off, with the line above; see [What's new in 1.49](#whats-new-in-149));
+- keeping the assistant's own questions to Outlook short in a large message: which message it is, its links' names and its pictures' text are asked once for each time the message takes the focus, and Word for half a second at most (on with the two lines above about links and pictures; see [What's new in 1.53](#whats-new-in-153));
 - reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on, or a migration takes it from that JAWS option; see [What's new in 1.26](#whats-new-in-126) and [What's new in 1.27](#whats-new-in-127));
 - reading Outlook's status bar as JAWS does, with Insert+Page Down: its items, such as Items in View and the zoom, without "Status Bar" and the view and zoom buttons (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));

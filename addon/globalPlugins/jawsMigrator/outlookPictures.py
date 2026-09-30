@@ -57,12 +57,18 @@ are remote ones Outlook doesn't show until told to. The link is what NVDA finds,
 message's own words, so a link it has named (``unlabeledLinks.NAMED_BY``) is not asked of Word's object model again. This is
 still for a picture NVDA finds with no text, in a link or not; and when Word answers with nothing, the log says what was asked
 and what Word held (the point, its range, how many pictures and links, how long their texts are) and not only that it had none.
+
+Since 1.53 (issue 40, "very slow": each line of pictures asked Word a dozen questions, and in the tester's Outlook each took
+35 milliseconds) Word is asked about the pictures of a message until one answer takes more than a third of a second, and not
+after that while the message has the focus; see outlookLookups.
 """
 
 from __future__ import annotations
 
 import functools
 import threading
+
+from . import outlookLookups as lookups
 
 #: The assistant's setting (state.json) that turns this on or off.
 STATE_KEY = "outlookPictureText"
@@ -85,8 +91,9 @@ NOT_WORDS = "\ufffc\u200b\u200c\u200d\ufeff\xa0 \t\r\n\v\f\0"
 _MOST_WRAPPERS = 16
 #: How many times in a row Word's object model may fail before it isn't asked again.
 _MOST_FAILURES = 3
-#: How many times the log says each thing it has to say: what Word answered, and what it had nothing for.
-_MOST_NOTES = 6
+#: How many times the log says each thing it has to say: what Word answered, and what it had nothing for. (What it had nothing for
+#: asks Word a dozen more questions, for the log alone.)
+_MOST_NOTES = 3
 
 _enabled = False
 _failed = False
@@ -359,10 +366,15 @@ def _screenTipOf(candidate) -> str:
 	return ""
 
 
-def _ask(info):
+class _TooSlow(Exception):
+	"""Word's object model took longer to answer than ``lookups.SLOW_ASK`` allows."""
+
+
+def _ask(info, watch=None):
 	"""What Word's object model has for the picture at the start of ``info``, NVDA's text of a line, as (text, where, asked),
 	with text "" when Word has none, or None when it couldn't be asked. ``asked`` is what was asked of Word, for the log: the
-	point on the screen, and the ranges of Word's document looked at."""
+	point on the screen, and the ranges of Word's document looked at. ``watch`` is the time since asking began: when the
+	point's range took longer than ``lookups.SLOW_ASK`` to come, the rest isn't asked (``_TooSlow``)."""
 	window = info.obj.WinwordWindowObject
 	if not window:
 		return None
@@ -374,6 +386,8 @@ def _ask(info):
 		point = info.pointAtStart
 	# A pixel inside the line's corner, as the point of a picture's edge could be the next character's.
 	where = window.rangeFromPoint(int(point.x) + 1, int(point.y) + 1)
+	if watch is not None and watch.took() > lookups.SLOW_ASK:
+		raise _TooSlow
 	candidates = []
 	# The point is on the picture, or just after it.
 	for shift in (0, -1):
@@ -440,7 +454,10 @@ def _rangeFacts(candidate) -> str:
 
 
 def _asking(asked) -> str:
-	"""What was asked of Word, in words for the log."""
+	"""What was asked of Word, in words for the log. (None where Word was slow to answer: what it held is not asked for the log
+	too, which is a dozen questions more.)"""
+	if asked is None:
+		return "Word was slow to answer, so what it held is not described"
 	point, where, candidates = asked
 	try:
 		place = f"the point {int(point.x)},{int(point.y)} of the screen"
@@ -449,14 +466,43 @@ def _asking(asked) -> str:
 	return f"asked at {place}; Word's range there is {_rangeFacts(where)}; looked at {'; '.join(_rangeFacts(candidate) for candidate in candidates)}"
 
 
+def _readingOf(info):
+	"""What the assistant has learned of the message ``info`` is in (``outlookLookups.reading``), or None."""
+	try:
+		return lookups.reading(info.obj)
+	except Exception:
+		return None
+
+
+def _slow(reading, watch, answered: bool) -> None:
+	"""Word took long over a picture: it isn't asked about the pictures of this message again (until the message takes the
+	focus again), so a message that keeps Outlook busy doesn't keep NVDA waiting for each line of it (issue 40)."""
+	if reading is not None:
+		reading.picturesOff = True
+	_note(
+		"slow",
+		f"Word's object model took {watch.took():.2f} seconds to answer about a picture in an Outlook message"
+		f"{'' if answered else ' and was not asked more'} (more than {lookups.SLOW_ASK} seconds), so it isn't asked about the pictures "
+		"of this message again, and a picture is said as NVDA says it",
+	)
+
+
 def _asked(info):
-	"""``_ask``, counting how often Word's object model fails: (text, where), or None."""
+	"""``_ask``, counting how often Word's object model fails: (text, where), or None. Not asked again about a message whose
+	pictures Word was slow to answer for."""
 	global _failures, _suspended
 	if _suspended or threading.current_thread() is not threading.main_thread():
 		return None
+	reading = _readingOf(info)
+	if reading is not None and reading.picturesOff:
+		return None
+	watch = lookups.Deadline(0)
 	try:
-		answer = _ask(info)
+		answer = _ask(info, watch)
 	except LookupError:
+		return None
+	except _TooSlow:
+		_slow(reading, watch, answered=False)
 		return None
 	except Exception:
 		_failures += 1
@@ -466,6 +512,11 @@ def _asked(info):
 			_note("suspended", "Word's object model failed again and again, so NVDA doesn't ask it for pictures' text until it restarts")
 		return None
 	_failures = 0
+	if watch.took() > lookups.SLOW_ASK:
+		# It answered, and the answer is used; the next line's picture is not asked.
+		_slow(reading, watch, answered=True)
+		if answer is not None:
+			answer = answer[:2] + (None,)
 	return answer
 
 

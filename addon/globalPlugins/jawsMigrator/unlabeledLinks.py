@@ -53,6 +53,11 @@ step had: how the message's window was found, what the HTML held (its links, tho
 with alt text, and the sites they go to, never an address), what Word's object model held, and what UI Automation gave for
 the first link. Where an Outlook gives a window caption as the subject alone, or as the window's title, either is taken.
 
+Since 1.53 (issue 40: "It is also very slow with the option checked to read the message", a log with NVDA frozen for 12.5
+seconds, five of them between the message's HTML and Word's answer about its 18 links) what is asked of Outlook is asked once
+for each time a message takes the focus, and Word's object model for half a second at most, and only about the links whose
+names nothing else gave: see outlookLookups.
+
 The code here needs only the standard library, apart from the Outlook object model it asks, so the tests load it
 without NVDA.
 """
@@ -66,6 +71,8 @@ import time
 from html.parser import HTMLParser
 from typing import NamedTuple
 from urllib.parse import unquote, urlsplit
+
+from . import outlookLookups as lookups
 
 #: Outlook's olFormatHTML, a message's BodyFormat when it is HTML.
 OL_FORMAT_HTML = 2
@@ -228,6 +235,13 @@ def labelsByAddress(html) -> dict:
 	return labels
 
 
+class Labels(dict):
+	"""The names a message's HTML gives its links, ``{addressKey: name}``. ``unnamed`` has the addresses of the links with no
+	text that it gives no name, which Word's object model may: the only ones it is asked about. None when that isn't known."""
+
+	unnamed = None
+
+
 # -- Where a link goes ---------------------------------------------------------------------------------------------
 
 
@@ -313,6 +327,7 @@ def reset() -> None:
 		_noted.clear()
 		_retryAt = 0.0
 		_failed = False
+	lookups.reset()
 
 
 def _failure(what: str, holdOff: bool = True) -> None:
@@ -460,27 +475,40 @@ def _factsOfHtml(found: list, labels: dict) -> str:
 
 def messageLabels(node) -> dict:
 	"""The names the HTML of the message that has the link ``node`` gives its links without text: ``{addressKey: name}``;
-	empty when Outlook can't say or the message isn't HTML. A message is read from Outlook once."""
-	if time.monotonic() < _retryAt or threading.current_thread() is not threading.main_thread():
+	empty when Outlook can't say or the message isn't HTML. Outlook is asked which message is shown, and for its HTML, once for
+	each time the message takes the focus (``outlookLookups.reading``); the messages seen last are kept past that."""
+	if threading.current_thread() is not threading.main_thread():
 		# Outlook's object model belongs to NVDA's main thread: a question from another thread fails, and is not asked.
 		return {}
+	reading = lookups.reading(node)
+	if reading.labels is not None:
+		return reading.labels
+	if time.monotonic() < _retryAt:
+		return {}
+	watch = lookups.Deadline(0)
 	try:
 		item, how = shownWhy(node)
 		if item is None:
 			_say("no item", f"a link with no text in an Outlook message can't be named from the message's HTML: {how}")
-			return {}
+			reading.labels = Labels()
+			return reading.labels
 		format_ = getattr(item, "BodyFormat", None)
 		if format_ != OL_FORMAT_HTML:
 			_say(f"format {format_}", f"a link with no text in an Outlook message can't be named from its HTML: the message is not HTML (its body format is {format_!r})")
-			return {}
+			reading.labels = Labels()
+			return reading.labels
 		key = _messageKey(item)
 		with _lock:
 			if key in _messages:
 				_messages.move_to_end(key)
-				return _messages[key]
+				reading.labels = _messages[key]
+				return reading.labels
 		html = item.HTMLBody
 		found = anchors(html)
-		labels = labelsByAddress(html)
+		labels = Labels(labelsByAddress(html))
+		labels.unnamed = frozenset(
+			addressKey(anchor.href) for anchor in found if not hasText(anchor.text) and addressKey(anchor.href) not in labels
+		)
 	except Exception:
 		_failure("can't read the links of an Outlook message from Outlook, so a link with no text is named by where it goes")
 		return {}
@@ -488,9 +516,10 @@ def messageLabels(node) -> dict:
 		_messages[key] = labels
 		while len(_messages) > _MOST_MESSAGES:
 			_messages.popitem(last=False)
+	reading.labels = labels
 	_say(
 		f"read {key}",
-		f"read the HTML of an Outlook message from Outlook (found by {how}): {len(html or '')} characters, "
+		f"read the HTML of an Outlook message from Outlook (found by {how}, in {watch.took():.2f} seconds): {len(html or '')} characters, "
 		f"{_factsOfHtml(found, labels)}",
 	)
 	return labels
@@ -524,17 +553,26 @@ def _hyperlinksOf(document):
 	return word.Hyperlinks
 
 
-def wordNames(links) -> tuple:
+def wordNames(links, needed=None, deadline=None) -> tuple:
 	"""What Word's own object model names the links of the message whose Hyperlinks are ``links``: ({addressKey: name}, what
 	it had, in words for the debug log). A link around a picture is named by the picture's alternative text or title, before
 	its screen tip (as NVDA's own support for Word reads a picture link, ``_getLinkDataAtCaretPosition``); the address is
-	Word's, which is how the link is found. Asks Word about each link once for the whole message."""
+	Word's, which is how the link is found. Asks Word about each link once for the whole message, in the order of the message,
+	and only about those whose address is in ``needed`` (the links the message's HTML gave no name; all when it is None),
+	until ``deadline`` is over: each question of Word's object model waits for Outlook, and a message of eighteen links took five
+	seconds of NVDA's main thread in one tester's Outlook (issue 40)."""
 	total = int(links.Count)
-	names, pictures, shapes, withText = {}, 0, 0, 0
-	for index in range(1, min(total, _MOST_WORD_LINKS) + 1):
+	names, pictures, shapes, withText, looked = {}, 0, 0, 0, 0
+	last = min(total, _MOST_WORD_LINKS)
+	for index in range(1, last + 1):
+		if deadline is not None and deadline.over():
+			break
+		looked = index
 		try:
 			link = links[index]
 			address = link.Address or ""
+			if needed is not None and addressKey(address) not in needed:
+				continue
 			name = ""
 			if link.Type == HYPERLINK_INLINE_SHAPE:
 				pictures += 1
@@ -554,6 +592,8 @@ def wordNames(links) -> tuple:
 		f"Word has {total} hyperlinks: {pictures} around a picture, {shapes} of those with the picture in Word's range, "
 		f"{withText} with alt text or a title, and {len(names)} with a name"
 	)
+	if looked < last:
+		facts += f"; the time allowed ran out after {looked} of the {last} links asked about, so the others are named by where they go"
 	return names, facts
 
 
@@ -575,33 +615,48 @@ def _wordKey(node, links) -> str:
 
 
 def wordLabels(node, document) -> dict:
-	"""``wordNames`` of the message shown in ``document``, asked of Word once, as {addressKey: name}; {} when it can't be
+	"""``wordNames`` of the message shown in ``document``, asked of Word once for each time the message takes the focus
+	(``outlookLookups.reading``), in the time ``outlookLookups.WORD_BUDGET`` allows, as {addressKey: name}; {} when it can't be
 	asked."""
 	if threading.current_thread() is not threading.main_thread():
 		return {}
+	reading = lookups.reading(node)
+	if reading.words is not None:
+		return reading.words
+	needed = getattr(reading.labels, "unnamed", None)
+	if needed is not None and not needed:
+		# The message's HTML names each link with no text that it has: there is nothing for Word to add, and nothing is asked.
+		reading.words = {}
+		return reading.words
+	deadline = lookups.Deadline(lookups.WORD_BUDGET)
 	try:
 		links = _hyperlinksOf(document)
 		if links is None:
 			_say("no word", "a link with no text in an Outlook message can't be named by Word's object model: NVDA has none for this message (WinwordDocumentObject)")
-			return {}
+			reading.words = {}
+			return reading.words
 		key = _wordKey(node, links)
 		with _lock:
 			if key in _wordMessages:
 				_wordMessages.move_to_end(key)
-				return _wordMessages[key]
-		names, facts = wordNames(links)
+				reading.words = _wordMessages[key]
+				return reading.words
+		names, facts = wordNames(links, needed, deadline)
 	except Exception:
 		_say("word failed", "Word's object model couldn't name the links of an Outlook message, so a link with no text is named by where it goes")
 		try:
 			_log().debug("jawsMigrator: Word's object model failed:", exc_info=True)
 		except Exception:
 			pass
-		return {}
+		# Not asked again while this message has the focus: the same question would wait as long again.
+		reading.words = {}
+		return reading.words
 	with _lock:
 		_wordMessages[key] = names
 		while len(_wordMessages) > _MOST_MESSAGES:
 			_wordMessages.popitem(last=False)
-	_say(f"word {key}", f"asked Word's object model for the links of an Outlook message: {facts}")
+	reading.words = names
+	_say(f"word {key}", f"asked Word's object model for the links of an Outlook message, in {deadline.took():.2f} seconds: {facts}")
 	return names
 
 
