@@ -95,6 +95,9 @@ are (see screenShade). Where JAWS says "JAWS" as it starts, NVDA says "NVDA is r
 after it says where you are, and no key stops it (see startMessage). The suggestions an
 edit field on a web page shows, such as the addresses on visible.com, are reached with Down
 Arrow and chosen with Enter, which NVDA closed by moving the focus to them (see suggestionLists).
+NVDA+Shift+J, then T starts a Remote Access
+session in one key, as JAWS's Insert+Alt+T starts a Tandem session: it puts the link for the other person on the
+clipboard; Shift+T connects with a link from the clipboard, and Control+T copies the link again (see remoteAccess).
 """
 
 from __future__ import annotations
@@ -162,6 +165,10 @@ LAYER_COMMANDS = (
 	(("kb:shift+f11",), "reportScreenShade", "Shift+F11", "say whether the screen curtain is on."),
 	# Not JAWS's: the curtain kept on each time NVDA starts, as NVDA's own key pressed twice (issue 37).
 	(("kb:control+f11", "kb:control+printScreen"), "keepScreenShade", "Control+F11 or Control+Print Screen", "turn the screen curtain on and keep it on, also each time NVDA starts."),
+	# JAWS's Insert+Alt+T starts or ends a Tandem session; NVDA's Remote Access takes a dialog's worth of choices (issue 45).
+	(("kb:t",), "startOrEndRemoteSession", "T", "start a Remote Access session in one key, as JAWS's Insert+Alt+T starts a Tandem session: the link for the person who will control this computer goes on the clipboard; pressed again, it ends the session."),
+	(("kb:shift+t",), "joinRemoteSession", "Shift+T", "control another computer with the Remote Access link on the clipboard."),
+	(("kb:control+t",), "copyRemoteLink", "Control+T", "copy the link to the current Remote Access session to the clipboard again."),
 	(("kb:shift+/", "kb:f1"), "layerHelp", "Question mark or F1", "this help."),
 )
 
@@ -636,6 +643,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import startMessage
 
 			startMessage.stop()
+		except Exception:
+			pass
+		try:
+			from . import remoteAccess
+
+			remoteAccess.stop()
 		except Exception:
 			pass
 		try:
@@ -1204,6 +1217,32 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			notificationHistory.repeatLast()
 		except Exception:
 			debugLog.error("could not say the last notification")
+
+	def startOrEndRemoteSession(self):
+		# JAWS's Insert+Alt+T: a Remote Access session for this computer to be controlled, or its end (see remoteAccess).
+		try:
+			from . import remoteAccess
+
+			remoteAccess.startOrEnd(state.load())
+		except Exception:
+			debugLog.error("could not start or end a Remote Access session")
+
+	def joinRemoteSession(self):
+		# The link on the clipboard, to control the computer that sent it (see remoteAccess).
+		try:
+			from . import remoteAccess
+
+			remoteAccess.join()
+		except Exception:
+			debugLog.error("could not join a Remote Access session")
+
+	def copyRemoteLink(self):
+		try:
+			from . import remoteAccess
+
+			remoteAccess.copyLink()
+		except Exception:
+			debugLog.error("could not copy the Remote Access link")
 
 	def toggleAudioDucking(self):
 		# JAWS's Insert+Space, D: on or off, with JAWS's words (see duckingToggle).
@@ -1944,6 +1983,24 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	@script(description="Says the last notification again, as JAWS's Insert+Space, Shift+N does")
 	def script_repeatLastNotification(self, gesture):
 		self.repeatLastNotification()
+
+	@script(
+		description=(
+			"Starts a Remote Access session in one key, as JAWS's Insert+Alt+T starts a Tandem session: it turns Remote Access on "
+			"if it is off and puts the link for the person who will control this computer on the clipboard; where a session "
+			"is running, it ends it"
+		),
+	)
+	def script_startOrEndRemoteSession(self, gesture):
+		self.startOrEndRemoteSession()
+
+	@script(description="Controls another computer with the Remote Access link on the clipboard; NVDA asks you to confirm first")
+	def script_joinRemoteSession(self, gesture):
+		self.joinRemoteSession()
+
+	@script(description="Copies the link to the current Remote Access session to the clipboard again")
+	def script_copyRemoteLink(self, gesture):
+		self.copyRemoteLink()
 
 	@script(description="Turns audio ducking on or off: other programs' sound is lowered while NVDA speaks, as JAWS's Insert+Space, D does")
 	def script_toggleAudioDucking(self, gesture):

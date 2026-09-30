@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.46
+- Version: 1.48
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.48](#whats-new-in-148)
 - [What's new in 1.46](#whats-new-in-146)
 - [What's new in 1.45](#whats-new-in-145)
 - [What's new in 1.44](#whats-new-in-144)
@@ -99,10 +100,25 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.46.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.48.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.48
+
+From issue 45, "Make NVDA remote easier to use?". The tester pressed NVDA+Shift+J, then Shift+T, then NVDA+Shift+J and Control+T, and wrote "nothing happens. It just beeps at me." That was the assistant's fault, not the tester's: the commands the reply on issue 45 described were built for 1.42 and never put in a release (the number went to another change), so 1.43 to 1.45 had no T, Shift+T or Control+T, and the layer beeped, as it does for any key it has no command for. They are in 1.48.
+
+Asked what exactly they wanted and how NVDA should behave, the tester had answered "I'm open to suggestions on this." So this is a guess, from what a JAWS user meets in NVDA 2026.2's Remote Access. It is off until "Enable Remote Access" is checked in NVDA's Settings, and until then NVDA+Alt+R says only "Action unavailable when Remote Access is disabled". Once it is on, NVDA+Alt+R opens a dialog with Mode, Server, Host and Key and a Generate Key button, the Host has no default, and the other person needs both the host and the key. Only NVDA+Alt+R and NVDA+Alt+Tab have keys: Disconnect, Copy link, Mute remote, Send clipboard and Send Control+Alt+Delete have none. JAWS's Insert+Alt+T starts a Tandem session for the computer to be controlled, or ends it, and asks for nothing. If this isn't what you meant, say on issue 45 what should change.
+
+- **NVDA+Shift+J, then T starts a Remote Access session in one key, as JAWS's Insert+Alt+T starts a Tandem session.** It turns Remote Access on if it is off (what the "Enable Remote Access" check box does, with no restart), connects this computer, as the one to be controlled, to the server in NVDA's Settings, JAWS Migration Assistant, with a key of its own, and puts NVDA's own link to the session on the clipboard. NVDA says "Waiting for someone to control this computer. The link is on the clipboard: send it to them." When it had to turn Remote Access on, it says "Remote Access turned on." first. Pressed again while a session is running or being set up, T ends it, with NVDA's own words and sounds, and NVDA's own question while this computer is controlled. See [Remote Access](#remote-access).
+- **NVDA+Shift+J, then Shift+T controls another computer with the link on the clipboard.** The link can be inside a message. NVDA asks its own question first, "Do you wish to control the computer on server ... with key ...?", as it does for any link, so a link someone sent can't connect your computer without your yes. With no link on the clipboard it says so.
+- **NVDA+Shift+J, then Control+T copies the link to the session again**, with NVDA's own "Copied link".
+- **A server that can't be reached is said.** NVDA says nothing when the computer to be controlled can't reach its server: it tries again every five seconds, in silence. Now the first failure is said, "Can't reach nvdaremote.com. Check that this computer is online, or choose another server in NVDA's Settings, JAWS Migration Assistant.", and the attempt ends.
+- **The link is never said to be on the clipboard when it isn't.** Another program can hold the clipboard for a moment, and NVDA then reports a failed copy without an error. T tries a few times, and if the clipboard stays held it says "Couldn't copy the link. Give the other person the server, nvdaremote.com, and the key, ..." with the session's own key. Found while checking the commands against NVDA 2026.2's source; Shift+T tries a few times to read the clipboard too.
+- **The server is a setting.** NVDA's Settings, JAWS Migration Assistant, has "Customize the Remote Access server NVDA+Shift+J, then T uses (host, or host:port)". It begins as nvdaremote.com, the relay server NVDA's user guide gives as its example; change it to any Remote Access server. A relay server sees a session's traffic, as it does when you use NVDA's own dialog.
+- **A new migration gives JAWS's Insert+Alt+T to T's command.** Before, it went to NVDA's Connect dialog. Insert+Alt+T is NVDA+Alt+T in NVDA, which NVDA uses to toggle braille mode, so a migration gives it only where you let it take NVDA's own keystrokes, as before. A migration made before keeps NVDA's dialog on that key (NVDA+Alt+R opens it as always); to change it, give "Start a Remote Access session in one key" a keystroke in NVDA's Input Gestures dialog, under JAWS Migration Assistant, or migrate the keystrokes again. JAWS's Insert+Alt+Tab, Toggle Tandem Mode, stays NVDA's Alt+NVDA+Tab.
+- **What was tested, and what was not.** The tests run NVDA 2026.2's own network code, the transport that connects and reconnects, the message serializer, and the link code, against a relay server on the same computer with a certificate of its own, trusted as NVDA's own certificate question trusts one. T's connection joins the server as the controlled computer with the key that is in the link; the link, read from the clipboard by Shift+T, joins the same channel as the controlling computer; a server nobody answers is said once and NVDA's retries stop; a connection that drops later isn't called unreachable; and T pressed again closes the connection. Not tested: inside a running NVDA (its sounds, its menu and its question dialogs), with nvdaremote.com itself, or between two computers over the internet. The first real session is the real test, and a report on issue 45 would help.
 
 ## What's new in 1.46
 
@@ -756,6 +772,9 @@ Press NVDA+Shift+J, then:
 | F11 or Print Screen | Turn the screen curtain on or off, as JAWS's Insert+Space, F11 or Print Screen turns Screen Shade on or off: "Screen curtain on" or "Screen curtain off" (see [Screen curtain](#screen-curtain)) |
 | Shift+F11 | Say whether the screen curtain is on |
 | Control+F11 or Control+Print Screen | Turn the screen curtain on and keep it on, also each time NVDA starts: "Screen curtain on. NVDA turns it on each time it starts." F11 turns it off |
+| T | Start a Remote Access session in one key, as JAWS's Insert+Alt+T starts a Tandem session: the link for the person who will control this computer goes on the clipboard; pressed again, it ends the session (see [Remote Access](#remote-access)) |
+| Shift+T | Control another computer with the Remote Access link on the clipboard |
+| Control+T | Copy the link to the current Remote Access session to the clipboard again |
 | ? or F1 | Show these commands in a window, a line each, as JAWS's Insert+Space, question mark does |
 
 Any other key, or Escape, leaves the layer. Every command is also in NVDA's Input Gestures dialog, under JAWS Migration Assistant, where you can give it its own keystroke. NVDA+Shift+J itself can be changed there too.
@@ -800,6 +819,20 @@ While "Always show a warning when enabling Screen Curtain" is checked in NVDA's 
 When NVDA starts with the curtain on, because "Make screen black" is checked or you kept it on with Control+F11, NVDA says "Screen curtain on" after it says where you are. NVDA itself says so only on a braille display. To stop it, uncheck 'Say "Screen curtain on" when NVDA starts with the screen curtain on' in NVDA's Settings, JAWS Migration Assistant.
 
 NVDA's own keys still work. NVDA+Control+Escape pressed once turns the curtain on until NVDA restarts, and pressed twice keeps it on after that. NVDA's own "Reports the state of the screen curtain", under Miscellaneous in NVDA's Input Gestures dialog, has no key until you give it one. NVDA+Escape isn't a screen curtain key: a migration gives it JAWS's Insert+Escape, Refresh Screen, which refreshes a web page in browse mode.
+
+### Remote Access
+
+NVDA's Remote Access, in its Tools menu and on NVDA+Alt+R, takes a dialog's worth of choices: the mode, the server, the host, the key. JAWS's Tandem takes none: Insert+Alt+T starts a session for the computer to be controlled, and ends it. After NVDA+Shift+J:
+
+- **T** starts a session for this computer to be controlled. It turns Remote Access on if it is off (it checks "Enable Remote Access" in NVDA's Settings, Remote Access, and starts it with no restart), makes a key of its own, 20 letters and digits, connects to the server in NVDA's Settings, JAWS Migration Assistant, and puts NVDA's own link on the clipboard. The key is the session's name and its password, so it is long, and new for each session. Send the link to the person who will control this computer, in a message or by any means: they copy it, then press NVDA+Shift+J, then Shift+T, or open it from Windows' Run box. NVDA says "Connected as controlled computer" when the connection is made, and plays its sound when the other person joins. Where a session is running or being set up, T ends it.
+- **Shift+T** is for the person who controls the other computer. Copy the link, then press it. NVDA asks "Do you wish to control the computer on server ... with key ...?" and connects if you say yes. NVDA+Alt+Tab switches between controlling the other computer and your own, as it does in NVDA.
+- **Control+T** puts the link to the current session on the clipboard again.
+
+NVDA's own commands still work as before: NVDA+Alt+R opens the connection dialog, and Disconnect, Mute remote, Send clipboard and Send Control+Alt+Delete are in NVDA's Tools menu, under Remote Access, and in NVDA's Input Gestures dialog, under Remote Access, where you can give them keys. In secure mode NVDA allows no new session, so T and Shift+T say so.
+
+The server is set in NVDA's Settings, JAWS Migration Assistant: "Customize the Remote Access server NVDA+Shift+J, then T uses (host, or host:port)". It begins as nvdaremote.com, the relay server NVDA's user guide gives as its example. A relay server passes a session's traffic between the two computers, so use one you trust, as with NVDA's own dialog. If this computer can't reach it, NVDA says so and the attempt ends, instead of trying again in silence.
+
+When a migration gives JAWS's Insert+Alt+T, it goes to T's command. Insert+Alt+T is NVDA+Alt+T in NVDA, which NVDA uses to toggle braille mode, so a migration gives it only where you let it take NVDA's own keystrokes; otherwise NVDA+Shift+J, then T does the same. A migration made before 1.48 has it on NVDA's Connect dialog; give "Start a Remote Access session in one key" a keystroke in NVDA's Input Gestures dialog, under JAWS Migration Assistant, or migrate the keystrokes again.
 
 ### Program version
 

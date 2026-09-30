@@ -837,12 +837,14 @@ SCRIPT_MAP = {
 		"recognizeWithUwpOcr",
 		"Recognize the navigator object's content (the focus by default) with Windows OCR",
 	),
-	# JAWS Tandem -> NVDA Remote Access.
+	# JAWS Tandem -> NVDA Remote Access. JAWS's Insert+Alt+T starts a Tandem session for the computer to be controlled, or
+	# ends it, and asks for nothing; NVDA's own toggleRemoteConnection (NVDA+Alt+R) opens a dialog for the mode, server,
+	# host and key. The assistant's command does what JAWS's does (see remoteAccess).
 	"startorendtandemsession": (
-		"globalCommands",
-		"GlobalCommands",
-		"toggleRemoteConnection",
-		"Connect to or disconnect from a Remote Access session",
+		ASSISTANT_MODULE,
+		ASSISTANT_CLASS,
+		"startOrEndRemoteSession",
+		"Start a Remote Access session for this computer to be controlled, with the link on the clipboard, or end the session (a JAWS Migration Assistant command)",
 	),
 	"toggletandemmode": (
 		"globalCommands",

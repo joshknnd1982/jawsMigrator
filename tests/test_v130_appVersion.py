@@ -1640,10 +1640,16 @@ class KeyTests(KeysCase):
 		for layout in ("desktop", "laptop"):
 			plan = self.plan(layout=layout, overrideConflicts=True, text=text)
 			versions = sorted((b.gesture, b.script) for b in plan.bindings if b.module == "globalPlugins.jawsMigrator")
-			# And JAWS's Insert+V, QuickSettings (issue 40), which NVDA has no key for.
+			# The program's version (1.30), JAWS's Insert+V, QuickSettings (issue 40), which NVDA has no key for, and, since
+			# 1.48, JAWS's Start or End Tandem Session (Insert+Alt+T, Caps Lock+Alt+T).
 			self.assertEqual(
 				versions,
-				[("kb:NVDA+control+v", "sayAppVersion"), ("kb:NVDA+control+windows+v", "copyVersionDetails"), ("kb:NVDA+v", "quickSettings")],
+				[
+					("kb:NVDA+alt+t", "startOrEndRemoteSession"),
+					("kb:NVDA+control+v", "sayAppVersion"),
+					("kb:NVDA+control+windows+v", "copyVersionDetails"),
+					("kb:NVDA+v", "quickSettings"),
+				],
 				layout,
 			)
 

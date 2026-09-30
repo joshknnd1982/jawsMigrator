@@ -63,8 +63,17 @@ ADDED_IN_139 = (
 #: What 1.41 added after Shift+F11, for issue 37: "I do think we should add a command to keep it turned on if the user
 #: wants that."
 ADDED_IN_141 = "Control+F11 or Control+Print Screen, turn the screen curtain on and keep it on, also each time NVDA starts. "
-#: The help now: the tester's, word for word, with 1.39's and 1.41's commands where they go.
-HELP_NOW = TESTERS_PASTE.replace("Question mark or F1, this help.", ADDED_IN_139 + ADDED_IN_141 + "Question mark or F1, this help.")
+#: What 1.48 added after Control+F11, for issue 45: NVDA's Remote Access in one key, as JAWS's Insert+Alt+T starts a Tandem session.
+ADDED_IN_142 = (
+	"T, start a Remote Access session in one key, as JAWS's Insert+Alt+T starts a Tandem session: the link for the person who "
+	"will control this computer goes on the clipboard; pressed again, it ends the session. "
+	"Shift+T, control another computer with the Remote Access link on the clipboard. "
+	"Control+T, copy the link to the current Remote Access session to the clipboard again. "
+)
+#: The help now: the tester's, word for word, with 1.39's, 1.41's and 1.48's commands where they go.
+HELP_NOW = TESTERS_PASTE.replace(
+	"Question mark or F1, this help.", ADDED_IN_139 + ADDED_IN_141 + ADDED_IN_142 + "Question mark or F1, this help."
+)
 
 # NVDA 2026.2's inputCore.normalizeGestureIdentifier, word for word.
 NVDA_NORMALIZE_GESTURE = (
@@ -206,9 +215,9 @@ class TheHelpTests(unittest.TestCase):
 		self.assertEqual(len(set(normalized)), len(normalized), "no key twice")
 		# 1.35's 20 commands, on 21 keys (question mark and F1 both show the help), and 1.39's N, Shift+N and D, F11 or
 		# Print Screen (both turn the screen curtain on or off, as JAWS's Screen Shade) and Shift+F11, and 1.41's Control+F11
-		# or Control+Print Screen (the curtain kept on).
-		self.assertEqual(len(jawsMigrator.LAYER_GESTURES), 29)
-		self.assertEqual(len(jawsMigrator.LAYER_COMMANDS), 26)
+		# or Control+Print Screen (the curtain kept on), and 1.48's T, Shift+T and Control+T (Remote Access).
+		self.assertEqual(len(jawsMigrator.LAYER_GESTURES), 32)
+		self.assertEqual(len(jawsMigrator.LAYER_COMMANDS), 29)
 
 	def test_eachCommandHasAScriptInInputGestures(self):
 		for _gestures, script, key, _words in jawsMigrator.LAYER_COMMANDS:

@@ -43,6 +43,7 @@ from .. import (
 	pageReady,
 	profileSwitches,
 	quickNavHeadings,
+	remoteAccess,
 	screenShade,
 	speechHistory,
 	startMessage,
@@ -314,6 +315,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label='Say "Screen curtain on" when NVDA starts with the screen curtain on'),
 		)
 		self.sayScreenCurtainAtStart.SetValue(screenShade.wanted(state.load()))
+		# JAWS's Insert+Alt+T starts a Tandem session in one key; NVDA+Shift+J, then T does the same with this server (issue 45).
+		self.remoteServer = helper.addLabeledControl(
+			"Customi&ze the Remote Access server NVDA+Shift+J, then T uses (host, or host:port):",
+			wx.TextCtrl,
+		)
+		self.remoteServer.SetValue(remoteAccess.server(state.load()))
 		# NVDA+Shift+J starts the assistant's commands with JAWS's layered keystroke sound, or with a beep.
 		self.playLayerSound = helper.addItem(wx.CheckBox(self, label="Play JAWS's layered &keystroke sound for NVDA+Shift+J, instead of a beep"))
 		self.playLayerSound.SetValue(layerSound.wanted(state.load()))
@@ -423,6 +430,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownSayReady = self.sayReady.GetValue()
 		self._shownSayUnloading = self.sayUnloading.GetValue()
 		self._shownSayScreenCurtainAtStart = self.sayScreenCurtainAtStart.GetValue()
+		self._shownRemoteServer = self.remoteServer.GetValue()
 		self._shownPlayLayerSound = self.playLayerSound.GetValue()
 
 	def _run(self, action: str, closeSettings: bool = False):
@@ -538,6 +546,9 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[exitMessage.STATE_KEY] = self.sayUnloading.GetValue()
 		if self.sayScreenCurtainAtStart.GetValue() != self._shownSayScreenCurtainAtStart:
 			updates[screenShade.STATE_KEY] = self.sayScreenCurtainAtStart.GetValue()
+		if self.remoteServer.GetValue() != self._shownRemoteServer:
+			# Kept as a host: no scheme, no slashes, and NVDA's own example where it is left empty.
+			updates[remoteAccess.STATE_KEY] = remoteAccess.server({remoteAccess.STATE_KEY: self.remoteServer.GetValue()})
 		if self.playLayerSound.GetValue() != self._shownPlayLayerSound:
 			updates[layerSound.STATE_KEY] = self.playLayerSound.GetValue()
 		cleared = {name for index, name in enumerate(self.sleepApps) if not self.sleepList.IsChecked(index)}

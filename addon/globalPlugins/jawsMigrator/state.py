@@ -184,6 +184,9 @@ DEFAULTS = {
 	#: NVDA says "NVDA is ready." as it starts, as JAWS says "JAWS", and a key pressed meanwhile doesn't stop it; JAWS has
 	#: no setting for it, so it is on unless the user turns it off (see startMessage).
 	"sayNvdaReady": True,
+	#: The Remote Access server NVDA+Shift+J, then T connects to, as host or host:port; nvdaremote.com is the example NVDA's
+	#: user guide gives (see remoteAccess).
+	"remoteAccessServer": "nvdaremote.com",
 }
 
 _lock = threading.RLock()
