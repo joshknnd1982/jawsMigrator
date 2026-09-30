@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.44
+- Version: 1.45
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.45](#whats-new-in-145)
 - [What's new in 1.44](#whats-new-in-144)
 - [What's new in 1.43](#whats-new-in-143)
 - [What's new in 1.42](#whats-new-in-142)
@@ -97,10 +98,20 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.44.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.45.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.45
+
+From the tester's issues 43, "It no longer says page ready", and 44, about the same silence with the message "Loading Complete":
+
+- **ClassicSpeech's "Page ready" message, and the page summary after it, are said for every page that loads, also for a page the browser finished loading before NVDA was ready for it.** The tester turned on "Notify when page is ready" in ClassicSpeech's settings and found that some pages said nothing; later, with the message changed to "Loading Complete", "It doesn't say anything sometimes." The message is ClassicSpeech's, not the assistant's. The tester's two logs (NVDA 2026.2, Edge, ClassicSpeech 1.18) have 14 pages that loaded and said it, within half a second of NVDA reading the page's title, with the summary two seconds later. They have two that said nothing at all, not the message and not the summary: "NBA Rumors - HoopsRumors.com" at 11:47:09 and "MLB Rumors - MLBTradeRumors.com" at 12:05:35, which had said both the first time it was opened in the same log. On a third, the Elements List opened as the page loaded and took the focus, which ends ClassicSpeech's wait on purpose. Nothing in the log differs between a page that said it and one that didn't, because NVDA doesn't log the events it gets, but ClassicSpeech's code and NVDA's explain which can happen. ClassicSpeech says the message when NVDA tells it that the browser finished loading a document (NVDA's documentLoadComplete event), and it does that after NVDA's own handling of the event. NVDA gives that event to the page's browse mode buffer only once the buffer has loaded, and it has no other handler for it, so when the browser says a page has loaded while NVDA's buffer for it is still loading, or before NVDA has one, NVDA's event ends before ClassicSpeech's second line. ClassicSpeech never hears that the page loaded, and NVDA doesn't ask again: it reads the page as its buffer is done, and needs no load event for that. A page that loads slowly has its buffer ready first and says the message; a page that loads quickly can be the other way round.
+- **The assistant now notes each page that finishes loading in Edge, Chrome and Firefox, and, if ClassicSpeech didn't take it, waits until the page is the one NVDA's focus is in and is ready, and gives ClassicSpeech the event.** ClassicSpeech then says the message and the page summary as its own settings say, with its own message and delay, once for the page. The assistant looks every tenth of a second, so the message comes a moment after NVDA reads the page, as for any other page. It waits three seconds for NVDA's focus to come into the page and ten for the page to be ready, and stops when the focus goes to another program. Nothing changes for a page whose buffer was ready when the browser said it loaded, or without ClassicSpeech, and the page, the focus and the caret are never touched. It is "Say ClassicSpeech's "Page ready" message and page summary for every page that loads, also one that finishes loading before NVDA is ready for it" in NVDA's Settings, JAWS Migration Assistant, on unless you turn it off. Whether ClassicSpeech says anything, and what, is still decided in ClassicSpeech's own settings.
+- **Is it how it was before, that the message is said when you follow a link?** The tester asked this on issue 43. Yes: ClassicSpeech says it each time a page loads, whether you typed the page's address or followed a link to a new page, and the tester's log has both. A link that only moves to another place on the same page loads no page, so nothing is said. Version 1.45 doesn't change when it is said, only that it is now said for the pages it missed.
+- **The log says what happened to a page that loaded.** If a page still says nothing, NVDA's log now says whether the assistant saw the page finish loading, whether its buffer wasn't ready or NVDA's focus wasn't in it, where the focus was, and what ClassicSpeech had. Attach it with NVDA+Shift+J, then L.
+- **Checked with ClassicSpeech's own code and NVDA's own event chain, not yet in NVDA and Edge themselves.** The tests run ClassicSpeech 1.18's lifecycle code word for word and NVDA 2026.2's own event executer. ClassicSpeech alone hears nothing of a page that loads while its buffer is loading, or before NVDA's focus is in it, as in the tester's silence; with the assistant, each such page says the message and the summary once, for pages in turn, with the message "Loading Complete", with the summary or the message alone, and not at all where ClassicSpeech has both off. Nothing is said twice, for a page the focus never comes to, when the focus goes to NVDA's dialog, in another program, without ClassicSpeech, or turned off. Nobody has yet run it in Edge with the tester's settings, and the log can't say which order the browser's events came in, so if a page is still silent, please attach a log. The same fix belongs in ClassicSpeech itself, which should do its work in a finally after NVDA's event; when it does, the assistant finds the page taken and adds nothing.
 
 ## What's new in 1.44
 
@@ -834,6 +845,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));
 - saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region", not the page of a tab you are leaving, and not a page's first line the first time you come to it (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131), [What's new in 1.33](#whats-new-in-133) and [What's new in 1.34](#whats-new-in-134));
+- saying ClassicSpeech's "Page ready" message and page summary for every page that loads, also one the browser finished loading before NVDA was ready for it (on unless you turn it off; see [What's new in 1.45](#whats-new-in-145));
 - saying regions, groups, lists and articles on web pages with JAWS's words: "main region", "group", "list of 2 items", "main region end", and, reading, no banner, search, form, complementary or content information region (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134));
 - keeping what NVDA says, for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history, without what NVDA dropped before saying it (on unless you turn it off, or a migration takes it from JAWS's option; see [What's new in 1.29](#whats-new-in-129) and [What's new in 1.33](#whats-new-in-133));
 - saying "Unloading NVDA" as NVDA exits, where JAWS says "Unloading JAWS", and exiting once it has been said (off unless you turn it on, or a migration takes it from JAWS's JAWS Messages at your verbosity level; see [What's new in 1.37](#whats-new-in-137));

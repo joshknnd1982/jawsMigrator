@@ -770,6 +770,16 @@ class SettingsPanelTests(unittest.TestCase):
 			'NVDA says "window", "document" and a page\'s address again, at once',
 		)
 
+	def test_pageReadyForEveryPageIsSavedAndApplied(self):
+		from jawsMigrator import pageReady
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.pageReadyForEveryPage,
+			"Say ClassicSpeech's \"Page ready\" message and page summary for every page that loads, also one that finishes loading before NVDA is ready for it",
+			pageReady.STATE_KEY,
+			"ClassicSpeech's page message is said only for a page whose buffer was ready when the browser said it loaded, at once",
+		)
+
 	def test_sayWebRegionsAsJawsIsSavedAndApplied(self):
 		from jawsMigrator import webRegions
 

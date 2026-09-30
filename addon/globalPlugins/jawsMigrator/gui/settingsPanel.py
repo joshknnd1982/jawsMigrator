@@ -40,6 +40,7 @@ from .. import (
 	outlookPictures,
 	outlookRows,
 	outlookStatusBar,
+	pageReady,
 	profileSwitches,
 	quickNavHeadings,
 	screenShade,
@@ -252,6 +253,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.browserPagesAsJaws.SetValue(browserPages.wanted(state.load()))
+		# ClassicSpeech's "Notify when page is ready" said nothing for some pages (issues 43 and 44): a page the browser
+		# said had loaded before NVDA had its buffer ready.
+		self.pageReadyForEveryPage = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Say ClassicSpeech's \"Page ready\" message and page summary for every page that loads, also one that finishes loading before NVDA is ready for it",
+			),
+		)
+		self.pageReadyForEveryPage.SetValue(pageReady.wanted(state.load()))
 		# JAWS said "MainRegion" and "new Comment group" where NVDA said "main landmark" and "new Comment grouping"
 		# (issue 30), and, reading, "list of 2 items", "list end" and "main region end", and no banner or search region.
 		self.webRegionsAsJaws = helper.addItem(
@@ -394,6 +404,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
 		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
 		self._shownBrowserPagesAsJaws = self.browserPagesAsJaws.GetValue()
+		self._shownPageReadyForEveryPage = self.pageReadyForEveryPage.GetValue()
 		self._shownWebRegionsAsJaws = self.webRegionsAsJaws.GetValue()
 		self._shownBackForwardAsJaws = self.backForwardAsJaws.GetValue()
 		self._shownKeepSpeechHistory = self.keepSpeechHistory.GetValue()
@@ -498,6 +509,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[formFields.STATE_KEY] = self.formFieldsAsJaws.GetValue()
 		if self.browserPagesAsJaws.GetValue() != self._shownBrowserPagesAsJaws:
 			updates[browserPages.STATE_KEY] = self.browserPagesAsJaws.GetValue()
+		if self.pageReadyForEveryPage.GetValue() != self._shownPageReadyForEveryPage:
+			updates[pageReady.STATE_KEY] = self.pageReadyForEveryPage.GetValue()
 		if self.webRegionsAsJaws.GetValue() != self._shownWebRegionsAsJaws:
 			updates[webRegions.STATE_KEY] = self.webRegionsAsJaws.GetValue()
 		if self.backForwardAsJaws.GetValue() != self._shownBackForwardAsJaws:

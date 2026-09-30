@@ -139,6 +139,9 @@ DEFAULTS = {
 	#: placeholder, no "multi line" for any edit field, and nothing again of what browse mode's cursor was in when the
 	#: focus moves there (see formFields).
 	"sayFormFieldsAsJaws": True,
+	#: ClassicSpeech's "Page ready" message, and the page summary after it, are said for a page the browser said had loaded
+	#: before NVDA had its buffer ready, which ClassicSpeech 1.18 never heard of (see pageReady).
+	"sayPageReadyForEveryPage": True,
 	#: Edge's and Chrome's windows and pages are said as JAWS says them: the window by its name and a page that opens by
 	#: its title, without "window", "document", the page's address or Edge's frame around the page (see browserPages).
 	"sayBrowserPagesAsJaws": True,

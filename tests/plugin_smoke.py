@@ -1286,6 +1286,19 @@ def main():
 			browserPages.isRegistered() and speechPackage.speakObject.__wrapped__ is speakObject and "event_treeInterceptor_gainFocus" in vars(ChromeVBuf),
 			"and on again, wrapped once",
 		)
+		# ClassicSpeech's "Page ready" message is said for a page that loaded before its buffer was ready (see pageReady).
+		from jawsMigrator import pageReady
+
+		check(
+			pageReady.isRegistered() and plugin._pageReady is pageReady and callable(getattr(plugin, "event_documentLoadComplete", None)),
+			"ClassicSpeech's page message is said for a page that loaded before its buffer was ready, and NVDA gives the assistant the page load event",
+		)
+		jawsMigrator.state.set(pageReady.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not pageReady.isRegistered(), "turned off in the Settings panel, a page that loaded early is let be")
+		jawsMigrator.state.set(pageReady.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(pageReady.isRegistered(), "and on again")
 		# Regions, groups, lists and articles on web pages are said with JAWS's words (see webRegions).
 		from jawsMigrator import webRegions
 
@@ -1490,6 +1503,7 @@ def main():
 			"linkSpeech",
 			"formFields",
 			"browserPages",
+			"pageReady",
 			"webRegions",
 			"backForward",
 			"outlookFocus",

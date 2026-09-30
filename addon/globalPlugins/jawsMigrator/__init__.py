@@ -65,7 +65,9 @@ around the page, and not the page of a tab you are leaving, nor a page's first
 line the first time you come to it (see browserPages); JAWS's Say Next Sentence
 and Say Prior Sentence read by sentence on web pages, which NVDA's browse mode
 can't (see browseSentences); the MS Edge Discard Announcements add-on's category
-stays in NVDA's Settings while Edge runs (see edgeAnnouncements); regions, groups, lists
+stays in NVDA's Settings while Edge runs (see edgeAnnouncements); ClassicSpeech's
+"Page ready" message is said for a page that finished loading before NVDA had
+its buffer ready (see pageReady); regions, groups, lists
 and articles on web pages are said with JAWS's words, "main region", "group",
 "list of 2 items" and "main region end" (see webRegions);
 NVDA started with its desktop shortcut's key comes up in the window you were
@@ -222,6 +224,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._elementsList = None
 		#: The emptyAlerts module, once loaded: an alert event goes through it before NVDA says the alert.
 		self._emptyAlerts = None
+		#: The pageReady module, once loaded: a document that finished loading is noted after NVDA and ClassicSpeech took it.
+		self._pageReady = None
 		#: The fieldEdges module, once loaded: a caret key that can't move in an edit field goes through it before browse mode.
 		self._fieldEdges = None
 		#: The outlookRows module, once loaded: a change of name of an Outlook message goes through it before NVDA.
@@ -500,6 +504,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import emptyAlerts
 
 			emptyAlerts.unregister()
+		except Exception:
+			pass
+		self._pageReady = None
+		try:
+			from . import pageReady
+
+			pageReady.unregister()
 		except Exception:
 			pass
 		self._fieldEdges = None
@@ -816,6 +827,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._emptyAlerts = emptyAlerts
 		except Exception:
 			debugLog.error("could not apply leaving out alerts with nothing in them")
+		try:
+			from . import pageReady
+
+			# Not a JAWS setting: ClassicSpeech says its "Page ready" message from NVDA's load event, which NVDA doesn't give
+			# it for a page whose buffer is still loading, so a page that loads quickly got none (issues 43 and 44).
+			if pageReady.wanted(data):
+				pageReady.register()
+			else:
+				pageReady.unregister()
+			self._pageReady = pageReady
+		except Exception:
+			debugLog.error("could not apply saying ClassicSpeech's page message for a page that loaded early")
 		try:
 			from . import fieldEdges
 
@@ -1688,6 +1711,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if outlookRows is not None and outlookRows.leftBehind(obj):
 			return
 		nextHandler()
+
+	def event_documentLoadComplete(self, obj, nextHandler):
+		# NVDA's and ClassicSpeech's handling of the event first; then a page ClassicSpeech didn't take, because the focus
+		# wasn't in it yet, is waited for (see pageReady).
+		try:
+			nextHandler()
+		finally:
+			pageReady = getattr(self, "_pageReady", None)
+			if pageReady is not None:
+				pageReady.noteLoad(obj)
 
 	def event_alert(self, obj, nextHandler):
 		# An alert with nothing in it isn't said: NVDA would say "alert" alone, and JAWS says nothing (see emptyAlerts).
