@@ -92,7 +92,8 @@ _app = None
 
 def setUpModule():
 	global _app
-	_app = wx.App()
+	# The application other test modules made, as they do (a second one, or one that goes with this module, breaks them).
+	_app = wx.GetApp() or wx.App(False)
 
 
 def pump(seconds=0.05):
@@ -613,7 +614,8 @@ class NvdaCase(unittest.TestCase):
 		self.configDir, appDir = fakeNvda.makeNvdaFolders(os.path.join(self.root, "nvda"))
 		self.frame = wx.Frame(None)
 		self.addCleanup(self.frame.Destroy)
-		self.conf, _current = fakeNvda.install(self.configDir, appDir, self.frame)
+		# No frame for NVDA's gui: what the fake leaves in gui.mainFrame must not be a window this test destroys.
+		self.conf, _current = fakeNvda.install(self.configDir, appDir, None)
 		# NVDA's configuration always has its defaults.
 		for path, value in NVDA_DEFAULTS.items():
 			self.setBase(path, value)
