@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.48
+- Version: 1.49
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.49](#whats-new-in-149)
 - [What's new in 1.48](#whats-new-in-148)
 - [What's new in 1.46](#whats-new-in-146)
 - [What's new in 1.45](#whats-new-in-145)
@@ -100,10 +101,23 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.48.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.49.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.49
+
+From the tester's issue 46, "NVDA and unlabeled links in a email", and issue 42, "Jaws reads an email better then NVDA", which are the same candle shop message. The tester tried 1.44 and 1.45 on it and wrote "it didn't" and "still not reading the links", with three NVDA logs and the message: this is the first version with the change that matters for it, and it is the build the reply on issue 46 called 1.47.
+
+- **A link with no text in an Outlook message is named, as JAWS names it, instead of "link" alone.** The tester wrote: "Jaws reads unlabeled links properly. It is able to determine the link. NVDA can't." The message's HTML has thirty links, and twenty of them hold only a picture, such as `<a href="..."><img alt="Pink Pumpkin Yankee Candle with label and a pink pumpkin beside it on a pink background"></a>`. The tester's log shows NVDA saying "link" and nothing more for each one as the arrow keys went down the message, and "link, Web Browser" for a link with text. In NVDA's Elements List the label of such a link is the word "Unlabeled". JAWS's own settings (Default.JCF) list every graphical link, name a picture by its alt text before its title, and name a graphical link that has neither by where it goes.
+- **Why 1.44 didn't do it.** 1.44 asked Word's object model for the picture at the start of a line. The logs of 1.44 and 1.45 show that for this message there is no picture for NVDA to ask about: each of those lines is, in NVDA's text, a link with nothing in it (no picture, no text), and Word had no text where the line starts: "Word's object model has no alternative text for the picture at the start of this line ... (NVDA's fields: start EDITABLETEXT, start EDITABLETEXT, start LINK, '', end, end, end)", line after line. The message's pictures are remote ones (`src="https://..."`) which Outlook doesn't show until told to, and each has the alt text its sender wrote. The tall ones have several lines, and NVDA said "link" on the first and "blank" on the lines after it, which are the same link. So 1.49 names the link, from the message's own words.
+- **What NVDA says now.** In an Outlook message you read, a link with no text is said with a name after "link" (and before it in quick navigation, as NVDA says a link's text): first the name Word gives it, if it gives one; then the alt text of the picture in the link, or its title, which the assistant reads from the message's HTML in Outlook (the link with the same address); then the alt text, title or screen tip Word's own object model has for the picture in that link; then where it goes, such as "click.shop.example", or the e-mail address of a link to one ("send mail link, reply@shop.example"). A link with text is said as before. The name is also what the Elements List and the Links List (Insert+F7) show in the place of "Unlabeled", and what braille shows. The next lines of a tall picture are still said as "blank", as NVDA says a blank line.
+- **Finding the message.** The assistant finds the message that has the link by its window: an open message's inspector whose caption or subject fits the window's title (which is "Subject - Message (HTML)"), else the window Outlook has in front, else, in the main window with the reading pane, the message selected in the list.
+- **It works with 1.44's pictures.** A picture Word's object model has text for, in a link that has no name from the message, is said as 1.44 said it ("link, graphic, Make it Pink"); when the link is named from the message, which Word's object model can't improve on, it isn't asked. When the name is only where the link goes and Word has the picture's text, NVDA says both: "link, click.shop.example, graphic, Make it Pink".
+- **The debug log says what happened.** For each message, once: how the message was found, what its HTML held (how many links, how many have no text, how many hold a picture with alt text, and the sites they go to, never an address), what Word's object model held, and what UI Automation gives for the first link with no text (whether it has an address, a name). When Word's object model has no text for a picture, the note says what was asked of it (the point on the screen, Word's range there, how many pictures and links, how long their texts are) and not only that it had none. Where a link's name was lost, the log says where.
+- **Nothing leaves your computer.** The HTML is read from Outlook on your computer, and only its links are looked at. NVDA's debug log names each kind of name once, with the site it was for and never the rest of an address. It is on unless you uncheck 'Say Outlook messages as JAWS does' in NVDA's Settings, JAWS Migration Assistant, which also turns off "send mail link" and the lists in messages.
+- **Not yet run in a live classic Outlook.** Classic Outlook isn't installed on the computer this was made on. The message was read as data from the .msg the tester attached, never opened. The tests run NVDA 2026.2's own code for the fields of Word's text, their speech and the Elements List's label, with imitations of Outlook's and Word's object models, against the tester's message: all thirty of its links are found in its HTML, and the twenty with no text are all named. If a link is still said as "link" alone, please attach NVDA's log taken at debug level (NVDA+Shift+J, then L): it says which step lost the name.
 
 ## What's new in 1.48
 
@@ -883,6 +897,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying the alternative text of a picture in an Outlook message, as JAWS does, where NVDA said "link" or "blank" (on unless you turn it off; see [What's new in 1.44](#whats-new-in-144));
 - saying Outlook messages as JAWS does: "send mail link" for an e-mail address, where lists start and end, and no heading for the From line of a quoted message (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125) and [What's new in 1.26](#whats-new-in-126));
+- naming a link with no text in an Outlook message, as JAWS names one: by the alt text of its picture, or where it goes, in speech, braille and the Elements List (on unless you turn it off, with the line above; see [What's new in 1.49](#whats-new-in-149));
 - reading an Outlook message from the top when it opens, as JAWS's "Messages automatically read" does (off unless you turn it on, or a migration takes it from that JAWS option; see [What's new in 1.26](#whats-new-in-126) and [What's new in 1.27](#whats-new-in-127));
 - reading Outlook's status bar as JAWS does, with Insert+Page Down: its items, such as Items in View and the zoom, without "Status Bar" and the view and zoom buttons (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));

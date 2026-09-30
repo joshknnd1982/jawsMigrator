@@ -75,6 +75,10 @@ Automatically Read", not checked. It is ``[NonJCFOptions] MessageSayAllVerbosity
 JAWS 2026's own Outlook.jcf has on, so a JAWS as it comes reads a message you open, and the tester's own Outlook.jcf
 turns it off. A migration now takes it into the first setting, the user's Outlook.jcf over JAWS's own, as JAWS reads it
 (settingsMap.mapOutlookSettings), so NVDA reads a message as it opens where JAWS did, and not where it didn't.
+
+Since 1.49 a link with no text in a message you read is named as JAWS names it, and not said as "link" alone (issue 46; see
+unlabeledLinks): NVDA's field for the link gets a name as its content, and NVDA's Elements List labels it with that name in
+the place of "Unlabeled". It works with the same setting as the rest (``STATE_KEY``).
 """
 
 from __future__ import annotations
@@ -110,6 +114,10 @@ GAIN_FOCUS = "event_treeInterceptor_gainFocus"
 TEXT_INFO = "WordDocumentTextInfo"
 FORMAT_AT_RANGE = "_getFormatFieldAtRange"
 CONTROL_FIELD = "_getControlFieldForUIAObject"
+#: NVDA's Elements List item for an element of a document it reads through UI Automation, and its label, which is made of
+#: the element's properties (UIAHandler.browseMode.UIATextRangeQuickNavItem).
+QUICK_NAV_ITEM = "UIATextRangeQuickNavItem"
+LABEL = "label"
 #: What NVDA says with a list where it starts, "with 3 items": the number of its items (speech.getControlFieldSpeech).
 ITEM_COUNT = "_childcontrolcount"
 #: No function is wrapped deeper than this.
@@ -206,8 +214,25 @@ def register(saying: bool = True, reading: bool = False) -> None:
 				sayingInPlace = _replace(WordDocumentTextInfo, FORMAT_AT_RANGE, _formatGuarded) or sayingInPlace
 		except Exception:
 			_failure("can't change how NVDA says links, lists and headings in Outlook messages, so it says them as it does")
+		try:
+			import importlib
+
+			quickNavItem = getattr(importlib.import_module("UIAHandler.browseMode"), QUICK_NAV_ITEM, None)
+		except ImportError:
+			quickNavItem = None
+		except Exception:
+			_failure("can't change how the Elements List names a link with no text in an Outlook message, so it says \"Unlabeled\"")
+			quickNavItem = None
+		if quickNavItem is None:
+			_log().debug("jawsMigrator: NVDA has no UIAHandler.browseMode.UIATextRangeQuickNavItem, so its Elements List says \"Unlabeled\" for a link with no text")
+		else:
+			try:
+				with _lock:
+					sayingInPlace = _replaceLabel(quickNavItem) or sayingInPlace
+			except Exception:
+				_failure("can't change how the Elements List names a link with no text in an Outlook message, so it says \"Unlabeled\"")
 	else:
-		_restore(CONTROL_FIELD, FORMAT_AT_RANGE)
+		_restore(CONTROL_FIELD, FORMAT_AT_RANGE, LABEL)
 	# What was in place from before stays in place, should NVDA's modules be missing this time.
 	_reading = reading and (readingInPlace or _reading)
 	_saying = saying and (sayingInPlace or _saying)
@@ -453,9 +478,108 @@ def _controlFieldGuarded(original):
 					_log().debug(f"jawsMigrator: a link to {address!r} in an Outlook message is \"{SEND_MAIL_LINK}\", as JAWS says it")
 		except Exception:
 			_failure("could not tell whether a link in an Outlook message is to an e-mail address, so NVDA says \"link\"")
+			return field
+		try:
+			nameLinkWithNoText(self, obj, field, address)
+		except Exception:
+			_failure("could not name a link with no text in an Outlook message, so NVDA says \"link\" alone")
 		return field
 
 	return _getControlFieldForUIAObject
+
+
+# -- Links with no text -------------------------------------------------------------------------------------------
+
+
+def nameLinkWithNoText(textInfo, node, field, address) -> bool:
+	"""Give ``field``, NVDA's field for the link ``node`` in the text ``textInfo`` of an Outlook message you read, a name
+	to say when the link has no text, as JAWS names one: NVDA says a field's content after "link" (and before it for
+	quick navigation and the focus), and braille shows it. True when it was named (issue 46)."""
+	from . import unlabeledLinks
+
+	if field.get("content") or not isMessageYouRead(textInfo):
+		return False
+	if not unlabeledLinks.isUnlabeled(textInfo.obj, node):
+		return False
+	name, where = unlabeledLinks.nameWhere(node, address, textInfo.obj)
+	if not name:
+		return False
+	field["content"] = name
+	field[unlabeledLinks.NAMED_BY] = where
+	return True
+
+
+def unlabeledItemName(item):
+	"""The name for ``item``, an element of NVDA's Elements List, when it is a link with no text in an Outlook message
+	you read, or None."""
+	from . import unlabeledLinks
+
+	if getattr(item, "itemType", None) != "link" or unlabeledLinks.hasText(item.textInfo.text):
+		return None
+	document = getattr(item, "document", None)
+	root = getattr(document, "rootNVDAObject", document)
+	if not inOutlook(root) or getattr(root, "isReadonlyViewer", False) is not True:
+		return None
+	node = item.obj
+	if node is None:
+		return None
+	try:
+		address = node.value
+	except Exception:
+		address = None
+	return unlabeledLinks.nameOf(node, address, root)
+
+
+class _LabelProperty(property):
+	"""The assistant's version of a label, marked as the assistant's own (``MARK``) so that it is found again."""
+
+	_jawsMigratorOutlookMessages = _TOKEN
+
+
+def _replaceLabel(owner) -> bool:
+	"""Put the assistant's version of NVDA's ``label`` in its place on the Elements List item class ``owner``, once. True
+	when it is there."""
+	current = vars(owner).get(LABEL)
+	if isinstance(current, _LabelProperty):
+		# Still there from before: turned off and on again.
+		return True
+	if not isinstance(current, property) or current.fget is None:
+		_failure(f"NVDA has no {getattr(owner, '__name__', owner)}.{LABEL} the assistant knows, so its Elements List says \"Unlabeled\"")
+		return False
+	installed = _LabelProperty(_labelGuarded(current.fget), current.fset, current.fdel, current.__doc__)
+	setattr(owner, LABEL, installed)
+	_replaced.append((owner, LABEL, installed, current))
+	_log().debug(f"jawsMigrator: NVDA names a link with no text in an Outlook message in its Elements List ({getattr(owner, '__name__', owner)}.{LABEL})")
+	return True
+
+
+def _labelGuarded(original):
+	"""NVDA's label for an element of its Elements List: a link with no text in an Outlook message you read has a name,
+	where NVDA's label says "Unlabeled". Like NVDA's, it is made of the element's properties, by ``_getLabelForProperties``
+	(which the Links List changes); the element's name is the assistant's where it has none."""
+
+	@functools.wraps(original)
+	def label(self, *args, **kwargs):
+		if not _saying:
+			return original(self, *args, **kwargs)
+		try:
+			name = unlabeledItemName(self)
+		except LookupError:
+			# An element the document took away: the Elements List needs to see this (see elementsList).
+			raise
+		except Exception:
+			_failure("could not name a link with no text in the Elements List, so it says \"Unlabeled\"")
+			name = None
+		if not name:
+			return original(self, *args, **kwargs)
+
+		def getProperty(propertyName):
+			value = getattr(self.obj, propertyName, None)
+			return name if propertyName == "name" and not value else value
+
+		return self._getLabelForProperties(getProperty)
+
+	return label
 
 
 # -- Lists ------------------------------------------------------------------------------------------------------

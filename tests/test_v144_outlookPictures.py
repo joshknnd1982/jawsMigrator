@@ -107,6 +107,14 @@ class WordRange:
 		self.start += count
 
 	@property
+	def Start(self):
+		return self.start
+
+	@property
+	def End(self):
+		return self.end
+
+	@property
 	def InlineShapes(self):
 		return Collection(shape for shape in self.document.shapes if self.start <= shape.start < self.end)
 

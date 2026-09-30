@@ -48,6 +48,15 @@ noted in NVDA's log, so a tester's log says what happened.
 
 Not tried with classic Outlook: it isn't installed on the computer this was made on. The tests run NVDA 2026.2's own
 speech code against the tester's lines, and imitate what Word's object model answers.
+
+The tester's logs of 1.44 and 1.45 (issue 42) show that for the candle shop's message this isn't what is missing: the lines of
+its pictures are a link with an empty string in it, and Word's object model had no text at the start of the line ("Word's
+object model has no alternative text for the picture at the start of this line of an Outlook message (NVDA's fields: start
+EDITABLETEXT, start EDITABLETEXT, start LINK, '', end, end, end)"), for line after line. The pictures of a message like that
+are remote ones Outlook doesn't show until told to. The link is what NVDA finds, and unlabeledLinks (1.49) names it from the
+message's own words, so a link it has named (``unlabeledLinks.NAMED_BY``) is not asked of Word's object model again. This is
+still for a picture NVDA finds with no text, in a link or not; and when Word answers with nothing, the log says what was asked
+and what Word held (the point, its range, how many pictures and links, how long their texts are) and not only that it had none.
 """
 
 from __future__ import annotations
@@ -113,14 +122,15 @@ def _failure(what: str) -> None:
 		pass
 
 
-def _note(kind: str, text: str) -> None:
-	"""Say ``text`` in NVDA's log, for the first few times ``kind`` happens."""
+def _note(kind: str, text) -> None:
+	"""Say ``text`` in NVDA's log, for the first few times ``kind`` happens. ``text`` may be a function that gives it, asked
+	only when it is said (it may ask Word's object model things)."""
 	count = _noted.get(kind, 0)
 	if count >= _MOST_NOTES:
 		return
 	_noted[kind] = count + 1
 	try:
-		_log().debug(f"jawsMigrator: {text}")
+		_log().debug(f"jawsMigrator: {text() if callable(text) else text}")
 	except Exception:
 		pass
 
@@ -350,8 +360,9 @@ def _screenTipOf(candidate) -> str:
 
 
 def _ask(info):
-	"""What Word's object model has for the picture at the start of ``info``, NVDA's text of a line, as (text, where),
-	with text "" when Word has none, or None when it couldn't be asked."""
+	"""What Word's object model has for the picture at the start of ``info``, NVDA's text of a line, as (text, where, asked),
+	with text "" when Word has none, or None when it couldn't be asked. ``asked`` is what was asked of Word, for the log: the
+	point on the screen, and the ranges of Word's document looked at."""
 	window = info.obj.WinwordWindowObject
 	if not window:
 		return None
@@ -372,19 +383,70 @@ def _ask(info):
 		else:
 			candidate.expand(WD_CHARACTER)
 		candidates.append(candidate)
+	asked = (point, where, candidates)
 	found = None
 	for candidate in candidates:
 		found = _pictureIn(candidate)
 		if found and found[0]:
-			return found
+			return found + (asked,)
 		if found:
 			break
 	# The picture has no text of its own: the link around it may have a screen tip.
 	for candidate in candidates:
 		tip = _screenTipOf(candidate)
 		if tip:
-			return tip, found[1] if found else None
-	return ("", found[1] if found else None)
+			return tip, found[1] if found else None, asked
+	return "", found[1] if found else None, asked
+
+
+def _count(collection) -> str:
+	try:
+		return str(int(collection.count))
+	except Exception:
+		return "?"
+
+
+def _textLength(shape, name: str) -> str:
+	try:
+		return str(len(_clean(getattr(shape, name))))
+	except Exception:
+		return "?"
+
+
+def _rangeFacts(candidate) -> str:
+	"""What Word's range ``candidate`` holds, for the log: where it is, its pictures (their kind, and how long the alternative
+	text and the title of the first are) and its links. Never the text itself."""
+	parts = []
+	for name in ("Start", "End"):
+		try:
+			parts.append(str(int(getattr(candidate, name))))
+		except Exception:
+			parts.append("?")
+	text = f"range {parts[0]}-{parts[1]}"
+	try:
+		shapes = candidate.InlineShapes
+		text += f": {_count(shapes)} pictures"
+		if int(shapes.count):
+			shape = shapes[1]
+			kind = getattr(shape, "Type", "?")
+			text += f" (the first of kind {kind}, alt text {_textLength(shape, 'AlternativeText')} characters, title {_textLength(shape, 'Title')})"
+	except Exception:
+		text += ": pictures can't be read"
+	try:
+		text += f", {_count(candidate.Hyperlinks)} links"
+	except Exception:
+		text += ", links can't be read"
+	return text
+
+
+def _asking(asked) -> str:
+	"""What was asked of Word, in words for the log."""
+	point, where, candidates = asked
+	try:
+		place = f"the point {int(point.x)},{int(point.y)} of the screen"
+	except Exception:
+		place = "the start of the line"
+	return f"asked at {place}; Word's range there is {_rangeFacts(where)}; looked at {'; '.join(_rangeFacts(candidate) for candidate in candidates)}"
 
 
 def _asked(info):
@@ -407,6 +469,17 @@ def _asked(info):
 	return answer
 
 
+def namedFromTheMessage(fields) -> bool:
+	"""Whether a link in ``fields`` has been given a name from the message itself (unlabeledLinks: the name Word gives it, the
+	picture's alt text or title in the message's HTML, or Word's own): the picture says nothing more than that."""
+	from . import unlabeledLinks
+
+	return any(
+		_isCommand(item, "controlStart") and item.field.get(unlabeledLinks.NAMED_BY) in unlabeledLinks.REAL_NAMES
+		for item in fields
+	)
+
+
 def addPictureText(info, fields) -> list:
 	"""``fields``, NVDA's text of ``info``, a range of an Outlook message, with the alternative text of the picture in it
 	where NVDA has none to say. Changes ``fields``, and gives it back."""
@@ -419,12 +492,15 @@ def addPictureText(info, fields) -> list:
 	if not pictures and not hasPictureCharacter(fields):
 		# An empty paragraph, not a picture.
 		return fields
+	if namedFromTheMessage(fields):
+		# The link around the picture has its name from the message, which Word's object model can't improve on.
+		return fields
 	answer = _asked(info)
 	if answer is None:
 		return fields
-	text, where = answer
+	text, where, asked = answer
 	if not text:
-		_note("empty", f"Word's object model has no alternative text for the picture at the start of this line of an Outlook message (NVDA's fields: {_describe(fields)})")
+		_note("empty", lambda: f"Word's object model has no alternative text for the picture at the start of this line of an Outlook message (NVDA's fields: {_describe(fields)}; {_asking(asked)})")
 		return fields
 	if linkSaysIt(fields, text):
 		_note("named", f"the link around a picture in an Outlook message is said with its name already, which has the picture's text: {text!r}")
