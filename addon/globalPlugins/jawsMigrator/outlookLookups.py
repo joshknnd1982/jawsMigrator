@@ -11,9 +11,9 @@ after 12.5 seconds"; the Python stack it listed for NVDA's main thread was insid
 message, and the same lines of the assistant's own debug log said where the time went: "read the HTML of an Outlook message"
 at 15:51:08.562, and "asked Word's object model for the links of an Outlook message" at 15:51:13.621, five seconds later, with
 only the assistant's code between them. Outlook answered each question of its object model in about 35 milliseconds (a message
-of 18 links and nine pictures took about 145 questions), where the small message the same tester opened first had taken 0.15
-seconds in all. A message that size makes Outlook's own thread busy, and everything NVDA asks of it waits, on NVDA's main
-thread, while NVDA is in the middle of a key press.
+of 18 links and nine pictures took about 145 questions), where the same two lines of the log for the small message the tester
+opened first are 0.05 seconds apart (15:49:37.167 and .218). A message that size makes Outlook's own thread busy, and everything
+NVDA asks of it waits, on NVDA's main thread, while NVDA is in the middle of a key press.
 
 The assistant asked a lot, and asked it again for each line:
 
