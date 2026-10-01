@@ -15,8 +15,14 @@
 # The tester's NVDA log of 30 September (1.43, NVDA 2026.2, Edge, 13:01:44 and 13:02:02) shows the first of those in NVDA itself: in
 # focus mode Down Arrow in the field, with "has auto complete", said "Address suggestions, list, <address>, 1 of 20", then the
 # field had the focus again and the list was gone (test_nvda_down_arrow_in_the_field_shows_the_first_suggestion_and_the_list_closes).
-# The assistant's suggestionLists keeps the focus in the field while browse mode is on a suggestion, presses the suggestion
-# with the mouse, and has Down Arrow in the field go on past it in browse mode, to the suggestions.
+# The assistant's suggestionLists keeps the focus in the field while browse mode is on a suggestion, and presses the suggestion
+# with the mouse.
+# Version 1.54: this file was written for 1.46, which also had Down Arrow in the field go on in browse mode to the suggestions,
+# and imitated a browse mode buffer with all of them in it. NVDA's buffer has one (the selected item of an interactive list, see
+# test_v154_suggestionVisit), and the decision about Down Arrow ran in the keyboard hook's thread, where NVDA's objects can't be
+# read, so 1.46 to 1.53 never took the key. Down Arrow in the field, going through the suggestions, and Enter are tested in
+# test_v154_suggestionVisit; what is left here is what is kept from 1.46: browse mode's cursor on the suggestion its buffer
+# has (focus stays in the field, Enter presses it with the mouse) and the way NVDA's methods are put in place and given back.
 # The imitation NVDA runs NVDA 2026.2's own browseMode.BrowseModeTreeInterceptor.shouldPassThrough, _activateNVDAObject,
 # _activatePosition, script_activatePosition and _focusLastFocusableObject, and BrowseModeDocumentTreeInterceptor's
 # _activatePosition, _set_selection and _shouldSetFocusToObj, word for word; the page is visible.com's script, as above.
@@ -631,19 +637,6 @@ class TreeInterceptor:
 		self.moved.append(obj)
 		self._set_selection(Info(self, obj), reason)
 
-	def getScript(self, gesture):
-		# Browse mode has a script for Down Arrow, moveByLine_forward, whatever mode it is in.
-		if gesture.mainKeyName == "downArrow":
-			return self.script_moveByLine_forward
-		return None
-
-	def script_moveByLine_forward(self, gesture):
-		"""NVDA's browse mode: the next line, which is the next object here (the field, then its suggestions)."""
-		order = [self.page.input, *self.page.options] if self.page.listShowing else [self.page.input]
-		here = order.index(self.caret) if self.caret in order else 0
-		if here + 1 < len(order):
-			self.moveCaretTo(order[here + 1])
-
 
 class Info:
 	"""A position in browse mode's document (a TextInfo): the object it is in, what was done to it."""
@@ -765,7 +758,6 @@ class Nvda:
 		if plugin is not None:
 			script = plugin.getScript(gesture)
 		if script is None and not self.document.passThrough:
-			script = self.document.getScript(gesture) if key == "downArrow" and not modifiers else None
 			if key in ("enter", "space") and not modifiers:
 				script = self.document.script_activatePosition
 		if script is not None:
@@ -918,52 +910,6 @@ class SuggestionListsTest(unittest.TestCase):
 		self.assertEqual(self.nvda.screen.pointer, [10, 10])
 		self.assertEqual(self.page.options[0].calls, ["doAction"], "NVDA activates it as it does, once the press failed")
 
-	def test_down_arrow_in_the_field_goes_on_in_browse_mode_to_the_first_suggestion(self):
-		self.assistant()
-		self.typed()
-		gesture = self.nvda.press("downArrow")
-		self.assertEqual(gesture.sent, 0, "the key never reaches the page, which would move the focus into the list")
-		self.assertIs(self.document.caret, self.page.options[0], "browse mode's cursor is on the first suggestion")
-		self.assertFalse(self.document.passThrough, "in browse mode")
-		self.assertEqual(
-			self.document.caretSteps,
-			[[("expand", "controlField"), ("collapse", "end"), ("move", "character", -1)]],
-			"browse mode's cursor went to the end of the field first, as NVDA's own event_caretMovementFailed does",
-		)
-		self.settle()
-		self.assertTrue(self.page.listShowing)
-		self.assertIs(self.page.focused, self.field)
-
-	def test_down_arrow_leaves_focus_mode_when_nvda_skips_its_choice_of_mode_for_the_next_key_waiting(self):
-		# NVDA's _set_selection returns before it chooses the mode while another key waits, as when the tester holds Down Arrow.
-		self.assistant()
-		self.typed()
-		self.nvda.scriptWaiting = True
-		self.nvda.press("downArrow")
-		self.assertIs(self.document.caret, self.page.options[0])
-		self.assertFalse(self.document.passThrough, "browse mode: the next Down Arrow goes on through the suggestions, not to the page")
-
-	def test_down_arrow_works_without_automatic_focus_mode_for_caret_movement_too(self):
-		self.nvda.conf["virtualBuffers"]["autoPassThroughOnCaretMove"] = False
-		self.assistant()
-		self.typed()
-		self.nvda.press("downArrow")
-		self.assertIs(self.document.caret, self.page.options[0])
-		self.assertFalse(self.document.passThrough, "browse mode, not focus mode with the cursor in the list")
-
-	def test_the_tester_types_an_address_goes_down_to_the_third_suggestion_and_chooses_it(self):
-		self.assistant()
-		self.typed()
-		self.nvda.press("downArrow")
-		self.nvda.press("downArrow")
-		self.nvda.press("downArrow")
-		self.assertIs(self.document.caret, self.page.options[2])
-		self.settle()
-		self.assertTrue(self.page.listShowing)
-		self.nvda.press("enter")
-		self.assertEqual(self.page.chosen, "1600 PENNSYLVANIA AVE NW, WASHINGTON, DC, 20502, USA")
-		self.assertEqual(nvdaStubs.spoken, ["1600 PENNSYLVANIA AVE NW, WASHINGTON, DC, 20502, USA, selected"])
-
 	def test_the_list_reached_through_the_field_is_the_list_the_option_is_in_though_nvda_calls_them_different(self):
 		# controllerFor gives an object of another class than the option's parent, for the same element.
 		self.assistant()
@@ -999,71 +945,6 @@ class SuggestionListsTest(unittest.TestCase):
 		self.assertEqual(self.page.chosen, option.name, "and what is said is the suggestion, not what is in it")
 
 	# -- what stays as NVDA does it -------------------------------------------------------------------------------------------
-
-	def down(self, expected=False):
-		"""Down Arrow, alone, in focus mode: the assistant's command for it, if any."""
-		plugin = self.assistant() if not suggestionLists.isRegistered() else self.nvda.plugin
-		found = plugin.getScript(Gesture(self.page, "downArrow"))
-		self.assertEqual(found is not None, expected)
-		return found
-
-	def test_down_arrow_goes_to_the_page_in_a_multi_line_field(self):
-		self.typed()
-		self.field._states.add(State.MULTILINE)
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_in_a_combo_box(self):
-		self.typed()
-		self.field.role = Role.COMBOBOX
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_in_an_expandable_field(self):
-		# A page that says so (aria-expanded) handles its keys.
-		for expandable in (State.EXPANDED, State.COLLAPSED):
-			with self.subTest(expandable):
-				self.field._states = {State.EDITABLE, State.FOCUSABLE, State.AUTOCOMPLETE, expandable}
-				self.typed()
-				self.down()
-
-	def test_down_arrow_goes_to_the_page_in_a_field_that_says_nothing_of_suggestions(self):
-		self.typed()
-		self.field._states.discard(State.AUTOCOMPLETE)
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_when_the_list_is_closed(self):
-		self.typed()
-		self.page.listShowing = False
-		self.assertEqual(self.field.controllerFor, [])
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_when_the_list_is_empty(self):
-		self.typed()
-		self.page.list.children[:] = []
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_in_browse_mode_and_with_other_keys(self):
-		self.typed(passThrough=False)
-		self.down()
-		self.typed()
-		plugin = self.nvda.plugin
-		for key, modifiers in (("upArrow", ()), ("enter", ()), ("rightArrow", ()), ("downArrow", ("control",)), ("downArrow", ("shift",)), ("downArrow", ("alt",))):
-			with self.subTest(key=key, modifiers=modifiers):
-				self.assertIsNone(plugin.getScript(Gesture(self.page, key, *modifiers)))
-
-	def test_down_arrow_goes_to_the_page_for_a_field_outside_browse_mode_documents(self):
-		self.typed()
-		self.field.treeInterceptor = None
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_before_the_document_is_read(self):
-		self.typed()
-		self.document.isReady = False
-		self.down()
-
-	def test_down_arrow_goes_to_the_page_when_something_else_has_the_focus(self):
-		self.typed()
-		self.page.focused = self.page.document
-		self.down()
 
 	def test_a_suggestion_of_a_list_another_control_controls_is_left_to_nvda(self):
 		# A menu button's list: the focus is on the button, which is no edit field.
@@ -1124,24 +1005,6 @@ class SuggestionListsTest(unittest.TestCase):
 		self.assertTrue(self.document.passThrough, "NVDA's choice")
 		failures = [line for line in logged.output if "could not tell whether browse mode is on a suggestion" in line]
 		self.assertEqual(len(failures), 1, logged.output)
-
-	def test_down_arrow_goes_to_the_page_when_the_field_cant_be_read(self):
-		self.assistant()
-		self.typed()
-		with mock.patch.object(Field, "controllerFor", new_callable=mock.PropertyMock, side_effect=OSError("gone")):
-			with self.assertLogs("nvda", level="DEBUG") as logged:
-				self.assertIsNone(self.nvda.plugin.getScript(Gesture(self.page, "downArrow")))
-		self.assertTrue(any("could not tell whether the field has suggestions" in line for line in logged.output), logged.output)
-
-	def test_when_browse_mode_cant_go_on_the_key_goes_to_the_page(self):
-		self.assistant()
-		self.typed()
-		script = self.down(expected=True)
-		gesture = Gesture(self.page, "downArrow")
-		with mock.patch.object(self.document, "makeTextInfo", side_effect=RuntimeError("no caret")):
-			with self.assertLogs("nvda", level="DEBUG"):
-				script(gesture)
-		self.assertEqual(gesture.sent, 1, "the key is not lost")
 
 	# -- putting NVDA's methods in place, and back ------------------------------------------------------------------------------
 

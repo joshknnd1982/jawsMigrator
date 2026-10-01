@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Josh Kennedy
 # This file is covered by the GNU General Public License, version 2 or later.
 
-"""Get to the suggestions an edit field on a web page offers, and choose one (issue 47).
+"""Get to the suggestions an edit field on a web page offers, go through them, and choose one (issue 47).
 
 A tester wrote about visible.com's home internet page: "You enter your address. They have suggested addresses. You
 can't get to them using NVDA." The page's address field (``input#address-input``, ``aria-autocomplete="list"``,
@@ -18,32 +18,53 @@ measured in Chromium on 30 September 2026:
 - a suggestion is chosen by its ``mousedown`` event, or by Enter or Space on it when it has the focus. A ``click``
   (``element.click()``, which is all a screen reader's default action sends) chooses nothing.
 
-What NVDA 2026.2 does with that page, in its source:
+1.46 to 1.53 tried to keep the focus in the field and take Down Arrow for the suggestions, and never did, for the tester or
+for anyone. 1.54 was tried in a second NVDA 2026.2 on its own Windows desktop, with Microsoft Edge 154 on the live page, and
+the shipped 1.53 was tried there too. What that showed, in NVDA itself:
 
-- Down Arrow in the field goes to the page, which does the first thing above: NVDA says the first suggestion, then the
-  list closes;
-- Escape, then Down Arrow in browse mode, moves browse mode's cursor to a suggestion. NVDA's "Automatic focus mode for
-  caret movement" (virtualBuffers.autoPassThroughOnCaretMove), which the migration turns on for JAWS's Auto Forms
-  Mode, has ``browseMode.BrowseModeTreeInterceptor.shouldPassThrough`` choose focus mode for a list item
-  (ALWAYS_SWITCH_TO_PASS_THROUGH_ROLES), and ``_set_selection`` then has ``setFocus()`` move the focus to it: the field
-  loses it and the list closes;
-- Enter on a suggestion in browse mode: ``script_activatePosition`` sets the focus to it
-  (``_focusLastFocusableObject``: the list closes), and ``_activatePosition`` chooses focus mode for it, so nothing is
-  pressed. Where it does reach ``_activateNVDAObject``, ``doAction`` sends only a ``click``.
+- **NVDA looks for the script of a key in the keyboard hook's thread** (the tester's log: ``executeGesture`` on
+  ``winInputHook``). NVDA's main thread is an STA, so none of its objects can be read there: the COM call fails with "The
+  application called an interface that was marshalled for a different thread", and NVDA catches it and answers "none". 1.53's
+  ``getScript`` asked whether the field had a list (``controllerFor``) and its states there, so the answer was always that it had
+  none, Down Arrow went to the page, which did the first thing above, and NVDA said the first suggestion as the list closed.
+  NVDA's debug log had the COMError the moment Down Arrow was pressed. Windows also gives that hook about 300 milliseconds. So
+  the hook's side here (``scriptFor``, ``_wantsDown``) looks at nothing but what is Python's, and everything that reads an NVDA
+  object is in the script, which NVDA runs in its main thread;
+- **browse mode has one suggestion, not all of them.** NVDA's buffer is made by nvdaHelper's gecko_ia2 backend, which renders
+  only the selected item of an interactive list (``renderSelectedItemOnly`` for ``ROLE_SYSTEM_LIST`` without
+  ``STATE_SYSTEM_READONLY``): of the twenty suggestions the buffer had the first, before and after NVDA made it again, and the
+  line after it was the "Check availability" button. So browse mode's cursor can't go through the suggestions, whatever is done
+  about the focus. The objects NVDA has for the list (``list.children``) are all twenty, each with its name, its place ("2 of
+  20", IAccessible2's group position) and its place on the screen; making them takes about 200 milliseconds, so it is done once
+  for each visit;
+- a browser says which list a field controls (``aria-controls``, IAccessible2's controller-for relation) only for a list it
+  knew when it described the field. Edge 154 gave it for the address list the first time, and once gave nothing for it after
+  the address was cleared and typed again, as the tester did in his log. The page keeps the list in the same container as the
+  field, next to it, and that is where the list is looked for when the browser says nothing.
 
-So the suggestions can't be chosen with NVDA, and the key that reaches them, Down Arrow, only shows them going. What
-this module does about it, for the suggestions of the edit field that has the focus (the list it ``aria-controls``, a
-field that says it has autocomplete), and for those alone:
+What this module does, for an edit field of a web page of one line that says it has autocomplete and isn't a combo box, and for
+those alone:
 
-- browse mode leaves the focus in the field, in browse mode, when its cursor is on one of the field's suggestions, so
-  the list stays open;
-- Enter, or Space, on a suggestion presses it with the mouse, as NVDA does for a control without a default action
-  (``BrowseModeTreeInterceptor._activateNVDAObject``): the pointer goes to it, presses and lets go, and goes back. The
-  page gets ``mousedown``, ``mouseup`` and ``click``, which chooses a suggestion on this page and on one that listens for
-  ``click``. NVDA says the suggestion and "selected";
-- Down Arrow alone in that field, in focus mode, goes on in browse mode past the field, to the first suggestion, which
-  NVDA says: browse mode's own way when the page doesn't take the key (``event_caretMovementFailed``), and JAWS's Auto
-  Forms Mode leaves a field of one line with Down Arrow too (see fieldEdges). The key isn't sent to the page.
+- NVDA's global plugins are asked about each object as it is made, in the main thread, where its states can be read
+  (``chooseOverlay``): such a field gets a class that takes Down Arrow alone. Its script, in the main thread, looks whether
+  suggestions are showing. If not, NVDA does with the key what it does without the assistant (``_passOn``: its own script for
+  it, or the key to the page), and the log says so once for the field. If they are, Down Arrow says the first suggestion with its
+  list and its place ("Address suggestions, list, 241 W PINE ST, ..., 1 of 20");
+- from then on Down Arrow and Up Arrow go from one suggestion to the next, Home and End to the first and the last, each said with
+  its place. None of these keys reaches the page, whose own Down Arrow would move the focus into the list and close it. The focus
+  stays in the field, in the mode it was in; Enter, or Space, presses the suggestion with the mouse, as NVDA does for a control
+  without a default action (``BrowseModeTreeInterceptor._activateNVDAObject``): the page scrolls the suggestion into view when
+  its list has it out of sight (IAccessible2's ``scrollTo``, which NVDA's ``scrollIntoView`` calls; NVDA reports the new place
+  about twelve milliseconds later), the pointer goes to it, presses and lets go, and goes back. The page gets ``mousedown``,
+  ``mouseup`` and ``click``, which chooses a suggestion on this page and on one that listens for ``click``. NVDA says the
+  suggestion and "selected";
+- any other key goes to the page as it does, and the visit is over: typing goes on in the field, Escape and Tab do what NVDA does
+  with them. These keys, once Down Arrow has begun a visit, are the assistant's from the keyboard hook's side (``scriptFor``),
+  which knows nothing but the key and which object has the focus. A key pressed before the first Down Arrow has made the
+  objects is the visit's too (it waits in NVDA's queue behind it), for two seconds;
+- where browse mode's cursor does come to the one suggestion its buffer has (Escape, then Down Arrow), the focus stays in the
+  field and Enter presses it, as in 1.46. Browse mode itself is not changed: Down Arrow goes into the suggestions in focus
+  mode, where the tester types.
 
 A field that is a combo box (its own role, or expanded or collapsed) does as it did: its page handles its keys. It works
 while the assistant runs, unless it is turned off in NVDA's Settings, JAWS Migration Assistant.
@@ -53,6 +74,7 @@ from __future__ import annotations
 
 import functools
 import threading
+import time
 
 #: The assistant's setting (state.json) that turns this on or off.
 STATE_KEY = "chooseWebSuggestions"
@@ -62,10 +84,24 @@ MARK = "_jawsMigratorSuggestionLists"
 _TOKEN = object()
 #: Keeps NVDA's own method on the assistant's.
 ORIGINAL = "_jawsMigratorSuggestionListsOriginal"
-#: The key that goes on past a field of one line, in browse mode (see fieldEdges).
-LEAVING_KEY = "downArrow"
+#: The key that goes into the suggestions, and on to the next one.
+DOWN_KEY = "downArrow"
 #: How far up from an object the list is looked for (an option, and what an option has in it).
 _MOST_LEVELS = 8
+#: How many levels down from a list its options are looked for (an option may hold its text in other elements).
+_MOST_OPTION_LEVELS = 3
+#: How many containers, from the field up, the list that follows it is looked for in, and how many objects after each.
+_MOST_CONTAINERS = 3
+_MOST_FOLLOWERS = 3
+#: How far, in pixels of the screen, a list may be from the field to be the field's: it follows the field closely.
+_NEAR = 60
+#: How long, in seconds, the keys that follow Down Arrow at once are taken for the suggestions, before its script has begun
+#: the visit.
+_PENDING_SECONDS = 2.0
+#: How long, in seconds, a suggestion the page scrolls into view is waited for, and the pause between looks: the page took
+#: about twelve milliseconds to tell NVDA where the suggestion was (Edge 154, NVDA 2026.2).
+_SCROLL_WAIT = 0.4
+_SCROLL_STEP = 0.01
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
@@ -76,6 +112,19 @@ _lock = threading.RLock()
 _replaced: list = []
 #: The suggestion browse mode was last kept from, so the log says so once for each.
 _noted = None
+#: Where the user is in the suggestions of a field: the field, and which suggestion was said last (see _Session).
+_session = None
+#: Why Down Arrow was last left to NVDA in a field with suggestions, so the log says so once for each.
+_declined = None
+#: The field Down Arrow was last taken in, and until when (time.monotonic) keys that follow at once are taken too, before the
+#: script of Down Arrow has begun the visit (see scriptFor).
+_pending = None
+#: True while the assistant asks NVDA what it does with a key without the assistant's commands (see _passOn).
+_passing = False
+#: The class given to edit fields with suggestions (see _overlayClass).
+_overlay = None
+#: The names of the fields that were given the class, so the log says so once for each.
+_noticed: set = set()
 
 
 def _log():
@@ -120,9 +169,13 @@ def register() -> None:
 
 def unregister() -> None:
 	"""Give NVDA its own methods back, where nothing has been put over the assistant's since."""
-	global _enabled, _noted
+	global _enabled, _noted, _session, _declined, _pending
 	_enabled = False
 	_noted = None
+	_session = None
+	_declined = None
+	_pending = None
+	_noticed.clear()
 	with _lock:
 		for owner, name, installed, original in reversed(_replaced):
 			try:
@@ -228,27 +281,135 @@ def _suggestingField(field) -> bool:
 	return State.EXPANDED not in states and State.COLLAPSED not in states
 
 
-def _suggestionOf(obj):
-	"""The suggestion ``obj`` is, or is in, in the list the focused edit field controls. None for anything else."""
+def _optionsOf(box) -> list:
+	"""The suggestions in a list: the objects with a list item's role in it, shown, in the order of the page.
+
+	NVDA's buffer has only the selected one of an interactive list's items; the objects of the list, which this reads, have
+	them all, those scrolled out of the list's box too.
+	"""
+	from controlTypes import Role, State
+
+	found = []
+
+	def walk(parent, depth):
+		for child in parent.children or ():
+			if child is None:
+				continue
+			if child.role == Role.LISTITEM:
+				found.append(child)
+			elif depth < _MOST_OPTION_LEVELS:
+				walk(child, depth + 1)
+
+	walk(box, 1)
+	return [option for option in found if State.INVISIBLE not in option.states]
+
+
+def _isListNextTo(field, candidate) -> bool:
+	"""Whether ``candidate`` is a list the page shows next to ``field``: right below it or right above it, as wide as it is."""
+	from controlTypes import Role, State
+
+	if candidate.role != Role.LIST:
+		return False
+	if State.INVISIBLE in candidate.states or State.OFFSCREEN in candidate.states:
+		return False
+	box, edit = candidate.location, field.location
+	if not box or not edit or not box.width or not box.height or not edit.width or not edit.height:
+		return False
+	below = edit.top + edit.height - _NEAR <= box.top <= edit.top + edit.height + _NEAR
+	above = edit.top - _NEAR <= box.top + box.height <= edit.top + _NEAR
+	across = box.left < edit.left + edit.width and edit.left < box.left + box.width
+	return across and (below or above)
+
+
+def _listFollowing(field):
+	"""The list the page shows next to ``field``, after it in its container; None when there is none.
+
+	A browser says what a field controls (aria-controls) for a list it knew when it described the field. Edge 154 described the
+	address field again when its text changed, but not when the page showed its list: after the address was cleared and typed
+	again, with the list showing, ``controllerFor`` was empty (NVDA 2026.2, measured up to two seconds later). The page puts the
+	list next to the field, in the same container, so it is found there, if a list is right below the field or right above it.
+	"""
+	node = field
+	for _ in range(_MOST_CONTAINERS):
+		follower = node.next
+		for _ in range(_MOST_FOLLOWERS):
+			if follower is None:
+				break
+			if _isListNextTo(field, follower):
+				return follower
+			follower = follower.next
+		node = node.parent
+		if node is None:
+			break
+	return None
+
+
+def _suggestionList(field):
+	"""The list that holds the suggestions of ``field`` and its suggestions: (None, []) when none are showing.
+
+	The list the field controls, or, where the browser doesn't say, the list that follows the field (see _listFollowing).
+	"""
+	for box in _controls(field):
+		if box.hasIrrelevantLocation:
+			continue
+		options = _optionsOf(box)
+		if options:
+			return box, options
+	box = _listFollowing(field)
+	if box is not None:
+		options = _optionsOf(box)
+		if options:
+			return box, options
+	return None, []
+
+
+def _showing(field):
+	"""The list ``field`` has showing, found as cheaply as can be; None when there is none.
+
+	NVDA looks for the script of a key in the keyboard hook (``scriptHandler.findScript``, from ``internal_keyDownEvent``),
+	which Windows gives about 300 milliseconds before it stops calling it, and the objects of a list of twenty suggestions took
+	about 200 to make (Edge 154, NVDA 2026.2). So the decision about a key looks at the list and how many children it has, which
+	NVDA reads without making them; the script, which runs afterwards, makes them (see _suggestionList).
+	"""
+	for box in _controls(field):
+		if not box.hasIrrelevantLocation and _childCount(box):
+			return box
+	box = _listFollowing(field)
+	if box is not None and _childCount(box):
+		return box
+	return None
+
+
+def _suggestionAndList(obj):
+	"""The suggestion ``obj`` is, or is in, and the list it is in, for the focused edit field's list. (None, None) for anything else."""
 	import api
 
 	if obj is None:
-		return None
+		return None, None
 	field = api.getFocusObject()
 	if field is None or _same(obj, field) or not _suggestingField(field):
-		return None
+		return None, None
 	lists = _controls(field)
 	if not lists:
-		return None
+		following = _listFollowing(field)
+		lists = [following] if following is not None else []
+	if not lists:
+		return None, None
 	child = obj
 	for _ in range(_MOST_LEVELS):
 		parent = child.parent
 		if parent is None:
-			return None
-		if any(_same(parent, suggestions) for suggestions in lists):
-			return child
+			return None, None
+		for suggestions in lists:
+			if _same(parent, suggestions):
+				return child, suggestions
 		child = parent
-	return None
+	return None, None
+
+
+def _suggestionOf(obj):
+	"""The suggestion ``obj`` is, or is in, in the list the focused edit field controls. None for anything else."""
+	return _suggestionAndList(obj)[0]
 
 
 def _note(obj, what: str) -> None:
@@ -319,36 +480,89 @@ def _activationGuarded(original):
 	return _mark(_activateNVDAObject, original)
 
 
-def pressSuggestion(obj) -> bool:
-	"""Press ``obj``, when it is a suggestion of the focused field, with the mouse. True once the mouse has pressed it.
+def _nameOf(obj) -> str:
+	"""An object's name as one line of words, or an empty line."""
+	try:
+		return " ".join(str(obj.name or "").split())
+	except Exception:
+		return ""
 
-	It is what NVDA does for a control it can't activate any other way (``_activateNVDAObject``): the pointer goes to
-	the middle of the object, presses and lets go with the primary button, and goes back. The page gets the mouse's
-	``mousedown``, ``mouseup`` and ``click``, which the suggestions of visible.com choose by, not the ``click`` alone
-	that ``doAction`` sends.
-	"""
-	suggestion = _suggestionOf(obj)
+
+def pressSuggestion(obj) -> bool:
+	"""Press ``obj``, when it is a suggestion of the focused field, with the mouse. True once the mouse has pressed it."""
+	suggestion, box = _suggestionAndList(obj)
 	if suggestion is None:
 		return False
+	return _press(suggestion, box)
+
+
+def _inPlace(option, box) -> bool:
+	"""Whether ``option`` has a place on the screen for the mouse: in sight, and inside the box of its list."""
+	if option.hasIrrelevantLocation:
+		return False
+	location = option.location
+	if not location.width or not location.height:
+		return False
+	area = box.location if box is not None else None
+	if not area or not area.width or not area.height:
+		return True
+	x, y = location.center
+	return area.left <= x < area.left + area.width and area.top <= y < area.top + area.height
+
+
+def _forget(obj) -> None:
+	"""Have NVDA read an object's place again: it keeps what it read of an object until the next key."""
+	try:
+		obj.invalidateCache()
+	except Exception:
+		pass
+
+
+def _scrollInto(option, box) -> bool:
+	"""Have the page scroll ``option`` into its list's box, and wait for NVDA to see it there. False when it doesn't get there."""
+	try:
+		option.scrollIntoView()
+	except Exception:
+		return False
+	deadline = time.monotonic() + _SCROLL_WAIT
+	while True:
+		_forget(option)
+		if _inPlace(option, box):
+			return True
+		if time.monotonic() >= deadline:
+			return False
+		time.sleep(_SCROLL_STEP)
+
+
+def _press(option, box=None) -> bool:
+	"""Press ``option`` with the mouse. True once the mouse has pressed it.
+
+	It is what NVDA does for a control it can't activate any other way (``_activateNVDAObject``): the pointer goes to the
+	middle of the object, presses and lets go with the primary button, and goes back. The page gets the mouse's ``mousedown``,
+	``mouseup`` and ``click``, which the suggestions of visible.com choose by, not the ``click`` alone that ``doAction`` sends.
+	A suggestion that is out of its list's box, as all but the first seven of visible.com's twenty are, is not where the mouse
+	would press it: the page scrolls it into view first (IAccessible2's scrollTo, which NVDA's ``scrollIntoView`` calls), as it
+	does for NVDA's own cursor.
+	"""
 	import mouseHandler
 	import winUser
 
-	if suggestion.hasIrrelevantLocation:
+	text = _nameOf(option)
+	scrolled = not _inPlace(option, box)
+	if scrolled and not _scrollInto(option, box):
+		_log().debug(f"jawsMigrator: the suggestion {text!r} is not in the list's box on the screen, so the mouse didn't press it")
 		return False
-	location = suggestion.location
-	if not location.width or not location.height:
-		return False
-	try:
-		text = suggestion.name
-	except Exception:
-		text = None
+	location = option.location
 	oldX, oldY = winUser.getCursorPos()
 	try:
 		winUser.setCursorPos(*location.center)
 		mouseHandler.doPrimaryClick()
 	finally:
 		winUser.setCursorPos(oldX, oldY)
-	_log().debug(f"jawsMigrator: the suggestion {text!r} was pressed with the mouse")
+	_log().debug(
+		f"jawsMigrator: the suggestion {text!r} was pressed with the mouse"
+		+ (", after the page scrolled it into view" if scrolled else "")
+	)
 	_say(text)
 	return True
 
@@ -365,63 +579,299 @@ def _say(text) -> None:
 		pass
 
 
+class _Session:
+	"""Where the user is in the suggestions of one field: its list and the suggestions in it, and the one said last.
+
+	NVDA takes about two hundred milliseconds to make the objects of a list of twenty suggestions (Edge 154, NVDA 2026.2), so
+	they are made once for a visit and used again for each key, as long as the list is the same.
+	"""
+
+	def __init__(self, field, box, options: list, index: int):
+		self.field, self.box, self.options, self.index = field, box, list(options), index
+		self.name = _nameOf(self.options[index])
+		self.count = _childCount(box)
+
+	def holds(self) -> bool:
+		"""Whether the list is still the one these suggestions are of: as many items in it, and the one said last is named so."""
+		count = _childCount(self.box)
+		return count is not None and count == self.count and bool(self.name) and _nameOf(self.options[self.index]) == self.name
+
+
+def _childCount(box):
+	"""How many children a list has, which NVDA reads without making them; None where it can't be read."""
+	try:
+		return int(box.childCount)
+	except Exception:
+		return None
+
+
+def _endSession(why: str) -> None:
+	"""The visit to the suggestions is over: the keys go to the page again."""
+	global _session, _pending
+	_pending = None
+	if _session is not None:
+		_session = None
+		_log().debug(f"jawsMigrator: the visit to the field's suggestions is over: {why}")
+
+
+def _visit(field):
+	"""The visit to the suggestions of ``field`` that is going on, or None."""
+	session = _session
+	if session is not None and _same(field, session.field) and session.holds():
+		return session
+	return None
+
+
+def _placeOf(option, index: int, count: int):
+	"""A suggestion's place in its list as the page says it (IAccessible2's group position), or as it was counted."""
+	try:
+		info = option.positionInfo
+		position, total = int(info.get("indexInGroup") or 0), int(info.get("similarItemsInGroup") or 0)
+		if 0 < position <= total:
+			return position, total
+	except Exception:
+		pass
+	return index + 1, count
+
+
+def _announce(box, options, index: int, first: bool) -> None:
+	"""NVDA says the suggestion, with its place in the list, and the list itself the first time."""
+	import ui
+
+	option = options[index]
+	position, total = _placeOf(option, index, len(options))
+	text = f"{_nameOf(option)}, {position} of {total}"
+	if first:
+		label = _nameOf(box)
+		text = f"{label}, list, {text}" if label else f"list, {text}"
+	ui.message(text)
+	_log().debug(f"jawsMigrator: suggestion {position} of {total} of the field's list said: {text!r}")
+
+
+def _passOn(gesture) -> None:
+	"""Do with the key what NVDA does without the assistant's commands: run the script it has for it, or send the key on.
+
+	It is for a key the assistant took before it knew it was not for the suggestions, which only its script, in NVDA's main
+	thread, can know (see chooseOverlay).
+	"""
+	global _passing
+	script = None
+	_passing = True
+	try:
+		import scriptHandler
+
+		script = scriptHandler.findScript(gesture)
+	except Exception:
+		_failure("could not find what NVDA does with a key the assistant took, so the key goes to the page")
+	finally:
+		_passing = False
+	if script is None:
+		gesture.send()
+	else:
+		script(gesture)
+
+
+def _go(gesture, target, enter: bool = False) -> None:
+	"""Go to a suggestion of the focused field, say it and remember it; the key goes on as NVDA has it when that can't be done.
+
+	``target`` is given where the user is in the list (None before the first suggestion) and how many there are, and gives
+	the number of the suggestion to go to, which is kept inside the list. Only a key that ``enter`` the suggestions, Down
+	Arrow, begins a visit.
+	"""
+	global _session, _pending
+	try:
+		import api
+
+		field = api.getFocusObject()
+		session = _visit(field)
+		if session is not None:
+			box, options, here = session.box, session.options, session.index
+		else:
+			if not enter:
+				_endSession("the key came with no visit going on")
+				_passOn(gesture)
+				return
+			_pending = None
+			if _showing(field) is None:
+				_decline(field, "no suggestions are showing for it")
+				_endSession("no suggestions are showing")
+				_passOn(gesture)
+				return
+			box, options = _suggestionList(field)
+			here = None
+			if not options:
+				_endSession("the list has no suggestions")
+				_passOn(gesture)
+				return
+		index = max(0, min(len(options) - 1, target(here, len(options))))
+		_session = _Session(field, box, options, index)
+		_announce(box, options, index, first=session is None)
+	except Exception:
+		_session = None
+		_pending = None
+		_failure("could not go through the field's suggestions, so the key goes on as NVDA has it")
+		_passOn(gesture)
+
+
+# The commands. They have no description, as NVDA's scripts that may send the key on have none: NVDA then keeps the keys
+# pressed after them in order (scriptHandler._isInterceptedCommandScript).
+
+
+def _down(gesture):
+	# Down Arrow: the first suggestion of the focused field, or the next one.
+	_go(gesture, lambda here, count: 0 if here is None else here + 1, enter=True)
+
+
+def _up(gesture):
+	# Up Arrow: the previous suggestion; the first, where the user is on it.
+	_go(gesture, lambda here, count: 0 if here is None else here - 1)
+
+
+def _first(gesture):
+	# Home: the first suggestion.
+	_go(gesture, lambda here, count: 0)
+
+
+def _last(gesture):
+	# End: the last suggestion.
+	_go(gesture, lambda here, count: count - 1)
+
+
+def _choose(gesture):
+	# Enter or Space: the suggestion the user is on is pressed with the mouse.
+	global _session, _pending
+	try:
+		import api
+		import ui
+
+		field = api.getFocusObject()
+		session = _visit(field)
+		if session is None:
+			_endSession("the key came with no visit going on")
+			_passOn(gesture)
+			return
+		if _press(session.options[session.index], session.box):
+			_endSession("the suggestion was chosen")
+		else:
+			ui.message("Can't press this suggestion")
+	except Exception:
+		_session = None
+		_pending = None
+		_failure("could not choose the suggestion, so the key goes on as NVDA has it")
+		_passOn(gesture)
+
+
+#: The keys that go through the suggestions of a field once Down Arrow has gone into them, and what each does.
+_COMMANDS = {
+	"downArrow": _down,
+	"upArrow": _up,
+	"home": _first,
+	"end": _last,
+	"enter": _choose,
+	"numpadEnter": _choose,
+	"space": _choose,
+}
+
+
+def _decline(field, why: str) -> None:
+	"""Down Arrow in an edit field with suggestions is left to NVDA: said once in NVDA's log, with why."""
+	global _declined
+	if _declined is not None and _declined[1] == why and _declined[0] is field:
+		return
+	_declined = (field, why)
+	_log().debug(f"jawsMigrator: Down Arrow in the edit field {_nameOf(field)!r}, which says it has suggestions, goes on as NVDA has it: {why}")
+
+
 def scriptFor(gesture):
-	"""The command to run for Down Arrow alone in the focused field, when it has suggestions to go to. None: NVDA goes on."""
-	if not _enabled:
+	"""The command to run for this key when a visit to the suggestions of the focused edit field is going on. None: NVDA goes on.
+
+	NVDA asks for the script of a key in its keyboard hook's thread, where no object of NVDA's can be read (they are made for
+	the main thread, and NVDA says "The application called an interface that was marshalled for a different thread."), and
+	where Windows gives about 300 milliseconds. So this looks at nothing but what is Python's: the key, and which object has the
+	focus. Once Down Arrow has gone into the suggestions (see chooseOverlay), Down Arrow, Up Arrow, Home, End, Enter and Space go
+	through them and choose one, until another key is pressed (it goes to the page as it does: typing, Escape to close the list,
+	Tab to leave the field) or the focus moves.
+	"""
+	if not _enabled or _passing:
+		return None
+	session, pending = _session, _pending
+	if session is None and (pending is None or time.monotonic() > pending[1]):
 		return None
 	try:
-		if getattr(gesture, "mainKeyName", None) != LEAVING_KEY or getattr(gesture, "modifiers", None):
+		if getattr(gesture, "isModifier", False) or getattr(gesture, "modifiers", None):
 			return None
 		import api
 
 		field = api.getFocusObject()
-		document = getattr(field, "treeInterceptor", None)
-		# Only in focus mode, in a document that browse mode has read: browse mode's own Down Arrow does the rest.
-		if document is None or not getattr(document, "isReady", False) or not getattr(document, "passThrough", False):
+		if field is not (session.field if session is not None else pending[0]):
+			_endSession("the focus moved")
 			return None
-		if not _suggestingField(field) or not _hasSuggestions(field):
-			return None
-	except Exception:
-		_failure("could not tell whether the field has suggestions to go to, so Down Arrow goes to the page as it does")
+		key = getattr(gesture, "mainKeyName", None)
+		if key in _COMMANDS:
+			return _COMMANDS[key]
+		_endSession(f"{key} was pressed")
 		return None
-	return _pastTheField
-
-
-def _hasSuggestions(field) -> bool:
-	"""Whether a list the field controls is showing, with something in it."""
-	for control in _controls(field):
-		if control.hasIrrelevantLocation:
-			continue
-		if control.firstChild is not None:
-			return True
-	return False
-
-
-def _pastTheField(gesture) -> None:
-	"""Down Arrow in browse mode, from the end of the field: to what follows it, the field's suggestions.
-
-	Word for word what NVDA's ``BrowseModeDocumentTreeInterceptor.event_caretMovementFailed`` does when a key can't move
-	the caret in a field: browse mode's cursor goes to the field's edge, and browse mode's own script for the key runs
-	there. The key isn't sent to the page, which would move the focus into its list and close it.
-	"""
-	try:
-		import api
-		import scriptHandler
-		import textInfos
-
-		document = api.getFocusObject().treeInterceptor
-		script = document.getScript(gesture)
-		if script is None:
-			raise LookupError("browse mode has no script for the key")
-		info = document.makeTextInfo(textInfos.POSITION_CARET)
-		info.expand(textInfos.UNIT_CONTROLFIELD)
-		info.collapse(end=True)
-		info.move(textInfos.UNIT_CHARACTER, -1)
-		info.updateCaret()
-		# Focus mode, which the caret in the field chose again with automatic focus mode for caret movement, would send
-		# the next keys to the page; browse mode's cursor is about to be on a suggestion, which is not in the field.
-		document.passThrough = False
-		scriptHandler.queueScript(script, gesture)
 	except Exception:
-		_failure("could not go on past the field with Down Arrow, so the key goes to the page as it does")
-		gesture.send()
+		_failure("could not tell whether the key is for the field's suggestions, so it goes on as NVDA has it")
+		return None
+
+
+def _wantsDown(gesture) -> bool:
+	"""Whether the key is Down Arrow alone, which a field with suggestions may take. Python only (see scriptFor)."""
+	if not _enabled or _passing:
+		return False
+	if getattr(gesture, "mainKeyName", None) != DOWN_KEY:
+		return False
+	return not getattr(gesture, "isModifier", False) and not getattr(gesture, "modifiers", None)
+
+
+def _overlayClass():
+	"""The class that gives an edit field with suggestions its Down Arrow, made once when it is first needed."""
+	global _overlay
+	if _overlay is None:
+		from NVDAObjects import NVDAObject
+
+		class SuggestingField(NVDAObject):
+			"""An edit field of a web page that says it has suggestions: Down Arrow in it may be the key into them."""
+
+			def getScript(self, gesture):
+				# Python only: NVDA asks in the keyboard hook's thread (see scriptFor). Whether suggestions are showing is the
+				# script's to find out, in the main thread, and it passes the key on when they aren't.
+				global _pending
+				if _wantsDown(gesture):
+					_pending = (self, time.monotonic() + _PENDING_SECONDS)
+					return self.script_suggestionsDown
+				return super().getScript(gesture)
+
+			def script_suggestionsDown(self, gesture):
+				# No description, as NVDA's scripts that may send a key on have none (see _down).
+				_down(gesture)
+
+		_overlay = SuggestingField
+	return _overlay
+
+
+def chooseOverlay(obj, clsList) -> None:
+	"""Have an edit field of a web page that says it has suggestions take Down Arrow, to go into them, from NVDA's classes.
+
+	NVDA's global plugins are asked about each object as it is made, in the main thread, where its states can be read. The
+	field is one of one line, with autocomplete, that isn't a combo box (see _suggestingField); the class is only for web pages
+	(IAccessible2), where NVDA's buffer has one of the suggestions (see the top of this file).
+	"""
+	if not _enabled:
+		return
+	try:
+		from NVDAObjects.IAccessible.ia2Web import Ia2Web
+
+		if not any(isinstance(cls, type) and issubclass(cls, Ia2Web) for cls in clsList):
+			return
+		from controlTypes import Role
+
+		if obj.role == Role.EDITABLETEXT and _suggestingField(obj):
+			clsList.insert(0, _overlayClass())
+			name = _nameOf(obj)
+			if name not in _noticed:
+				_noticed.add(name)
+				_log().debug(f"jawsMigrator: the edit field {name!r} says it has suggestions, so Down Arrow in it can go into them")
+	except Exception:
+		_failure("could not tell whether an edit field has suggestions, so NVDA does as it does with its keys")

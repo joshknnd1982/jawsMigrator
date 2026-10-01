@@ -1853,6 +1853,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		elementsList = getattr(self, "_elementsList", None)
 		if elementsList is not None:
 			elementsList.chooseOverlay(obj, clsList)
+		# An edit field of a web page that says it has suggestions: Down Arrow in it goes into them, in the main thread, where the
+		# list can be read (see suggestionLists).
+		suggestionLists = getattr(self, "_suggestionLists", None)
+		if suggestionLists is not None:
+			suggestionLists.chooseOverlay(obj, clsList)
 		# A UI Automation object of the program NVDA went back to from the taskbar as it started (see startupFocus).
 		startupFocus = getattr(self, "_startupFocus", None)
 		if startupFocus is not None:
@@ -1870,8 +1875,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				found = insertKeys.scriptFor(gesture, self._insertKeys)
 				if found is not None:
 					return found
-			# Down Arrow in an edit field that has suggestions goes on in browse mode, to them, instead of to a page
-			# that would close the list (see suggestionLists).
+			# Once Down Arrow has gone into an edit field's suggestions, the keys that go through them and choose one are the
+			# assistant's, until another key is pressed (see suggestionLists).
 			suggestionLists = getattr(self, "_suggestionLists", None)
 			if suggestionLists is not None:
 				found = suggestionLists.scriptFor(gesture)
