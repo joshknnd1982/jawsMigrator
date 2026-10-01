@@ -583,6 +583,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import evenSpeech
+
+			evenSpeech.unregister()
+		except Exception:
+			pass
+		try:
 			from . import linkSpeech
 
 			linkSpeech.unregister()
@@ -971,6 +977,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			debugLog.error("could not keep Columns Review and Emoticons from holding NVDA up at a profile switch")
 		try:
+			from . import evenSpeech
+
+			# Not a JAWS setting. NVDA saves what you change into the profile turned on last, the migration's profile for
+			# the program you are in or Custom Browse Mode's, so a volume turned down in Settings applied in Edge and not
+			# on a page (issue 49).
+			if evenSpeech.wanted(data):
+				evenSpeech.register()
+			else:
+				evenSpeech.unregister()
+		except Exception:
+			debugLog.error("could not keep the speech settings the same everywhere")
+		try:
 			from . import linkSpeech
 
 			# Not a JAWS setting as such: JAWS, as it comes, says "same page" only for a link to a place on the page
@@ -1090,7 +1108,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._busy:
 			self._repairTimer = wx.CallLater(60000, self._repairVoices)
 			return
-		from . import dictRepair, exitMessage, gestureRepair, migrator, newKeys, rateRepair, symbolRepair
+		from . import dictRepair, evenSpeech, exitMessage, gestureRepair, migrator, newKeys, rateRepair, symbolRepair
 
 		def insertKeysRepair(announce, done=None):
 			def reload():
@@ -1109,6 +1127,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			("the keystrokes of JAWS commands new since the last migration", lambda announce, done=None: newKeys.addOnce(self._jawsKeymapFiles, announce, done)),
 			("the repair of the Eloquence rate", lambda announce, done=None: rateRepair.repairOnce(announce, migrator._backupFirst, done)),
 			("the repair of punctuation symbols for spaces and line breaks", symbolRepair.repairOnce),
+			# A rate, pitch or volume that is not the same in every profile NVDA turns on (issue 49), for the user to choose from.
+			("the question about speech settings that differ between profiles", lambda announce, done=None: evenSpeech.offerOnce(announce, migrator._backupFirst, done)),
 			# Whether NVDA says "Unloading NVDA" as it exits, from JAWS's settings, for a migration made before 1.37.
 			("the check whether JAWS says \"Unloading JAWS\"", lambda announce, done=None: exitMessage.checkOnce(self._jawsDefaultJcf, announce, done)),
 		]

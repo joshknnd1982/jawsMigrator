@@ -52,5 +52,14 @@ def toggle() -> bool:
 	# As NVDA's own script_cycleAudioDuckingMode.
 	audioDucking.setAudioDuckingMode(mode)
 	config.conf["audio"]["audioDuckingMode"] = int(mode)
+	try:
+		from . import evenSpeech
+
+		# NVDA wrote the mode into the profile turned on last: on a web page that is Custom Browse Mode's, and ducking would
+		# be on or off on pages alone, as the speech volume was (issue 49). A migration sets NVDA's ducking from JAWS's one
+		# option for it (settingsMap).
+		evenSpeech.afterChange(("audio",), "audioDuckingMode", int(mode))
+	except Exception:
+		pass
 	_say(OFF if int(mode) == int(modes.NONE) else ON)
 	return True

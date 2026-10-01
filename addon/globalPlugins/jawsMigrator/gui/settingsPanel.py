@@ -23,6 +23,7 @@ from .. import (
 	documentValues,
 	driveLetters,
 	emptyAlerts,
+	evenSpeech,
 	exitMessage,
 	fieldEdges,
 	formFields,
@@ -237,6 +238,15 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			),
 		)
 		self.quickProfileSwitches.SetValue(profileSwitches.wanted(state.load()))
+		# A tester turned the speech volume down in NVDA's Settings and it stayed down in Edge when he typed, and was loud again
+		# on a page (issue 49): NVDA saved it into the profile for Edge, which a profile for web pages then hid.
+		self.keepSpeechEven = helper.addItem(
+			wx.CheckBox(
+				self,
+				label="Keep the speech rate, pitch and volume you set, and audio ducking, the same in every program and on web pages",
+			),
+		)
+		self.keepSpeechEven.SetValue(evenSpeech.wanted(state.load()))
 		# NVDA said "HEADLINES, same page, link, Homepage, heading, level 3" for a heading on a web page; JAWS said
 		# "HEADLINES, heading level 3, Link": no "same page" for a link to the page itself, no title, the heading first.
 		self.linksAsJaws = helper.addItem(
@@ -419,6 +429,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownOutlookStatusBar = self.outlookStatusBar.GetValue()
 		self._shownQuietListBounds = self.quietListBounds.GetValue()
 		self._shownQuickProfileSwitches = self.quickProfileSwitches.GetValue()
+		self._shownKeepSpeechEven = self.keepSpeechEven.GetValue()
 		self._shownLinksAsJaws = self.linksAsJaws.GetValue()
 		self._shownFormFieldsAsJaws = self.formFieldsAsJaws.GetValue()
 		self._shownBrowserPagesAsJaws = self.browserPagesAsJaws.GetValue()
@@ -524,6 +535,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[listBounds.STATE_KEY] = self.quietListBounds.GetValue()
 		if self.quickProfileSwitches.GetValue() != self._shownQuickProfileSwitches:
 			updates[profileSwitches.STATE_KEY] = self.quickProfileSwitches.GetValue()
+		if self.keepSpeechEven.GetValue() != self._shownKeepSpeechEven:
+			updates[evenSpeech.STATE_KEY] = self.keepSpeechEven.GetValue()
 		if self.linksAsJaws.GetValue() != self._shownLinksAsJaws:
 			updates[linkSpeech.STATE_KEY] = self.linksAsJaws.GetValue()
 		if self.formFieldsAsJaws.GetValue() != self._shownFormFieldsAsJaws:

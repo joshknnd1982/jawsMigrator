@@ -49,3 +49,13 @@ The visible.com address list needs the page's own address service to answer; if 
 - What was tried to bring a row that the page's edge hides into the page, and failed, which is why 1.55 presses where a row shows instead: every IAccessible2 `scrollTo` type (`s45`), the
   page's `scrollIntoView` (`s46`, `s48`), and `scrollToPoint` (`s49`: it moved the list the wrong way). The address form is in a part of the page that stays where it is. `s40` tried NVDA's
   hit test `objectFromPoint` for "what is under the pointer": it answered with a generic section for a row in plain view, so it can't be used.
+
+## The speech volume that changed between typing and reading (issue 49, 1 October, 1.56)
+
+No Edge is needed. `setup_issue49.py` writes the tester's profiles (`JAWS - msedge`, `browseMode`, ...), his normal configuration's Eloquence settings, the triggers, the assistant's settings, and a **silent copy of
+Eloquence64RS 19.1.4's driver** into the private NVDA's `cfg/scratchpad/synthDrivers`: its functions that keep and apply a copy of the voice's settings for each set of turned-on profiles, and its
+`loadSettings`, `saveSettings`, pitch and volume, are the add-on's own, word for word (`tests/issue49Sources.py`), with an engine that is a table of numbers, so nothing can be heard on the PC. Run it with `off`
+(the assistant's setting that keeps the voice's settings the same everywhere turned off: NVDA and Eloquence as the tester had them) or `ask` (the question about settings that differ is asked 20 seconds after
+NVDA starts), then `python restart_nvda.py`, then, from this folder, `python -m scenarios.s60 control|fixed|question|user`. `scenarios/s60.py` says what each does: NVDA's real Settings dialog is opened on its Speech
+category, the Volume slider is moved with the slider's own event and OK is pressed; the settings ring is NVDA's own scripts; Edge's profile is turned on with NVDA's own `ProfileTrigger` and `browseMode` with
+`config.conf.manualActivateProfile`, as Custom Browse Mode does. This NVDA is not an installed copy and can't duck audio, so the scenario imitates only `audioDucking.setAudioDuckingMode`.

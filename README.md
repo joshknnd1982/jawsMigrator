@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.55
+- Version: 1.56
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.56](#whats-new-in-156)
 - [What's new in 1.55](#whats-new-in-155)
 - [What's new in 1.54](#whats-new-in-154)
 - [What's new in 1.53](#whats-new-in-153)
@@ -107,10 +108,22 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.55.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.56.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.56
+
+From the tester's issue 49, "Audio will get louder and then quiet": "I went into speech settings and turned down the volume. It will stay quiet for a little while then get louder. What is causing this?", and, with a second NVDA log, after he had checked that audio ducking was not on: "when I'm typing in this box it is at the lower volume I set. When it is reading it is louder."
+
+- **Why the volume changed as he moved.** His NVDA log has his settings files as NVDA loaded them. Eloquence's volume was in three of them: 100 in his normal configuration, 100 in "browseMode" (the profile the Custom Browse Mode add-on, one of the add-ons the assistant installs, turns on whenever browse mode is on) and 78 in "JAWS - msedge" (the profile the migration made for Edge) when NVDA started at 00:08 on 1 October, 80 when it started at 07:43, after he had set it again. NVDA uses the value of the profile turned on last, so an edit field in Edge, where browse mode is off, was at 80, and reading a page, with "browseMode" on top of "JAWS - msedge", at 100. His check of audio ducking was right: its mode is 0, off, in every configuration that has it.
+- **How it got there.** NVDA saves a changed setting into the profile turned on last. Opening Settings from Edge leaves "JAWS - msedge" the last one, and NVDA says "Editing profile JAWS - msedge" when the Speech category opens (it did three times in his two logs, at 00:10, 05:11 and 07:42), so the volume he set applied in Edge and nowhere else. The migration never writes a rate, pitch or volume into a profile for a program, so the 78 and the 80 were his, from Settings. NVDA's settings ring, and NVDA+Shift+J, then D, which turns audio ducking on or off, save into the profile turned on last too, and on a page that is "browseMode".
+- **His Eloquence add-on makes it harder to see.** Eloquence64RS 19.1.4 keeps a copy of the voice's settings for each set of turned-on profiles, applies the copy when NVDA switches to that set, and writes the copy into the profile turned on last when NVDA's own value differs. A volume changed in one set is not in the copies of the others, so changing the profiles alone would not have been enough.
+- **Now what you change applies everywhere.** When you change the speech rate, pitch, volume or inflection in NVDA's Settings, Speech (OK or Apply), or with NVDA's settings ring (and the keys the assistant gives it for JAWS's voice rate), or turn audio ducking on or off with NVDA+Shift+J, then D, the value goes into your normal configuration and is taken out of "browseMode" and of the profiles for single programs that the migration or Quick Settings make ("JAWS - msedge"), where it would hide it. Eloquence64RS's copies are changed to match. A profile of your own that you turned on by hand, or that turns on in a program of its own, keeps what you change while NVDA writes to it: it is what that profile is for. The assistant's debug log says what it did, as "speech.eloquence.volume = 70 everywhere: set in the normal configuration; taken out of browseMode, JAWS - msedge; Eloquence's remembered value changed for 5 sets of profiles".
+- **A question for settings that are already different.** What was set before can't be told from what was chosen, so once, 20 seconds after NVDA starts, if a rate, pitch, volume or inflection is not the same in your normal configuration, "browseMode" and the migration's profiles, a list asks which should apply everywhere. For the tester's files: "80, as in the profile "JAWS - msedge"", "100, as in NVDA's normal configuration and the profile "browseMode"" and "Leave it as it is". NVDA's settings are backed up first. Leaving it as it is, or closing the list, changes nothing and the same values are not asked about again; a choice that could not be made (the backup failed) is asked again when NVDA next starts.
+- **It is a setting.** "Keep the speech rate, pitch and volume you set, and audio ducking, the same in every program and on web pages", in NVDA's Settings, JAWS Migration Assistant, is on unless you turn it off. Turned off, NVDA saves a change as it always did.
+- **What was tried, and what was not.** In NVDA itself, as for 1.54 and 1.55: a second NVDA 2026.2 on its own Windows desktop (the one that was running was not touched), with the tester's profiles as his log shows them and a silent voice made of Eloquence64RS 19.1.4's own code for its copies of the settings, word for word, so NVDA's real profile switches, Settings dialog and settings ring ran into it. With the setting turned off, Settings opened from Edge (titled "NVDA Settings: Speech (JAWS - msedge)") and the Volume slider moved from 80 to 70 gave 70 in Edge and 100 on a page, what he reported. With it on, the same steps gave 70 outside Edge, in Edge and on a page, with no volume left in "JAWS - msedge" or "browseMode", nor in their saved files, and Eloquence's copy at 70 for each of its six sets of profiles. The settings ring on a page, twice down, gave 60 in all three places and none in "browseMode"; the audio ducking key turned ducking on in all three; a profile of my own turned on by hand kept its own 55 and everything else stayed as it was; and the question was asked 20 seconds after NVDA started, answered through its own list, after which the volume was 80 in all three places. The setting in NVDA's Settings, JAWS Migration Assistant, turned off and on again, took all of it away and put it back. That is 28 checks, all passed in the last run, on this version's own files. 96 new tests run the assistant's code against NVDA 2026.2's own property classes and settings ring and Eloquence64RS's own functions, word for word. Not tried: Eloquence64RS with its real engine (its code was real, its voice silent), the Custom Browse Mode add-on itself and a page in browse mode (its profile was turned on by the call it makes, Edge's by NVDA's own trigger), JAWS, the tester's other add-ons, and audio ducking where NVDA really ducks (this NVDA is not an installed copy, so only the call to Windows was imitated).
 
 ## What's new in 1.55
 
@@ -896,7 +909,7 @@ As JAWS does, the assistant keeps the notifications Windows and programs send wh
 
 What NVDA and your other add-ons say for a notification doesn't change. The history stays in memory only, and is gone when NVDA restarts. To stop keeping it, uncheck "Keep the notifications Windows and programs send, for NVDA+Shift+J then N, as JAWS's notification history" in NVDA's Settings, JAWS Migration Assistant.
 
-**D** after NVDA+Shift+J turns audio ducking on or off, as JAWS's Insert+Space, D does: NVDA says "Duck other audio" when it lowers other programs' sound while it speaks, and "Do not duck other audio" when it doesn't. NVDA's own NVDA+Shift+D still goes through all three of NVDA's choices. NVDA can duck only as an installed copy; a portable copy says "Audio ducking not supported".
+**D** after NVDA+Shift+J turns audio ducking on or off, as JAWS's Insert+Space, D does: NVDA says "Duck other audio" when it lowers other programs' sound while it speaks, and "Do not duck other audio" when it doesn't. NVDA's own NVDA+Shift+D still goes through all three of NVDA's choices. From 1.56, D's choice applies everywhere: NVDA otherwise saves it only in the profile turned on last, which on a web page is Custom Browse Mode's (see [What's new in 1.56](#whats-new-in-156)). NVDA can duck only as an installed copy; a portable copy says "Audio ducking not supported".
 
 ### Screen curtain
 
@@ -982,6 +995,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - reading Outlook's status bar as JAWS does, with Insert+Page Down: its items, such as Items in View and the zoom, without "Status Bar" and the view and zoom buttons (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - keeping the Columns Review add-on from saying "List top" and "List bottom" at the ends of a list (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - keeping the Columns Review and Emoticons add-ons from holding NVDA up each time NVDA switches configuration profiles, as switching programs or browse mode does (on unless you turn it off; see [What's new in 1.34](#whats-new-in-134) and [What's new in 1.35](#whats-new-in-135));
+- keeping the speech rate, pitch and volume you set, and audio ducking, the same in every program and on web pages, where NVDA otherwise saves a change only in the profile turned on last, the migration's profile for the program you are in or Custom Browse Mode's (on unless you turn it off; see [What's new in 1.56](#whats-new-in-156));
 - saying links on web pages as JAWS does: "same page" only for a link to a place on the page, no link titles, and "link" after a heading (on unless you turn it off; see [What's new in 1.25](#whats-new-in-125));
 - saying edit fields on web pages as JAWS does: "blank, placeholder" and the placeholder for an empty field, no "multi line", and no landmark you were already in (on unless you turn it off; see [What's new in 1.26](#whats-new-in-126));
 - saying Edge and Chrome windows and pages as JAWS does: their titles, without "window", "document", the page's address or Edge's "region", not the page of a tab you are leaving, and not a page's first line the first time you come to it (on unless you turn it off; see [What's new in 1.31](#whats-new-in-131), [What's new in 1.33](#whats-new-in-133) and [What's new in 1.34](#whats-new-in-134));

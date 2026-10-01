@@ -132,6 +132,13 @@ DEFAULTS = {
 	#: programs or browse mode does: Columns Review keeps the keys of NVDA's own commands until they change, and Emoticons
 	#: reads NVDA's dictionaries once for each change (see profileSwitches).
 	"quickProfileSwitches": True,
+	#: The rate, pitch and volume you set for NVDA's voice, in NVDA's Settings or with the settings ring, and audio ducking
+	#: set with NVDA+Shift+J, then D, apply everywhere: NVDA otherwise saves them into the profile turned on last, the
+	#: migration's profile for the program you are in or Custom Browse Mode's, and they apply there alone (see evenSpeech).
+	"keepSpeechEven": True,
+	#: The voice settings that differ between NVDA's profiles the assistant has asked about, once for each set of values
+	#: (see evenSpeech).
+	"evenSpeechAsked": [],
 	#: A link on a web page is said as JAWS says it: "same page" only for a link to a place on the page (a "#" in its
 	#: address), without the title NVDA says as its description, and, when quick navigation moves to a heading, "link"
 	#: after the heading and its level; quick navigation says no description of a link or heading (see linkSpeech).
