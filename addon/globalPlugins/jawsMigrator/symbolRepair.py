@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """A one-time repair of the symbols versions 1.0 to 1.9 wrote for spaces and line breaks.
 

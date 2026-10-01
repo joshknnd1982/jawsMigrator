@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """JAWS's layered keystroke sound, when NVDA+Shift+J starts the assistant's layer of commands.
 

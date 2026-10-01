@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """Browse mode on a web page's tabs and toolbar buttons, as JAWS's Auto Forms Mode, so letters never reach the page.
 

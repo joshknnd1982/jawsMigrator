@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """NVDA doesn't have a document build its whole text at every key, which slowed typing in a large file.
 

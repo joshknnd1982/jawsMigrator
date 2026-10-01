@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """JAWS's rule for a colon between digits, as in 6:02 PM, as an NVDA symbol rule.
 

@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """The rate, pitch and volume you set for NVDA's voice apply everywhere, not only in the program or on the page you set them in.
 

@@ -1,8 +1,8 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 # The update check follows ClassicSpeech's (https://github.com/joshknnd1982/classicspeech-nvda),
-# also GPL 2, so both add-ons behave the same way.
+# so both add-ons behave the same way.
 
 """Check GitHub for a newer JAWS Migration Assistant, download it and install it with NVDA.
 

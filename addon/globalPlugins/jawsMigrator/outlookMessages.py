@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """An Outlook message you read is said as JAWS says it: "send mail link" for an e-mail address, where a list starts and
 ends, and no heading for the From line of a message it quotes; and, when turned on, read from the top when it opens.

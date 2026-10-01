@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """Links on web pages are said as JAWS says them: "same page" only for a link to a place on the page, no link titles
 but on Tab, "link" after the heading a link is in, and, in quick navigation, no description.

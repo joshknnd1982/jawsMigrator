@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """JAWS's Screen Shade keys and words for NVDA's Screen Curtain, and the curtain said as NVDA starts with it on (issue 37).
 

@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """What NVDA said, kept as JAWS keeps its speech history: NVDA+Shift+J, then H shows it, Control+H copies it
 and Shift+H clears it.

@@ -1,7 +1,7 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
-# The same dialog ClassicSpeech (https://github.com/joshknnd1982/classicspeech-nvda, GPL 2) uses for its updates.
+# This file is covered by the MIT License.
+# The same dialog ClassicSpeech (https://github.com/joshknnd1982/classicspeech-nvda) uses for its updates.
 
 """The dialog that offers an update, with its release notes to read.
 

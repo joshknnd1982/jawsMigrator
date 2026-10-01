@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """The arrow keys stay in an edit field on a web page when they reach its start or end, as in JAWS's Auto Forms Mode.
 

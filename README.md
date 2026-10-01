@@ -18,7 +18,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 - Version: 1.58
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
-- License: GNU General Public License, version 2 or later
+- License: MIT License
 
 ## Contents
 
@@ -1261,5 +1261,6 @@ Three further scripts need wxPython and a computer with JAWS or JAWS settings. T
 ## Credits
 
 - Written by Josh Kennedy, with Claude.
-- The update check and update dialog follow [ClassicSpeech](https://github.com/joshknnd1982/classicspeech-nvda)'s, also under the GPL.
+- The update check and update dialog follow [ClassicSpeech](https://github.com/joshknnd1982/classicspeech-nvda)'s.
+- Test files that are word-for-word copies of NVDA, ClassicSpeech and Eloquence64RS code keep their own licences: see [NOTICE.md](NOTICE.md).
 - JAWS, Leasey, Eloquence and other product names belong to their owners. This add-on is not affiliated with Freedom Scientific, Vispero or Hartgen Consultancy.

@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """Alt+Left and Alt+Right in a web browser say "Back" and "Forward", and the page you go back to is read where you are
 in it, as JAWS does.

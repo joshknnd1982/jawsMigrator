@@ -1,6 +1,6 @@
 # JAWS Migration Assistant for NVDA
 # Copyright (C) 2026 Josh Kennedy
-# This file is covered by the GNU General Public License, version 2 or later.
+# This file is covered by the MIT License.
 
 """In Outlook, NVDA reads the status bar as JAWS reads it: the items and the zoom, without the view and zoom buttons.
 
