@@ -71,6 +71,9 @@ textInfos = types.SimpleNamespace(POSITION_CARET="caret")
 
 _Rect = namedtuple("Rect", "left top width height")
 
+#: What NVDA says when it can't press a suggestion.
+CANT_PRESS = "Can't press this suggestion, it is not on the screen. Make the window bigger or the page smaller."
+
 
 class Rect(_Rect):
 	"""NVDA's locationHelper.RectLTWH."""
@@ -308,9 +311,13 @@ class Page:
 		return Rect(590, top, 560, self.ROW)
 
 	def offscreen(self, option):
-		box = self.list._rect
+		"""NVDA's off screen state: all of the suggestion is outside its list's box, or outside the page (its document's rectangle)."""
+		box, page = self.list._rect, self.document._rect
 		top = box.top + self.options.index(option) * self.ROW - self.scrollTop
-		return top + self.ROW <= box.top or top >= box.top + box.height
+		bottom = top + self.ROW
+		if bottom <= box.top or top >= box.top + box.height:
+			return True
+		return bottom <= page.top or top >= page.top + page.height
 
 	def scrollTo(self, option):
 		"""IAccessible2's scrollTo: the box scrolls as far as it takes to have the whole option in it."""
@@ -398,6 +405,7 @@ class VisitTestCase(unittest.TestCase):
 		self.page = Page()
 		self.screen = Screen(self.page)
 		self.document = Document()
+		self.document.rootNVDAObject = self.page.document
 		self.clock = Clock()
 		nvdaObjects = types.ModuleType("NVDAObjects")
 		nvdaObjects.NVDAObject = NVDAObject
@@ -710,7 +718,7 @@ class ChoosingTest(VisitTestCase):
 		box = self.page.list._rect
 		self.assertTrue(box.top <= y < box.top + box.height, "the press is in the list's box, on the suggestion that was chosen")
 
-	def test_a_suggestion_only_partly_in_sight_is_scrolled_too(self):
+	def test_a_suggestion_only_partly_in_sight_is_pressed_where_it_shows(self):
 		# The fourth row of 3.5 shows its top half: its middle is outside the box, where the mouse would press the page.
 		for _ in range(4):
 			self.press("downArrow")
@@ -718,7 +726,10 @@ class ChoosingTest(VisitTestCase):
 		self.assertFalse(option.hasIrrelevantLocation, "NVDA says nothing is wrong with its place")
 		self.press("enter")
 		self.assertEqual(self.page.chosen, option._name)
-		self.assertIn("scrollIntoView", option.calls)
+		self.assertEqual(option.calls, [], "it shows enough to be pressed: no scrolling")
+		x, y = self.screen.clicks[0]
+		box = self.page.list._rect
+		self.assertTrue(box.top <= y < box.top + box.height, "the press is in the list's box, not at the middle of the row, which is outside it")
 
 	def test_a_suggestion_in_sight_is_not_scrolled(self):
 		self.press("downArrow")
@@ -741,7 +752,7 @@ class ChoosingTest(VisitTestCase):
 		gesture = self.press("enter")
 		self.assertIsNone(self.page.chosen)
 		self.assertEqual(self.screen.clicks, [])
-		self.assertEqual(self.said()[-1], "Can't press this suggestion")
+		self.assertEqual(self.said()[-1], CANT_PRESS)
 		self.assertEqual(gesture.sent, 0, "and Enter doesn't submit the form")
 		self.assertGreaterEqual(self.clock.slept, suggestionLists._SCROLL_WAIT)
 		self.assertIsNotNone(suggestionLists._session, "the visit goes on")
@@ -759,7 +770,7 @@ class ChoosingTest(VisitTestCase):
 		with mock.patch.object(Option, "location", property(lambda self: Rect(0, 0, 0, 0))):
 			self.press("enter")
 		self.assertEqual(self.screen.clicks, [])
-		self.assertEqual(self.said()[-1], "Can't press this suggestion")
+		self.assertEqual(self.said()[-1], CANT_PRESS)
 
 
 class OtherKeysTest(VisitTestCase):

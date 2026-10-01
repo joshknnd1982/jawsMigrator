@@ -57,7 +57,12 @@ those alone:
   its list has it out of sight (IAccessible2's ``scrollTo``, which NVDA's ``scrollIntoView`` calls; NVDA reports the new place
   about twelve milliseconds later), the pointer goes to it, presses and lets go, and goes back. The page gets ``mousedown``,
   ``mouseup`` and ``click``, which chooses a suggestion on this page and on one that listens for ``click``. NVDA says the
-  suggestion and "selected";
+  suggestion and "selected". The pointer goes to the middle of the part of the suggestion that shows in its list's box and in the
+  page (the document's rectangle, less the scrollbars at its right and bottom edges): where all of it shows, its middle. In a
+  window so small that the list runs past the page's bottom edge, NVDA doesn't call the row at the edge off screen though its
+  middle is outside the page, and 1.54 pressed there; scrolling can't bring such a row in (the address form stays where it is
+  when the page scrolls, and neither ``scrollTo`` of any kind nor the page's ``scrollIntoView`` moved anything), so a row that
+  shows too little is not pressed and NVDA says so;
 - any other key goes to the page as it does, and the visit is over: typing goes on in the field, Escape and Tab do what NVDA does
   with them. These keys, once Down Arrow has begun a visit, are the assistant's from the keyboard hook's side (``scriptFor``),
   which knows nothing but the key and which object has the focus. A key pressed before the first Down Arrow has made the
@@ -75,6 +80,7 @@ from __future__ import annotations
 import functools
 import threading
 import time
+from collections import namedtuple
 
 #: The assistant's setting (state.json) that turns this on or off.
 STATE_KEY = "chooseWebSuggestions"
@@ -98,6 +104,10 @@ _NEAR = 60
 #: How long, in seconds, the keys that follow Down Arrow at once are taken for the suggestions, before its script has begun
 #: the visit.
 _PENDING_SECONDS = 2.0
+#: How many pixels of a suggestion must show, high and wide, for the mouse to press it there.
+_LEAST_SHOWING = 6
+#: How thick, in pixels, the browser's scrollbars are taken to be where Windows doesn't say (see _scrollbarSize).
+_SCROLLBAR = 20
 #: How long, in seconds, a suggestion the page scrolls into view is waited for, and the pause between looks: the page took
 #: about twelve milliseconds to tell NVDA where the suggestion was (Edge 154, NVDA 2026.2).
 _SCROLL_WAIT = 0.4
@@ -493,21 +503,72 @@ def pressSuggestion(obj) -> bool:
 	suggestion, box = _suggestionAndList(obj)
 	if suggestion is None:
 		return False
-	return _press(suggestion, box)
+	import api
+
+	return _press(suggestion, box, _pageOf(api.getFocusObject()))
 
 
-def _inPlace(option, box) -> bool:
-	"""Whether ``option`` has a place on the screen for the mouse: in sight, and inside the box of its list."""
+#: A rectangle on the screen, as NVDA's locations are.
+_Area = namedtuple("_Area", "left top width height")
+
+
+def _scrollbarSize() -> int:
+	"""How thick a scrollbar is on this screen, in pixels, as Windows has it (more on a screen that is scaled up)."""
+	try:
+		import ctypes
+
+		user32 = ctypes.windll.user32
+		return max(user32.GetSystemMetrics(2), user32.GetSystemMetrics(3)) or _SCROLLBAR
+	except Exception:
+		return _SCROLLBAR
+
+
+def _pageOf(field):
+	"""Where the page shows on the screen, or None where NVDA can't say.
+
+	It is the rectangle of the document NVDA's buffer is of, less what the browser's scrollbars may take at its right and
+	bottom edges: they are inside that rectangle (measured in Edge 154: the document was 383 pixels high and its page 15 CSS
+	pixels less, with a horizontal scrollbar), and a press on a scrollbar chooses nothing.
+	"""
+	try:
+		area = field.treeInterceptor.rootNVDAObject.location
+		if area and area.width and area.height:
+			room = _scrollbarSize()
+			return _Area(area.left, area.top, max(area.width - room, 1), max(area.height - room, 1))
+	except Exception:
+		pass
+	return None
+
+
+def _part(rectangle, area):
+	"""The part of ``rectangle`` that is in ``area``, as (left, top, right, bottom); an area that is not known holds all of it."""
+	left, top, right, bottom = rectangle
+	if area and area.width and area.height:
+		left, top = max(left, area.left), max(top, area.top)
+		right, bottom = min(right, area.left + area.width), min(bottom, area.top + area.height)
+	return left, top, right, bottom
+
+
+def _pressPoint(option, box, page=None):
+	"""Where the mouse can press ``option``: the middle of the part of it that shows in its list's box and the page. None when none does.
+
+	A press on any part of a suggestion chooses it. NVDA calls a suggestion off screen only when all of it is, and the one at the
+	bottom edge of a small window has its top in the page and its middle outside it (measured: the page ended at 526 and the
+	middle was at 527, the suggestion not off screen): pressed at its middle, the mouse is outside the page. Where all of
+	it shows this is its middle, as it was.
+	"""
 	if option.hasIrrelevantLocation:
-		return False
+		return None
 	location = option.location
 	if not location.width or not location.height:
-		return False
-	area = box.location if box is not None else None
-	if not area or not area.width or not area.height:
-		return True
-	x, y = location.center
-	return area.left <= x < area.left + area.width and area.top <= y < area.top + area.height
+		return None
+	rectangle = (location.left, location.top, location.left + location.width, location.top + location.height)
+	for area in (box.location if box is not None else None, page):
+		rectangle = _part(rectangle, area)
+	left, top, right, bottom = rectangle
+	if right - left < _LEAST_SHOWING or bottom - top < _LEAST_SHOWING:
+		return None
+	return (left + right) // 2, (top + bottom) // 2
 
 
 def _forget(obj) -> None:
@@ -518,44 +579,52 @@ def _forget(obj) -> None:
 		pass
 
 
-def _scrollInto(option, box) -> bool:
-	"""Have the page scroll ``option`` into its list's box, and wait for NVDA to see it there. False when it doesn't get there."""
+def _scrollInto(option, box, page=None):
+	"""Have the page scroll ``option`` into its list's box, and wait for NVDA to see it there. Where to press it, or None.
+
+	Scrolling brings a suggestion that is out of its list's box into it. It does not bring one into the page that the page's edge
+	hides and the list's box does not: the list is in a part of the page that stays where it is, and neither IAccessible2's
+	scrollTo nor the page's own scrollIntoView moves anything then (measured, in Edge 154).
+	"""
 	try:
 		option.scrollIntoView()
 	except Exception:
-		return False
+		return None
 	deadline = time.monotonic() + _SCROLL_WAIT
 	while True:
 		_forget(option)
-		if _inPlace(option, box):
-			return True
+		point = _pressPoint(option, box, page)
+		if point is not None:
+			return point
 		if time.monotonic() >= deadline:
-			return False
+			return None
 		time.sleep(_SCROLL_STEP)
 
 
-def _press(option, box=None) -> bool:
+def _press(option, box=None, page=None) -> bool:
 	"""Press ``option`` with the mouse. True once the mouse has pressed it.
 
 	It is what NVDA does for a control it can't activate any other way (``_activateNVDAObject``): the pointer goes to the
-	middle of the object, presses and lets go with the primary button, and goes back. The page gets the mouse's ``mousedown``,
-	``mouseup`` and ``click``, which the suggestions of visible.com choose by, not the ``click`` alone that ``doAction`` sends.
-	A suggestion that is out of its list's box, as all but the first seven of visible.com's twenty are, is not where the mouse
-	would press it: the page scrolls it into view first (IAccessible2's scrollTo, which NVDA's ``scrollIntoView`` calls), as it
-	does for NVDA's own cursor.
+	object, presses and lets go with the primary button, and goes back. The page gets the mouse's ``mousedown``, ``mouseup`` and
+	``click``, which the suggestions of visible.com choose by, not the ``click`` alone that ``doAction`` sends. The pointer goes
+	to the middle of the part of the suggestion that shows in its list's box and in the page (``page``): one out of its list's box,
+	as all but the first seven of visible.com's twenty are, is scrolled into view first (IAccessible2's scrollTo, which NVDA's
+	``scrollIntoView`` calls), as it is for NVDA's own cursor. If no part of it shows, nothing is pressed.
 	"""
 	import mouseHandler
 	import winUser
 
 	text = _nameOf(option)
-	scrolled = not _inPlace(option, box)
-	if scrolled and not _scrollInto(option, box):
-		_log().debug(f"jawsMigrator: the suggestion {text!r} is not in the list's box on the screen, so the mouse didn't press it")
+	point = _pressPoint(option, box, page)
+	scrolled = point is None
+	if scrolled:
+		point = _scrollInto(option, box, page)
+	if point is None:
+		_log().debug(f"jawsMigrator: no part of the suggestion {text!r} shows in the list's box and the page on the screen, so the mouse didn't press it")
 		return False
-	location = option.location
 	oldX, oldY = winUser.getCursorPos()
 	try:
-		winUser.setCursorPos(*location.center)
+		winUser.setCursorPos(*point)
 		mouseHandler.doPrimaryClick()
 	finally:
 		winUser.setCursorPos(oldX, oldY)
@@ -750,10 +819,10 @@ def _choose(gesture):
 			_endSession("the key came with no visit going on")
 			_passOn(gesture)
 			return
-		if _press(session.options[session.index], session.box):
+		if _press(session.options[session.index], session.box, _pageOf(field)):
 			_endSession("the suggestion was chosen")
 		else:
-			ui.message("Can't press this suggestion")
+			ui.message("Can't press this suggestion, it is not on the screen. Make the window bigger or the page smaller.")
 	except Exception:
 		_session = None
 		_pending = None

@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.54
+- Version: 1.55
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.55](#whats-new-in-155)
 - [What's new in 1.54](#whats-new-in-154)
 - [What's new in 1.53](#whats-new-in-153)
 - [What's new in 1.52](#whats-new-in-152)
@@ -106,10 +107,19 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.54.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.55.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.55
+
+From a check of 1.54's press on the suggestions of an edit field on a web page (issue 47), in a second NVDA 2026.2 with Microsoft Edge 154 on the live [visible.com home internet page](https://www.visible.com/shop/home-internet), with the browser window made small.
+
+- **A suggestion is pressed where it shows on the page.** In a window so small that the address list runs past the bottom of the page, the row at the page's edge has its top in the page and its middle outside it, and NVDA does not call it off screen. 1.54 pressed at its middle, outside the page, and said "selected" though nothing was chosen: the page ended at 526 on the screen and the middle of the row was at 527. Now the mouse presses the middle of the part of the suggestion that shows in its list's box and in the page. The page's rectangle is less the browser's scrollbars at its right and bottom edges: they are inside it, and a press on one chose nothing (the first try of this change pressed on a scrollbar). Where all of a suggestion shows, that is its middle, as before.
+- **A suggestion the page hides is not pressed, and NVDA says so.** Scrolling can't bring such a row in: the address form stays where it is when the page scrolls, and no kind of IAccessible2 scrollTo, nor the page's own scrollIntoView, moved the page. Where under six pixels of a suggestion show, nothing is pressed and NVDA says "Can't press this suggestion, it is not on the screen. Make the window bigger or the page smaller." Up Arrow goes on to a suggestion that shows, and Enter presses that one. With the browser window as big as the screen's, or the page zoomed out, this does not come up.
+- **Where NVDA can't say where the page is,** the list's box alone decides, as in 1.54.
+- **What was tried, and what wasn't.** In the real NVDA, with the window made small: Down Arrow to the row at the edge and Enter put its address in the field (1.54 pressed outside the page; ten presses of ten that were replayed on the page at once chose it, and one of five replayed a second and a half after NVDA's press did not, and why is not known); the next row, hidden by the page, was refused with those words, and Up Arrow three times and Enter chose the third suggestion. In the usual window, the walk through the suggestions and Enter on the thirteenth, which is out of sight in the list, did what they did in 1.54. The tests have a page whose edge cuts the list and a scrollbar in the page's rectangle. NVDA's own hit test for a point, which would say what is under the pointer, was tried for this and is no use: it answered with a generic section for a row in plain view. **Not tried:** other pages or browsers, the real mouse pointer (the press was replayed on the page), and JAWS.
 
 ## What's new in 1.54
 
@@ -961,7 +971,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - opening a list of one kind for each JAWS list key, as JAWS does: Insert+F7 links, Insert+F6 headings, Insert+F5 form fields, Control+Insert+B buttons and Control+Insert+R regions, each with JAWS's title and no radio buttons, and JAWS's words on a page with none (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
 - staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
-- going into the suggestions an edit field on a web page shows, such as the addresses on visible.com, with Down Arrow after you type, through them with Down Arrow, Up Arrow, Home and End, and choosing one with Enter or Space (on unless you turn it off; see [What's new in 1.54](#whats-new-in-154) and [What's new in 1.46](#whats-new-in-146));
+- going into the suggestions an edit field on a web page shows, such as the addresses on visible.com, with Down Arrow after you type, through them with Down Arrow, Up Arrow, Home and End, and choosing one with Enter or Space (on unless you turn it off; see [What's new in 1.55](#whats-new-in-155), [What's new in 1.54](#whats-new-in-154) and [What's new in 1.46](#whats-new-in-146));
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying the alternative text of a picture in an Outlook message, as JAWS does, where NVDA said "link" or "blank" (on unless you turn it off; see [What's new in 1.44](#whats-new-in-144));
