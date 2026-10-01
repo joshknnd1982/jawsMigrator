@@ -155,21 +155,29 @@ class UndoingAChoiceTest(UndoTestCase):
 		self.assertEqual(self.page.keys, [])
 
 	def test_down_arrow_right_after_waits_for_the_page_to_show_them(self):
+		# 1.57 held NVDA's main thread for up to 1.5 seconds; 1.58 does not (the watchdog cancels COM calls from half a second on): its own
+		# timer looks again every 50 milliseconds.
 		self.choose(3)
 		self.undo()
-		before = self.clock.slept
+		before, started = self.clock.slept, self.clock.now
 		self.press("downArrow")
-		waited = self.clock.slept - before
+		self.assertEqual(self.said(), [f"Choice undone, {TYPED}"], "nothing yet: the page has not shown them")
+		self.assertEqual(self.stockRan, [], "NVDA's own Down Arrow did not run")
+		while len(self.said()) < 2 and self.clock.now - started < 3:
+			self.advance(0.01)
+		waited = self.clock.now - started
 		self.assertGreaterEqual(waited, self.page.listDelay)
 		self.assertLess(waited, self.page.listDelay + 0.1)
 		self.assertEqual(self.said()[-1], f"Address suggestions, list, {self.name(1)}, 1 of 10")
 		self.assertEqual(self.stockRan, [], "NVDA's own Down Arrow did not run")
 		self.assertEqual(self.page.keys, [])
+		self.assertEqual(self.clock.slept, before, "NVDA's main thread was not held")
 
 	def test_it_goes_on_to_the_next_suggestion_and_a_second_choice_can_be_made(self):
 		self.choose(3)
 		self.undo()
 		self.press("downArrow")
+		self.advance(1.0)
 		self.press("downArrow")
 		self.press("enter")
 		self.assertEqual(self.page.text, self.name(2))
@@ -181,13 +189,18 @@ class UndoingAChoiceTest(UndoTestCase):
 		self.page.listDelay = 99
 		self.choose(3)
 		self.undo()
-		before = self.clock.slept
+		before, started = self.clock.slept, self.clock.now
 		self.press("downArrow")
-		waited = self.clock.slept - before
-		self.assertGreaterEqual(waited, suggestionLists._RETURN_WAIT)
-		self.assertLess(waited, suggestionLists._RETURN_WAIT + 0.1)
-		self.assertEqual(self.stockRan, ["downArrow"], "then NVDA does what it does with the key")
-		self.assertEqual(self.page.keys, ["downArrow"])
+		self.assertEqual(self.stockRan, [], "the key waits: NVDA's own Down Arrow has not run yet")
+		self.advance(suggestionLists._RETURN_WAIT - 0.2)
+		self.assertEqual(self.stockRan, [])
+		self.advance(0.4)
+		self.assertLess(self.clock.now - started, suggestionLists._RETURN_WAIT + 0.3)
+		# 1.57 then did what NVDA does with the key, which in the field is to walk out of it (and, measured, into the buffer's "Loading...").
+		self.assertEqual(self.said()[-1], suggestionLists.NO_SUGGESTIONS_YET)
+		self.assertEqual(self.stockRan, [], "NVDA's own Down Arrow does not run")
+		self.assertEqual(self.page.keys, [])
+		self.assertEqual(self.clock.slept, before, "and NVDA's main thread was not held")
 
 	def test_the_wait_is_shorter_than_the_time_the_keys_that_follow_are_taken_for_the_visit(self):
 		# A key pressed while Down Arrow waits is looked for after the wait began, and is the visit's only for _PENDING_SECONDS.
@@ -328,11 +341,14 @@ class WhereControlZIsNotTheAssistantsTest(UndoTestCase):
 		self.assertEqual(self.page.keys, ["tab", "z"])
 		self.assertEqual(self.page.text, self.name(3))
 
-	def test_nothing_typed_means_nothing_to_take_back(self):
+	def test_a_field_that_held_nothing_is_put_back_empty(self):
+		# 1.57 left this to the page. 1.58 puts the nothing back: the unit box holds nothing when the page shows its units (tests/test_v158_unitBox.py).
 		self.page.text = ""
 		self.choose(3)
 		self.undo()
-		self.assertEqual(self.page.keys, ["z"])
+		self.assertEqual(self.page.keys, [])
+		self.assertEqual(self.page.text, "")
+		self.assertEqual(self.said(), ["Choice undone"])
 
 	def test_a_field_that_cant_be_read_offers_nothing(self):
 		self.page.unreadable = True
@@ -410,6 +426,7 @@ class TheLogSaysWhatHappenedTest(UndoTestCase):
 			self.choose(3)
 			self.undo()
 			self.press("downArrow")
+			self.advance(1.0)
 		text = "\n".join(logged.output)
 		self.assertIn(f"the suggestion {self.name(3)!r} was chosen, and Control+Z puts back {TYPED!r}", text)
 		self.assertIn(f"Control+Z took the choice back: the field holds {TYPED!r} again", text)
@@ -428,6 +445,7 @@ class TheLogSaysWhatHappenedTest(UndoTestCase):
 		self.undo()
 		with self.assertLogs("nvda", level="DEBUG") as logged:
 			self.press("downArrow")
+			self.advance(suggestionLists._RETURN_WAIT + 0.2)
 		self.assertIn("were not back", "\n".join(logged.output))
 
 

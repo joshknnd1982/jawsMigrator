@@ -106,6 +106,25 @@ result = list(doc.rootNVDAObject.location)
 		    dropdown: box ? getComputedStyle(box).display : null, options: document.querySelectorAll('#address-dropdown [role=option]').length};
 		})()""")
 
+	def unit(self):
+		"""The unit box of the stand-in page (pages/address.html) and its list: what has the focus, what the boxes hold, what the list shows."""
+		return self.cdp.js("""(() => {
+		  const wrap = document.querySelector('#availabilityUnitWrap'), box = document.querySelector('#unit-dropdown');
+		  const active = document.activeElement;
+		  return {active: active.id || active.className || active.tagName, address: document.querySelector('#address-input').value,
+		    unitBox: wrap ? getComputedStyle(wrap).display : null, unitValue: document.querySelector('#unit-input').value,
+		    unitList: box ? getComputedStyle(box).display : null,
+		    unitOptions: [...document.querySelectorAll('#unit-dropdown [role=option]')].map(o => o.textContent),
+		    unitLoading: document.querySelectorAll('#unit-dropdown .typeahead-loading').length,
+		    addressList: getComputedStyle(document.querySelector('#address-dropdown')).display,
+		    addressOptions: document.querySelectorAll('#address-dropdown [role=option]').length};
+		})()""")
+
+	def toUnitBox(self, wait=2.0):
+		"""What NVDA's focus event does when the page moves the focus to the unit box (this desktop has no real one): tell NVDA, and wait for the list."""
+		self.driver("syncFocus", find="Enter Unit Label")
+		time.sleep(wait)
+
 	def nvda(self):
 		res = self.driver("focus")
 		doc = res.get("doc") or {}

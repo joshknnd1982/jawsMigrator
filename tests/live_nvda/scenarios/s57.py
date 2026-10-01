@@ -1,7 +1,7 @@
 """Down Arrow right after Control+Z when the page is slow to show its suggestions again (issue 47, 1.57).
 
 A: the service answers 900 ms after the 300 ms of quiet: Down Arrow waits for the list (it waits at most 1.5 seconds) and says the first suggestion.
-B: the service answers after 4 seconds: Down Arrow waits the 1.5 seconds, then goes on as NVDA has it (here it leaves the field: automatic focus mode for caret movement).
+B: the service answers after 4 seconds: Down Arrow waits the 1.5 seconds, then NVDA says "No suggestions yet" and the focus stays in the field (1.57 went on as NVDA has it, which left the field: automatic focus mode for caret movement). Neither holds NVDA's main thread (1.58).
 """
 import time
 
@@ -35,5 +35,10 @@ for label, delay in (("A: slow service (900 ms)", 900), ("B: very slow service (
         print("   ", line)
     print("    page:", s.page())
     print("    nvda:", {k: v for k, v in s.nvda().items() if k in ("passThrough", "caretLine")})
-    time.sleep(4.5)
+    time.sleep(2.5)
+    # 1.58 waits with NVDA's own timer and not by holding its main thread, so what Down Arrow does comes some time after the key.
+    for line in gestureTimes():
+        print("    later:", line)
+    print("    nvda then:", {k: v for k, v in s.nvda().items() if k in ("passThrough", "caretLine")})
+    time.sleep(2.0)
 s.cdp.js("window.__serviceDelay = undefined; 1")

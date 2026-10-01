@@ -2,17 +2,23 @@
 <!--
   A stand-in for the address field on visible.com/shop/home-internet (issue 47), so that the rig can be tried without typing into
   a live site. The markup is the live page's. The script is written for this file; it does what the live page's was measured to do
-  on 30 September and 1 October 2026 (Edge 154, NVDA 2026.2):
+  on 30 September and 1 October 2026 (Edge 154, NVDA 2026.2), and what its script (clientlib-fioscheckavailability, read on
+  1 October 2026) does:
 
   - Down Arrow in the field, with the list open, focuses the first suggestion (and the field's blur then closes the list 150 ms later);
   - a suggestion is chosen by its mousedown, or by Enter or Space on it when it has the focus; a click alone chooses nothing;
   - choosing puts the address in the field with a script (no input event) and closes the list; the field keeps the focus;
-  - any edit of the field (an input event) forgets the choice and asks for suggestions for the text, 300 ms later (debounced);
-    the list is shown again when they arrive, if there are any and the text is at least three characters.
+  - any edit of the field (an input event) forgets the choice, hides the unit box and asks for suggestions for the text, 300 ms later
+    (debounced); the list is shown again when they arrive, if there are any and the text is at least three characters;
+  - choosing an address that has units (the third and the eleventh here) shows the unit box and moves the focus to it with a zero-delay
+    timer (showUnitField). The unit box's focus handler shows "Loading..." in its list at once and the units, with the two fixed
+    choices "I can't find my unit" and "I don't live in a unit" after them, when the service answers; typing in it asks again 300 ms
+    later; its blur closes the list 150 ms later; choosing a unit puts it in the box with a script (no input event) and closes the list.
 
   The suggestions are fixed: those the tester's log shows for "241 w pine st" (the first eight) and twelve more. The text typed is
   taken as the beginning of an address, so a whole address, once chosen, has the one suggestion that is that address.
-  window.__log has what happened, for the scenarios to read.
+  window.__log has what happened, for the scenarios to read. window.__serviceDelay and window.__unitServiceDelay (milliseconds) make
+  the address service and the unit service slower or faster.
 -->
 <html lang="en">
 <head>
@@ -24,6 +30,7 @@
   #address-input, #unit-input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 16px; }
   .typeahead-dropdown { display: none; position: absolute; left: 0; right: 0; top: 100%; max-height: 294px; overflow-y: auto; background: #fff; border: 1px solid #888; z-index: 10; }
   .typeahead-item { padding: 10px; height: 20px; line-height: 20px; border-bottom: 1px solid #ddd; cursor: pointer; }
+  .typeahead-loading { padding: 10px; height: 20px; line-height: 20px; }
   .typeahead-item:focus, .typeahead-item:hover { background: #dde; }
   .availability-actions { margin-top: 330px; }
 </style>
@@ -43,6 +50,7 @@
       <input id="unit-input" type="text" placeholder="Enter Unit address" autocomplete="off" aria-autocomplete="list" aria-controls="unit-dropdown" aria-label="Enter Unit Label">
       <div id="unit-dropdown" class="typeahead-dropdown" role="listbox" aria-label="Unit suggestions"></div>
     </div>
+    <span id="unitError" class="availability-error errorText" aria-live="polite"></span>
   </div>
   <div class="availability-actions">
     <button type="submit" id="checkAvailabilityBtn" class="cmp-button btn-primary availability-cta">Check availability</button>
@@ -58,16 +66,23 @@ const note = (what, extra) => window.__log.push(Object.assign({t: Math.round(per
 const TOWNS = [
   ['LISBON', 'OH', '44432'], ['PAXTON', 'IL', '60957'], ['CANISTOTA', 'SD', '57012'], ['JESUP', 'GA', '31545'],
   ['LANCASTER', 'WI', '53813'], ['JOHNSONVILLE', 'SC', '29555'], ['PONCHATOULA', 'LA', '70454'], ['CANTON', 'IL', '61520'],
-  ['ELDON', 'MO', '65026'], ['HAMBURG', 'AR', '71646'], ['ALTOONA', 'IA', '50009'], ['WINNSBORO', 'LA', '71295'],
+  ['ELDON', 'MO', '65026'], ['HAMBURG', 'AR', '71646'], ['GROVE CITY', 'PA', '16127'], ['WINNSBORO', 'LA', '71295'],
   ['BELOIT', 'KS', '67420'], ['EUREKA', 'CA', '95501'], ['MARION', 'IL', '62959'], ['DEXTER', 'NM', '88230'],
   ['ROCKWELL', 'NC', '28138'], ['SIOUX CENTER', 'IA', '51250'], ['BRYAN', 'OH', '43506'], ['LAPEER', 'MI', '48446'],
 ];
-const ADDRESSES = TOWNS.map(([city, state, zip], index) => ({disprawstr: `241 W PINE ST, ${city}, ${state}, ${zip}, USA`, unitExists: index === 2}));
+// The addresses with units: the third, and the eleventh (GROVE CITY, which the tester chose on 1 October 2026 and was taken to the unit box).
+const ADDRESSES = TOWNS.map(([city, state, zip], index) => ({disprawstr: `241 W PINE ST, ${city}, ${state}, ${zip}, USA`, unitExists: index === 2 || index === 10}));
+const UNITS = ['APT 1', 'APT 2', 'APT 3A', 'APT 3B', 'UNIT 4'];
+const STATIC_UNITS = ["I can't find my unit", "I don't live in a unit"];
 
 const input = document.getElementById('address-input');
 const dropdown = document.getElementById('address-dropdown');
 const unitWrap = document.getElementById('availabilityUnitWrap');
+const unitInput = document.getElementById('unit-input');
+const unitDropdown = document.getElementById('unit-dropdown');
 let chosen = null;
+let unitRequired = false;
+let unitSelectedFromDropdown = false;
 
 function suggestionsFor(text) {
   const wanted = text.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -79,13 +94,32 @@ function closeDropdown() {
   dropdown.style.display = 'none';
 }
 
+function showUnitField() {
+  unitWrap.style.display = 'flex';
+  unitRequired = true;
+  unitSelectedFromDropdown = false;
+  note('unitShow');
+  // Move the focus to the unit box so that keystrokes don't go to the address box (the live page's comment).
+  setTimeout(() => { unitInput.focus(); }, 0);
+}
+
+function hideUnitField() {
+  const was = unitWrap.style.display !== 'none';
+  unitWrap.style.display = 'none';
+  unitInput.value = '';
+  unitDropdown.style.display = 'none';
+  unitRequired = false;
+  unitSelectedFromDropdown = false;
+  if (was) note('unitHide');
+}
+
 function selectAddress(address) {
   input.value = address.disprawstr;  // by script: no input event, as on the live page
   chosen = address.disprawstr;
   closeDropdown();
-  unitWrap.style.display = address.unitExists ? 'block' : 'none';
   document.getElementById('chosen').textContent = 'Chosen: ' + chosen;
   note('select', {value: chosen});
+  if (address.unitExists === true) showUnitField(); else hideUnitField();
 }
 
 function buildItem(address) {
@@ -122,7 +156,7 @@ function ask(text) {
 
 input.addEventListener('input', () => {
   chosen = null;
-  unitWrap.style.display = 'none';
+  hideUnitField();  // "Hide unit field when address changes"
   document.getElementById('chosen').textContent = '';
   note('input', {value: input.value});
   ask(input.value);
@@ -136,10 +170,103 @@ input.addEventListener('keydown', event => {
   }
 });
 input.addEventListener('blur', () => { note('blur'); setTimeout(closeDropdown, 150); });
+
+// The unit box and its list (the live page's initUnitTypeahead, renderUnitDropdown, buildUnitDropdownItem and selectUnit).
+function closeUnitDropdown() { unitDropdown.style.display = 'none'; }
+
+function selectUnit(value) {
+  unitInput.value = value;  // by script: no input event
+  unitSelectedFromDropdown = true;
+  closeUnitDropdown();
+  note('unitSelect', {value});
+}
+
+function buildUnitItem(text, isStatic) {
+  const item = document.createElement('div');
+  item.className = 'typeahead-item' + (isStatic ? ' typeahead-item--static' : '');
+  item.setAttribute('role', 'option');
+  item.setAttribute('tabindex', '0');
+  item.textContent = text;
+  item.addEventListener('mousedown', event => { event.preventDefault(); selectUnit(text); });
+  item.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectUnit(text); }
+    else if (event.key === 'ArrowDown') { if (item.nextElementSibling) item.nextElementSibling.focus(); }
+    else if (event.key === 'ArrowUp') { (item.previousElementSibling || unitInput).focus(); }
+    else if (event.key === 'Escape') { closeUnitDropdown(); unitInput.focus(); }
+  });
+  return item;
+}
+
+function renderUnits(units, showLoading) {
+  unitDropdown.innerHTML = '';
+  if (showLoading) {
+    const loading = document.createElement('div');
+    loading.className = 'typeahead-loading';
+    loading.textContent = 'Loading...';
+    unitDropdown.appendChild(loading);
+    unitDropdown.style.display = 'block';
+    note('unitLoading');
+    return;
+  }
+  units.forEach(unit => unitDropdown.appendChild(buildUnitItem(unit, false)));
+  STATIC_UNITS.forEach(text => unitDropdown.appendChild(buildUnitItem(text, true)));
+  unitDropdown.style.display = 'block';
+  note('unitOpen', {count: units.length + STATIC_UNITS.length});
+}
+
+function fetchUnits(term) {
+  const wanted = term.toLowerCase();
+  return new Promise(resolve => setTimeout(
+    () => resolve(UNITS.filter(unit => unit.toLowerCase().includes(wanted))),
+    window.__unitServiceDelay === undefined ? 150 : window.__unitServiceDelay));
+}
+
+let unitTimer = null;
+function askUnits(value) {
+  clearTimeout(unitTimer);
+  unitTimer = setTimeout(async () => {
+    if (!chosen) return;
+    renderUnits([], true);
+    renderUnits(await fetchUnits(value), false);
+  }, 300);
+}
+
+unitInput.addEventListener('focus', async function () {
+  unitSelectedFromDropdown = false;
+  note('unitFocus');
+  if (!chosen) return;  // the live page: if (!selectedLocusID) return
+  renderUnits([], true);
+  const units = await fetchUnits(this.value.trim());
+  renderUnits(units, false);
+});
+unitInput.addEventListener('input', function () {
+  unitSelectedFromDropdown = false;
+  note('unitInput', {value: this.value});
+  askUnits(this.value.trim());
+});
+unitInput.addEventListener('blur', function () {
+  note('unitBlur');
+  const self = this;
+  setTimeout(() => {
+    closeUnitDropdown();
+    if (unitRequired && !unitSelectedFromDropdown && self.value.trim() !== '') {
+      document.getElementById('unitError').textContent = 'This is mandatory field.';
+    }
+  }, 150);
+});
+unitInput.addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown') {
+    const first = unitDropdown.style.display !== 'none' && unitDropdown.querySelector('.typeahead-item');
+    if (first) { event.preventDefault(); first.focus(); note('unitPageDown'); }
+  } else if (event.key === 'Escape') {
+    closeUnitDropdown();
+  }
+});
+
 document.getElementById('availability-form').addEventListener('submit', event => {
   event.preventDefault();
-  note('submit', {value: input.value, chosen});
-  document.getElementById('chosen').textContent = chosen ? 'Checking ' + chosen : 'Choose an address first';
+  note('submit', {value: input.value, chosen, unit: unitInput.value});
+  document.getElementById('chosen').textContent = chosen ? 'Checking ' + chosen + (unitInput.value ? ', ' + unitInput.value : '') : 'Choose an address first';
 });
 </script>
 </body>

@@ -1,6 +1,6 @@
 # Testing the add-on in a real NVDA, on a private desktop
 
-Written on 30 September 2026 while fixing issue 47 (1.54), and extended on 1 October (1.55; the stand-in page and Control+Z of 1.57). The tests under `tests/` run the add-on's code against
+Written on 30 September 2026 while fixing issue 47 (1.54), and extended on 1 October (1.55; the stand-in page and Control+Z of 1.57; the unit box and the watchdog of 1.58). The tests under `tests/` run the add-on's code against
 imitations of NVDA. They could not show what was wrong with 1.46 to 1.53, which only a running NVDA shows (NVDA looks for a key's script on the
 keyboard hook's thread, where its objects can't be read, and its buffer has one suggestion of a list). This runs a **second NVDA 2026.2 on its own
 Windows desktop**, with Microsoft Edge on that desktop, next to the user's own NVDA, which it never touches. Nothing here is part of the add-on and
@@ -36,7 +36,10 @@ none of it is packaged (`build.py` packages only `addon/`).
 3. Optional: `python fetch_addons.py` puts some of the tester's other add-ons into `cfg/addons` (the store's datastore JSON gives each URL), to see the assistant next to them. The scenarios also run with this add-on alone.
 4. `python deploy.py --norestart` copies this repository's `addon/` to `cfg/addons/jawsMigrator`.
 5. `python mkconfig.py nvda`, then run `python deskhost.py` in the background (it creates the desktop, starts NVDA on it, and runs until a file named `stop` appears next to it).
-6. `python restart_nvda.py` kills and starts the private NVDA again, and waits for the driver (use it after `deploy.py` changes the add-on; `python deploy.py` does both).
+6. `python restart_nvda.py` kills and starts the private NVDA again, and waits for the driver (use it after `deploy.py` changes the add-on; `python deploy.py` does both). **Then run `python restart_edge.py`**:
+   NVDA injects its helper into a browser that starts after it, and an Edge that was running when NVDA started again is left without it ("appModule has no binding handle to injected code, can't prepare
+   virtualBuffer yet" in NVDA's log). The document then has no buffer (`isReady` False, browse mode, and NVDA never gives a field its own focus event), a state no user has. After `restart_edge.py` the document is
+   `ChromeVBuf`, ready, in focus mode while you type, as a user's is (check with `s.driver("eval", ...)`: `api.getFocusObject().treeInterceptor.isReady`).
 7. `python start_edge.py` opens Edge on the private desktop with DevTools; then run a scenario from this folder, as a module: `python -m scenarios.s29`. A scenario types the
    address through DevTools, gives NVDA the focus, presses keys through NVDA's gesture handling, forwards what NVDA sent to the page, and prints what NVDA said
    and what the page did. `touch stop` ends it all.
@@ -47,6 +50,11 @@ The visible.com address list needs the page's own address service to answer; if 
 focuses the first suggestion and the blur then closes the list; a suggestion is chosen by its `mousedown`; choosing sets the field's text by script and shuts the list; any edit of the text is an `input` event, forgets
 the choice and asks for suggestions 300 ms later), with twenty canned suggestions for "241 w pine st" and one for a whole address. `window.__log` has what the page saw, for the scenarios to print. Nothing is typed
 into a live site and no network is needed. Use it for anything that does not depend on the live service.
+
+Since 1 October (1.58) the stand-in also has the unit step of the live page's script (clientlib-fioscheckavailability, read, not typed into): choosing the third or the eleventh address (the eleventh is GROVE CITY, PA,
+which the tester chose) shows the unit box and focuses it with a zero-delay timer; its focus handler asks for its list ("Loading...", then five units and "I can't find my unit" and "I don't live in a unit",
+`window.__unitServiceDelay` makes its service slower); choosing a unit puts it in the box by script; its blur closes the list 150 ms later; any change of the address box's text hides the unit box. This desktop has
+no real focus events, so `Scenario.toUnitBox()` gives NVDA the focus event the page's move would cause (`syncFocus` finds the box by its name), and after Control+Z a scenario gives it the address box's.
 
 ## The scenarios (`scenarios/`)
 
@@ -63,6 +71,14 @@ into a live site and no network is needed. Use it for anything that does not dep
   leaves the field because his NVDA has automatic focus mode for caret movement on); `s53` tries what brings the list back (Backspace once: a list of the one address; Control+A and typing the street: all twenty; the browser's
   own Control+Z: the one address again; `accValue` set to the street on NVDA's main thread: the page gets an `input` event and shows all twenty, NVDA says nothing); `s54` and `s55` are Control+Z with the assistant (the choice
   taken back and Down Arrow at once, typing in between, nothing chosen, after Up Arrow and Down Arrow, twice); `s56 [rounds]` repeats choose, Control+Z, Down Arrow at once or after a pause, choose another, and counts the rounds.
+- The unit box (issue 47, 1 October, 1.58; run on the stand-in page, with `restart_edge.py` done so that the buffer is ready): `s58 [letters]`. A is the tester's fourth round (the eleventh address, Enter, the unit box has the
+  focus, Control+Z): with 1.57 the key was the page's, which hid the unit box and left a list of the one address; with 1.58 NVDA says "Choice undone, 241 w pine st", the page has its text, the unit box is gone and
+  all twenty suggestions are back. B is Control+Z in the middle of going down the units, C a unit chosen with Enter and taken back (twice), D a unit service that answers after 2.2 seconds (Down Arrow as soon as the
+  focus arrives waits and says the first unit), E something typed in the unit box (the key is left to the page; the rig does not show the key NVDA sends on), F Control+Z in the address box after Shift+Tab,
+  G a unit service that answers after 4.5 seconds ("No suggestions yet"). `s57` is the same for the address list after Control+Z, with a service that answers after 0.9 and after 4 seconds.
+  **NVDA's watchdog:** do not hold NVDA's main thread in a script (a loop that sleeps between looks, `driver("eval")` included) for much more than half a second. The watchdog then cancels the COM calls made until the thread
+  comes round ("COM call cancelled", on and off from a second in, measured here with a loop of looks at the unit list), and the results are not what a user would get. 1.57's Down Arrow waited that way (up to 1.5 seconds);
+  1.58's looks with NVDA's own timer (`core.callLater`).
   What the rig cannot show: a press replayed on the page after the script returns, so a script that waits for the page to react to its own press (a loop of reads) waits for nothing: the rig only replays the press when
   `driver("sent")` is answered, which the main thread, busy in that script, cannot do. The assistant does not wait for it.
 

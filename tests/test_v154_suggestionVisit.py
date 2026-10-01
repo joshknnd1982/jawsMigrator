@@ -412,6 +412,8 @@ class VisitTestCase(unittest.TestCase):
 		self.document = Document()
 		self.document.rootNVDAObject = self.page.document
 		self.clock = Clock()
+		#: What NVDA's own timer (core.callLater) was asked to run: (when it is due, the function, its arguments).
+		self.later = []
 		nvdaObjects = types.ModuleType("NVDAObjects")
 		nvdaObjects.NVDAObject = NVDAObject
 		iaccessible = types.ModuleType("NVDAObjects.IAccessible")
@@ -421,6 +423,7 @@ class VisitTestCase(unittest.TestCase):
 			"controlTypes": controlTypes,
 			"textInfos": textInfos,
 			"api": types.SimpleNamespace(getFocusObject=lambda: self.page.focused),
+			"core": types.SimpleNamespace(callLater=lambda delay, function, *args, **kwargs: self.later.append((self.clock.now + delay / 1000, function, args, kwargs))),
 			"winUser": self.screen,
 			"mouseHandler": self.screen,
 			"scriptHandler": types.SimpleNamespace(findScript=lambda gesture: self.findScript(gesture)),
@@ -436,6 +439,7 @@ class VisitTestCase(unittest.TestCase):
 			mock.patch.object(suggestionLists, "_session", None),
 			mock.patch.object(suggestionLists, "_declined", None),
 			mock.patch.object(suggestionLists, "_pending", None),
+			mock.patch.object(suggestionLists, "_waiting", None),
 			mock.patch.object(suggestionLists, "_passing", False),
 			mock.patch.object(suggestionLists, "_overlay", None),
 			mock.patch.object(suggestionLists, "_noticed", set()),
@@ -448,6 +452,19 @@ class VisitTestCase(unittest.TestCase):
 		self.plugin._layerActive = False
 		self.plugin._insertKeys = None
 		self.plugin._suggestionLists = suggestionLists
+
+	def advance(self, seconds):
+		"""Time passes while NVDA's main thread is idle: what core.callLater was asked to run runs when it is due (the clock moves to it)."""
+		end = self.clock.now + seconds
+		while True:
+			ready = sorted((item for item in self.later if item[0] <= end), key=lambda item: item[0])
+			if not ready:
+				break
+			item = ready[0]
+			self.later.remove(item)
+			self.clock.now = max(self.clock.now, item[0])
+			item[1](*item[2], **item[3])
+		self.clock.now = max(self.clock.now, end)
 
 	def replaceField(self, new):
 		"""``new`` is the address field in the place of the one the page has."""
