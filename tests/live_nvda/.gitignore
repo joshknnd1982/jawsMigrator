@@ -1,0 +1,12 @@
+# What the rig makes while it runs (see README.md); none of it belongs in the repository.
+/cfg/
+/addondl/
+/edgeprofile/
+/pylib/
+/nvda.log
+/nvda-old.log
+/deskhost.json
+/deskhost.status
+/spawn-*.json*
+/kill-*.json*
+/stop

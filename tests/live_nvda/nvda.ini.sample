@@ -1,0 +1,60 @@
+schemaVersion = 24
+[general]
+	language = en
+	saveConfigurationOnExit = False
+	askToExit = False
+	playStartAndExitSounds = False
+	showWelcomeDialogAtStartup = False
+	preventDisplayTurningOff = False
+	loggingLevel = DEBUG
+[update]
+	autoCheck = False
+	startupNotification = False
+	allowUsageStats = False
+	askedAllowUsageStats = True
+[speech]
+	synth = silence
+	autoLanguageSwitching = False
+	symbolLevel = 200
+[braille]
+	display = noBraille
+[audio]
+	soundVolumeFollowsVoice = False
+	soundVolume = 0
+[keyboard]
+	keyboardLayout = laptop
+	NVDAModifierKeys = 7
+	speakTypedCharacters = 1
+[virtualBuffers]
+	passThroughAudioIndication = False
+	useScreenLayout = False
+	autoSayAllOnPageLoad = False
+	maxLineLength = 150
+	linesPerPage = 24
+	autoPassThroughOnCaretMove = True
+[UIA]
+	allowInChromium = 0
+[documentFormatting]
+	reportLandmarks = True
+	reportFrames = False
+	reportArticles = True
+	reportClickable = False
+[presentation]
+	reportAutoSuggestionsWithSound = False
+	reportDynamicContentChanges = True
+	reportObjectPositionInformation = True
+	reportObjectDescriptions = True
+[mouse]
+	enableMouseTracking = False
+	reportObjectRoleOnMouseEnter = False
+[development]
+	enableScratchpadDir = True
+[remote]
+	enabled = False
+[vision]
+	[[NVDAHighlighter]]
+		highlightFocus = False
+		highlightNavigator = False
+		highlightBrowseMode = False
+[screenCurtain]
+	enabled = False
