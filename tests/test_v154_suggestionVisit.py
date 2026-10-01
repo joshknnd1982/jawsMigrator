@@ -143,7 +143,13 @@ class Item(Ia2Web):
 		self.treeInterceptor = None
 		self.calls = []
 		Item.count += 1
-		self.IA2WindowHandle, self.IA2UniqueID = 4242, -2000 - Item.count
+		self._ia2Window, self.IA2UniqueID = 4242, -2000 - Item.count
+
+	@_com
+	def IA2WindowHandle(self):
+		# NVDA 2026.2 reads the window handle through COM the first time (then keeps it) and has the unique ID as a plain attribute (set in
+		# IAccessible.__init__): so an identity looked up in the keyboard hook's thread fails here as it does there.
+		return self._ia2Window
 
 	def add(self, child):
 		child._parent = self

@@ -42,6 +42,9 @@ from test_v157_undoChoice import TYPED, AccValue, TextField, TextPage  # noqa: E
 
 from jawsMigrator import suggestionLists  # noqa: E402
 
+#: What NVDA says when a unit that was chosen is taken back (1.59: which box is empty, and that the address choice can be taken back too).
+UNIT_UNDONE = f"Choice undone, Enter Unit Label is empty. {suggestionLists.EARLIER_CHOICE}"
+
 
 class AddressField(TextField):
 	"""The address field. NVDA's ``value`` is None for a field that holds nothing (IAccessible._get_value), where the earlier fake gave ""."""
@@ -139,9 +142,12 @@ class UnitPage(TextPage):
 		self.loading = self.unitList.add(Item(self, Role.SECTION, "Loading..."))
 		self.unitOptions = [self.unitList.add(UnitOption(self, Role.LISTITEM, name)) for name in self.UNITS]
 
-	def makeUnitField(self):
-		"""The unit box, as NVDA makes it: the assistant is asked about it, and may add its class."""
+	def makeUnitField(self, uniqueID=None):
+		"""The unit box, as NVDA makes it: the assistant is asked about it, and may add its class. ``uniqueID`` makes it the same element on
+		the page as an object made before (NVDA makes a new object each time the focus comes to a field)."""
 		raw = UnitField(self, Role.EDITABLETEXT, "Enter Unit Label", rect=Rect(589, 420, 581, 40))
+		if uniqueID is not None:
+			raw.IA2UniqueID = uniqueID
 		raw._states = {State.EDITABLE, State.FOCUSABLE, State.AUTOCOMPLETE}
 		classes = [visit.Ia2Web]
 		suggestionLists.chooseOverlay(raw, classes)
@@ -256,10 +262,10 @@ class UnitTestCase(VisitTestCase):
 		# Time passes between NVDA's making the objects and the user's choosing (the fake clock moves only when something sleeps).
 		self.clock.now += 1.0
 
-	def newUnitField(self):
+	def newUnitField(self, uniqueID=None):
 		"""NVDA's object for the unit box, as it makes one when the focus comes to it: the assistant is asked about it as it is made."""
 		old = self.page.unitField
-		new = self.page.makeUnitField()
+		new = self.page.makeUnitField(uniqueID)
 		new._parent = old._parent
 		siblings = old._parent._children
 		siblings[siblings.index(old)] = new
@@ -552,7 +558,7 @@ class TakingBackAUnitTest(UnitTestCase):
 		self.assertEqual(self.page.unitText, "APT 2")
 		self.assertEqual(suggestionLists._chosen.typed, "", "the box held nothing")
 		gesture = self.undo()
-		self.assertEqual(self.said(), ["Choice undone"], "nothing to say of what was put back")
+		self.assertEqual(self.said(), [UNIT_UNDONE], "1.59 says which box is empty, and that the address choice is still there to take back")
 		self.assertEqual(self.page.unitText, "")
 		self.assertEqual(self.page.unitInputs, [""], "the page got an input event for the empty box")
 		self.assertEqual(gesture.sent, 0)
@@ -563,7 +569,7 @@ class TakingBackAUnitTest(UnitTestCase):
 		self.undo()
 		started = self.clock.now
 		self.press("downArrow")
-		self.assertEqual(self.said(), ["Choice undone"], "nothing more yet")
+		self.assertEqual(self.said(), [UNIT_UNDONE], "nothing more yet")
 		self.advance(1.0)
 		self.assertGreater(self.page.unitAskAt - started, 0.29, "the page asks 300 ms after the change")
 		self.assertEqual(self.said()[-1], "Unit suggestions, list, APT 1, 1 of 7")
@@ -571,13 +577,17 @@ class TakingBackAUnitTest(UnitTestCase):
 		self.press("enter")
 		self.assertEqual(self.page.unitText, "APT 2", "and another unit can be chosen")
 
-	def test_the_address_choice_is_replaced_by_the_unit_choice(self):
+	def test_the_address_choice_is_not_replaced_by_the_unit_choice(self):
+		# 1.58 kept one choice: a second Control+Z was the page's own, which hid the unit box and left a list of the one address (the tester's
+		# 1.58 log of 11:45, after he took his unit back). 1.59 keeps both: the second Control+Z takes the address choice back.
 		self.chooseUnit(2)
 		self.undo()
 		nvdaStubs.spoken.clear()
-		self.undo()
-		self.assertEqual(self.page.keys, ["z"], "a second Control+Z is the page's")
-		self.assertEqual(self.page.text, self.name(3), "the address was not taken back")
+		gesture = self.undo()
+		self.assertEqual(self.page.keys, [], "a second Control+Z is not the page's")
+		self.assertEqual(gesture.sent, 0)
+		self.assertEqual(self.page.text, TYPED, "the address choice was taken back")
+		self.assertEqual(self.said(), [f"Choice undone, {TYPED}"], "there is no earlier choice to say")
 
 	def test_a_box_that_held_something_gets_it_back(self):
 		self.inUnitBox()
@@ -589,6 +599,8 @@ class TakingBackAUnitTest(UnitTestCase):
 		nvdaStubs.spoken.clear()
 		self.undo()
 		self.assertEqual(self.page.unitText, "APT")
+		# 1.59: no "Control+Z again takes back the earlier choice": the box holds "APT" again, and a second Control+Z in a box that holds text
+		# is left to the page (tests/test_v159_choiceHistory.py, TheWordsOnlySayWhatTheNextKeyDoesTest).
 		self.assertEqual(self.said(), ["Choice undone, APT"])
 
 
@@ -603,7 +615,7 @@ class AFieldThatHeldNothingTest(UnitTestCase):
 		self.undo()
 		self.assertEqual(self.page.text, "")
 		self.assertEqual(self.page.inputs, [""])
-		self.assertEqual(self.said(), ["Choice undone"])
+		self.assertEqual(self.said(), ["Choice undone, Enter your home address (required) is empty"], "1.59 says which box is empty")
 
 	def test_a_field_that_could_not_be_read_at_the_start_offers_nothing_to_put_back(self):
 		self.page.unreadable = True

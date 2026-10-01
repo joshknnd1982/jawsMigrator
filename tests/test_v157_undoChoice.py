@@ -348,7 +348,7 @@ class WhereControlZIsNotTheAssistantsTest(UndoTestCase):
 		self.undo()
 		self.assertEqual(self.page.keys, [])
 		self.assertEqual(self.page.text, "")
-		self.assertEqual(self.said(), ["Choice undone"])
+		self.assertEqual(self.said(), ["Choice undone, Enter your home address (required) is empty"], "1.59 says which box is empty")
 
 	def test_a_field_that_cant_be_read_offers_nothing(self):
 		self.page.unreadable = True

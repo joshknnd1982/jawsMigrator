@@ -108,7 +108,25 @@ those alone:
   Down Arrow in the box walks into the buffer's "Loading..." and leaves the field (measured). A unit chosen with Enter is a choice too:
   Control+Z puts back the empty box and the page shows all the units again (the page asks its service for the units that go with the text in
   the box when the focus comes back to a box that holds one). Where a box held nothing when the visit began (NVDA's ``value`` is None for nothing,
-  for only spaces and for an error alike, so it is asked again through IAccessible, which raises on an error), that is what is put back.
+  for only spaces and for an error alike, so it is asked again through IAccessible, which raises on an error), that is what is put back;
+- the choices are kept one behind the other, because a unit is chosen after an address (``_Choice.before``). The tester's 1.58 log of 1 October
+  (11:43 to 11:45 his time) has the unit step working in his NVDA, and then this: he chose UNIT 2 ("UNIT 2, selected"), Control+Z took it back
+  ("Choice undone"), he went up to the address box and pressed Down Arrow in it three times (11:45:05, 11:45:13, 11:45:20), each time "no suggestions
+  are showing for it": the page had shut the address list when the address was chosen, and brings it back only when the text changes. 1.58 kept
+  only the newest choice, so choosing the unit made it forget the address, and once the unit was taken back there was nothing left to take back: a
+  second Control+Z was the page's own, whose undo hid the unit box and left a list of the one address chosen (measured with 1.58 in the second NVDA).
+  Now Control+Z takes back the newest choice that belongs to where the focus is, and drops the ones after it (the page hides the unit box when the
+  address changes, so a unit chosen after it is gone with it): the unit first, and then, with the second Control+Z, the address ("Choice undone, 241
+  w pine st", the twenty suggestions come back), from the unit box or, after Shift+Tab, from the address box. What NVDA says names the box that is
+  empty ("Choice undone, Enter Unit Label is empty") and, where the next Control+Z will take an earlier choice back, says so ("Control+Z again takes
+  back the earlier choice"; not where the box holds text that was typed in it before, which the next Control+Z leaves to the page: ``_canGoBack``):
+  the tester heard "Choice undone" for the unit and went to the address box, where Down Arrow found no suggestions. The unit box is
+  known by what it is, and not only by when NVDA made its object: NVDA makes a new object each time the focus comes to a field, and in his log the focus
+  came back to the unit box twice (11:45:05 and 11:45:14), long after the three seconds in which 1.58 knew it for a box that followed the choice, so a
+  Control+Z there, or a visit to its units, would have lost the address choice. The window and the unique ID of each box made soon after a choice are kept with it
+  (``_noteFollower``, ``_follows``); the field of an earlier choice never follows a later one (the address box, which the focus goes back to right after
+  a unit was chosen). Down Arrow in a field whose list a choice shut is left to NVDA, as before, and the log now says why nothing was showing
+  (``_closedByChoice``).
 
 A field that is a combo box (its own role, or expanded or collapsed) does as it did: its page handles its keys. It works
 while the assistant runs, unless it is turned off in NVDA's Settings, JAWS Migration Assistant.
@@ -171,10 +189,16 @@ _RETURN_WINDOW = 5.0
 #: units, and focuses it with a zero-delay timer) for that box to be the one Control+Z takes the choice back in: NVDA makes the box's
 #: object when the focus arrives, a moment after the page's change, and this is the time that moment is given.
 _FOLLOW_SECONDS = 3.0
+#: How many choices are kept one behind the other (an address, then its unit), and how many boxes the page moved the focus to are known
+#: for each (the unit box, which is made again each time the focus comes back to it).
+_MOST_CHOICES = 4
+_MOST_BOXES = 4
 #: What the assistant stamps on the objects of the fields it gives its class: when NVDA made them (time.monotonic).
 MADE_AT = "_jawsMigratorMadeAt"
 #: What NVDA says when Down Arrow waited _RETURN_WAIT seconds for a list the page was to show, and it didn't.
 NO_SUGGESTIONS_YET = "No suggestions yet"
+#: What NVDA adds when a choice was taken back and the one before it can be taken back too (an address, once its unit is taken back).
+EARLIER_CHOICE = "Control+Z again takes back the earlier choice."
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
@@ -192,7 +216,7 @@ _declined = None
 #: The field Down Arrow was last taken in, and until when (time.monotonic) keys that follow at once are taken too, before the
 #: script of Down Arrow has begun the visit (see scriptFor).
 _pending = None
-#: The suggestion the assistant pressed last, while the field holds what that put there (see _Choice, _undoChoice).
+#: The suggestion the assistant pressed last, while the field holds what that put there, and the choices before it (see _Choice, _undoChoice).
 _chosen = None
 #: The field whose choice was taken back, and until when (time.monotonic) Down Arrow waits for the page's suggestions to come back.
 _returning = None
@@ -337,8 +361,11 @@ def _same(one, other) -> bool:
 	same list reached as an option's parent needn't have the same overlay classes. The unique ID within the window
 	(IAccessible2) tells, as NVDA's ``_isEqual`` uses it.
 	"""
-	if one == other:
-		return True
+	try:
+		if one == other:
+			return True
+	except Exception:
+		pass
 	try:
 		window, uniqueID = one.IA2WindowHandle, one.IA2UniqueID
 		return bool(window and uniqueID) and (window, uniqueID) == (other.IA2WindowHandle, other.IA2UniqueID)
@@ -779,9 +806,28 @@ def _visit(field):
 	return None
 
 
-#: What a choice replaced: the field, the text it held when the visit began (what the user typed; "" for a field that held nothing),
-#: the suggestion the choice put there (the page puts its text in the field), and when it was made (time.monotonic).
-_Choice = namedtuple("_Choice", "field typed text at")
+class _Choice:
+	"""What a choice replaced: the field, the text it held when the visit began (what the user typed; "" for a field that held nothing),
+	the suggestion the choice put there (the page puts its text in the field), and when it was made (time.monotonic).
+
+	``before`` is the choice this one followed, in the field before it: visible.com's unit box comes after the address that has units, and a
+	unit is chosen in it, so Control+Z goes back through them one at a time, the unit first and then the address (the tester's 1.58 log: the
+	unit taken back, and no way to the address). ``followers`` are the boxes the page moved the focus to right after the choice, known by their
+	identity (see _identity), because NVDA makes a new object each time the focus comes to a field.
+	"""
+
+	def __init__(self, field, typed, text, at, before=None):
+		self.field, self.typed, self.text, self.at, self.before = field, typed, text, at, before
+		self.followers = ()
+
+
+def _each(choice):
+	"""The choices from ``choice`` back through the ones before it, the newest first (never more than _MOST_CHOICES)."""
+	for _ in range(_MOST_CHOICES):
+		if choice is None:
+			return
+		yield choice
+		choice = getattr(choice, "before", None)
 
 
 def _textOf(field):
@@ -850,13 +896,19 @@ def _rememberChoice(field, typed, text) -> None:
 	that made it must not go on to the page.
 	"""
 	global _chosen
-	_chosen = None
 	try:
+		# A choice in the box the page moved the focus to after an earlier one (a unit after its address) goes on from it; any other starts over.
+		before = _chainFor(field)
+		_chosen = before
 		if typed is None or not text or not text.strip():
 			return
-		_chosen = _Choice(field, typed, text, time.monotonic())
-		_log().debug(f"jawsMigrator: the suggestion {text!r} was chosen, and Control+Z puts back {typed!r}")
+		_chosen = _Choice(field, typed, text, time.monotonic(), before)
+		_log().debug(
+			f"jawsMigrator: the suggestion {text!r} was chosen, and Control+Z puts back {typed!r}"
+			+ (f", and then the choice before it ({before.text!r})" if before is not None else "")
+		)
 	except Exception:
+		_chosen = None
 		_failure("could not note what the choice replaced, so Control+Z doesn't take it back")
 
 
@@ -869,6 +921,61 @@ def _madeAfter(field, chosen) -> bool:
 	"""
 	made = getattr(field, MADE_AT, None)
 	return made is not None and chosen.at <= made <= chosen.at + _FOLLOW_SECONDS and not _same(field, chosen.field)
+
+
+def _identity(obj):
+	"""What tells the element of a page that ``obj`` is, however many objects NVDA makes for it: its window and its unique ID within it
+	(IAccessible2), as ``_same`` uses them. None where NVDA can't say."""
+	try:
+		window, uniqueID = obj.IA2WindowHandle, obj.IA2UniqueID
+		return (window, uniqueID) if window and uniqueID else None
+	except Exception:
+		return None
+
+
+def _follows(field, choice) -> bool:
+	"""Whether ``field`` is a box the page moved the focus to right after ``choice``, and not the field the choice was made in.
+
+	NVDA made its object within a few seconds after the choice (``_madeAfter``), or made one for the same element then (``choice.followers``):
+	NVDA makes a new object each time the focus comes to a field, so the unit box that the focus left and came back to is known by what it is,
+	and not only by when NVDA first made it. The field of an earlier choice is not one that follows this one: the address box, which the focus
+	goes back to right after a unit was chosen, was there before the unit's box.
+	"""
+	try:
+		for earlier in _each(choice):
+			if _same(field, earlier.field):
+				return False
+		if _madeAfter(field, choice):
+			return True
+		identity = _identity(field)
+		return identity is not None and identity in choice.followers
+	except Exception:
+		return False
+
+
+def _chainFor(field):
+	"""The choices that go on when a visit or a choice begins in ``field``: the newest one that ``field`` follows, with those before it.
+
+	A choice in the address box, or in a field the page didn't move the focus to after the choices, starts a history of its own (None).
+	"""
+	for choice in _each(_chosen):
+		if _follows(field, choice):
+			return choice
+	return None
+
+
+def _noteFollower(obj, now: float) -> None:
+	"""NVDA has just made an object for a field with suggestions: if that is soon after a choice, it is a box the page moved the focus to, and
+	its identity is kept with the choice (see _follows)."""
+	identity = None
+	for choice in _each(_chosen):
+		if choice.at <= now <= choice.at + _FOLLOW_SECONDS:
+			if identity is None:
+				identity = _identity(obj)
+				if identity is None:
+					return
+			if identity not in choice.followers:
+				choice.followers = (choice.followers + (identity,))[-_MOST_BOXES:]
 
 
 def _isUndoKey(gesture) -> bool:
@@ -889,54 +996,112 @@ def _giveFocusTo(field) -> None:
 		_failure("could not give the focus back to the field the choice was made in")
 
 
+def _holds(choice) -> bool:
+	"""Whether the field of ``choice`` still holds what the choice put there, so that Control+Z can take the choice back."""
+	if choice is None:
+		return False
+	try:
+		_forget(choice.field)
+		return _normal(_textOf(choice.field)) == _normal(choice.text)
+	except Exception:
+		return False
+
+
+def _canGoBack(choice, field) -> bool:
+	"""Whether a second Control+Z, with the focus in ``field`` once ``choice`` has been taken back, takes back the choice before it.
+
+	That choice must still hold what it put in its field, and the focus must be in that field, or in a box that followed it and holds nothing
+	(``_undoChoice`` leaves what is typed in such a box to the page: a unit box that held "APT" when the unit was chosen holds "APT" again once
+	the unit is taken back, and Control+Z there is the page's own, so NVDA must not say that it will take the address back). The words say
+	only what the next key will do.
+	"""
+	earlier = choice.before
+	if earlier is None or not _holds(earlier):
+		return False
+	if _same(field, earlier.field):
+		return True
+	return not choice.typed.strip() and _follows(field, earlier)
+
+
+def _undoneWords(choice, field, earlier: bool) -> str:
+	"""What NVDA says once a choice is taken back: what the field holds again and, where an earlier choice can be taken back too, that it can.
+
+	The tester took back his unit, heard "Choice undone", and went to the address box, where Down Arrow found no suggestions: he was not told that
+	the address choice was still there to take back.
+	"""
+	if choice.typed.strip():
+		words = f"Choice undone, {choice.typed}"
+	else:
+		name = _nameOf(field)
+		words = f"Choice undone, {name} is empty" if name else "Choice undone, the box is empty"
+	return f"{words}. {EARLIER_CHOICE}" if earlier else words
+
+
 def _undoChoice(gesture):
-	# Control+Z while the field holds what a choice put there, in that field or in the box the page moved the focus to after the choice
-	# (and nothing is typed in it): the text typed before is put back, and the page shows its suggestions for it again. In any other case
-	# the key goes on as NVDA has it. No description, as NVDA's scripts that may send a key on have none.
+	# Control+Z while the field holds what a choice put there, in that field or in the box the page moved the focus to after the choice (and
+	# nothing is typed in it): the text typed before is put back, and the page shows its suggestions for it again. Of the choices made one after
+	# the other (an address, then its unit) it takes back the newest one that belongs to where the focus is, and drops the ones after it (the page
+	# hides the unit box when the address changes); Control+Z again takes back the one before. In any other case the key goes on as NVDA has it.
+	# No description, as NVDA's scripts that may send a key on have none.
 	global _chosen, _returning
-	chosen = _chosen
 	try:
 		import api
 		import ui
 
 		focus = api.getFocusObject()
-		if chosen is not None:
-			field = chosen.field
+		for choice in _each(_chosen):
+			field = choice.field
 			here = _same(focus, field)
-			beside = not here and _madeAfter(focus, chosen)
-			box = _nameOf(focus) if beside else ""  # the page hides it when the address changes: its name is gone by then
+			beside = not here and _follows(focus, choice)
+			if not here and not beside:
+				continue
 			if beside and _readText(focus) != "":
 				_log().debug("jawsMigrator: Control+Z goes on as NVDA has it: something is typed in the box the page moved the focus to")
 				_passOn(gesture)
 				return
-			if here or beside:
-				_chosen = None
-				_endSession("the choice was taken back")
-				_forget(field)
-				if _normal(_textOf(field)) == _normal(chosen.text):
-					if beside:
-						# The page hides the box that has the focus when the field's text changes, and the focus would fall to the page.
-						_giveFocusTo(field)
-					if _putText(field, chosen.typed):
-						_returning = (field, time.monotonic() + _RETURN_WINDOW)
-						ui.message(f"Choice undone, {chosen.typed}" if chosen.typed.strip() else "Choice undone")
-						_log().debug(
-							f"jawsMigrator: Control+Z took the choice back: the field holds {chosen.typed!r} again"
-							+ (f" and has the focus, which the page had moved to {box!r}" if beside else "")
-						)
-					else:
-						ui.message("Can't put back what you typed")
-						_log().debug(f"jawsMigrator: Control+Z could not put {chosen.typed!r} back in the field")
-					return
+			box = _nameOf(focus) if beside else ""  # the page hides it when the address changes: its name is gone by then
+			_chosen = choice.before
+			_endSession("the choice was taken back")
+			_forget(field)
+			if _normal(_textOf(field)) != _normal(choice.text):
 				_log().debug("jawsMigrator: Control+Z goes on as NVDA has it: the field no longer holds what the choice put there")
 				_passOn(gesture)
 				return
+			if beside:
+				# The page hides the box that has the focus when the field's text changes, and the focus would fall to the page.
+				_giveFocusTo(field)
+			if _putText(field, choice.typed):
+				_returning = (field, time.monotonic() + _RETURN_WINDOW)
+				earlier = _canGoBack(choice, field)
+				ui.message(_undoneWords(choice, field, earlier))
+				_log().debug(
+					f"jawsMigrator: Control+Z took the choice back: the field holds {choice.typed!r} again"
+					+ (f" and has the focus, which the page had moved to {box!r}" if beside else "")
+					+ (f"; Control+Z again takes back the choice before it, {choice.before.text!r}" if earlier else "")
+				)
+			else:
+				ui.message("Can't put back what you typed")
+				_log().debug(f"jawsMigrator: Control+Z could not put {choice.typed!r} back in the field")
+			return
 		_log().debug("jawsMigrator: Control+Z goes on as NVDA has it: nothing was chosen, or the focus is not where the choice was made")
 		_passOn(gesture)
 	except Exception:
 		_chosen = None
 		_failure("could not take the choice back, so the key goes on as NVDA has it")
 		_passOn(gesture)
+
+
+def _closedByChoice(field) -> str:
+	"""For the log, when Down Arrow finds no list in ``field``: that the page shut it when a suggestion was chosen in it, and Control+Z takes
+	that choice back. The tester pressed Down Arrow in the address box three times after he had taken his unit back and chosen nothing there
+	again (his 1.58 log, 11:45:05, 11:45:13 and 11:45:20): the line says why nothing was showing. "" where it is not that."""
+	try:
+		for choice in _each(_chosen):
+			if _same(field, choice.field) and _holds(choice):
+				return f": the page shut its list when {choice.text!r} was chosen in it, and Control+Z takes that choice back"
+	except Exception:
+		pass
+	return ""
 
 
 def _expectsList(field) -> bool:
@@ -946,8 +1111,7 @@ def _expectsList(field) -> bool:
 	returning = _returning
 	if returning is not None and now <= returning[1] and _same(returning[0], field):
 		return True
-	chosen = _chosen
-	return chosen is not None and now <= chosen.at + _RETURN_WINDOW and _madeAfter(field, chosen)
+	return any(now <= choice.at + _RETURN_WINDOW and _follows(field, choice) for choice in _each(_chosen))
 
 
 class _Waiting:
@@ -1027,10 +1191,8 @@ def _beginVisit(field, box, options, index: int = 0) -> None:
 	_pending = None
 	# What the field holds as the visit begins is what the user typed: Control+Z puts it back after a choice.
 	typed = _readText(field)
-	chosen = _chosen
-	if chosen is None or _same(field, chosen.field) or not _madeAfter(field, chosen):
-		# A visit in the box the page moved the focus to keeps the choice, which Control+Z there takes back; any other forgets it.
-		_chosen = None
+	# A visit in the box the page moved the focus to keeps the choices that box follows, which Control+Z there takes back; any other forgets them.
+	_chosen = _chainFor(field)
 	_returning = None
 	_session = _Session(field, box, options, index, typed)
 	_announce(box, options, index, first=True)
@@ -1125,7 +1287,7 @@ def _go(gesture, target, enter: bool = False) -> None:
 		if shown or _showing(field) is not None:
 			_endSession("the list has no suggestions")
 		else:
-			_decline(field, "no suggestions are showing for it")
+			_decline(field, "no suggestions are showing for it" + _closedByChoice(field))
 			_endSession("no suggestions are showing")
 		_passOn(gesture)
 	except Exception:
@@ -1314,10 +1476,12 @@ def chooseOverlay(obj, clsList) -> None:
 
 		if obj.role == Role.EDITABLETEXT and _suggestingField(obj):
 			clsList.insert(0, _overlayClass())
+			now = time.monotonic()
 			try:
-				setattr(obj, MADE_AT, time.monotonic())
+				setattr(obj, MADE_AT, now)
 			except Exception:
 				pass
+			_noteFollower(obj, now)
 			name = _nameOf(obj)
 			if name not in _noticed:
 				_noticed.add(name)

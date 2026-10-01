@@ -1,6 +1,6 @@
 # Testing the add-on in a real NVDA, on a private desktop
 
-Written on 30 September 2026 while fixing issue 47 (1.54), and extended on 1 October (1.55; the stand-in page and Control+Z of 1.57; the unit box and the watchdog of 1.58). The tests under `tests/` run the add-on's code against
+Written on 30 September 2026 while fixing issue 47 (1.54), and extended on 1 October (1.55; the stand-in page and Control+Z of 1.57; the unit box and the watchdog of 1.58; the choices one behind the other of 1.59). The tests under `tests/` run the add-on's code against
 imitations of NVDA. They could not show what was wrong with 1.46 to 1.53, which only a running NVDA shows (NVDA looks for a key's script on the
 keyboard hook's thread, where its objects can't be read, and its buffer has one suggestion of a list). This runs a **second NVDA 2026.2 on its own
 Windows desktop**, with Microsoft Edge on that desktop, next to the user's own NVDA, which it never touches. Nothing here is part of the add-on and
@@ -36,7 +36,7 @@ none of it is packaged (`build.py` packages only `addon/`).
 3. Optional: `python fetch_addons.py` puts some of the tester's other add-ons into `cfg/addons` (the store's datastore JSON gives each URL), to see the assistant next to them. The scenarios also run with this add-on alone.
 4. `python deploy.py --norestart` copies this repository's `addon/` to `cfg/addons/jawsMigrator`.
 5. `python mkconfig.py nvda`, then run `python deskhost.py` in the background (it creates the desktop, starts NVDA on it, and runs until a file named `stop` appears next to it).
-6. `python restart_nvda.py` kills and starts the private NVDA again, and waits for the driver (use it after `deploy.py` changes the add-on; `python deploy.py` does both). **Then run `python restart_edge.py`**:
+6. `python restart_nvda.py` kills and starts the private NVDA again, and waits for the driver (use it after `deploy.py` changes the add-on; `python deploy.py` does both). **It deletes `nvda.log` first** (there is no `nvda-old.log`), so copy the log away before a restart if you want that session's timeline. **Then run `python restart_edge.py`**:
    NVDA injects its helper into a browser that starts after it, and an Edge that was running when NVDA started again is left without it ("appModule has no binding handle to injected code, can't prepare
    virtualBuffer yet" in NVDA's log). The document then has no buffer (`isReady` False, browse mode, and NVDA never gives a field its own focus event), a state no user has. After `restart_edge.py` the document is
    `ChromeVBuf`, ready, in focus mode while you type, as a user's is (check with `s.driver("eval", ...)`: `api.getFocusObject().treeInterceptor.isReady`).
@@ -81,6 +81,13 @@ no real focus events, so `Scenario.toUnitBox()` gives NVDA the focus event the p
   1.58's looks with NVDA's own timer (`core.callLater`).
   What the rig cannot show: a press replayed on the page after the script returns, so a script that waits for the page to react to its own press (a loop of reads) waits for nothing: the rig only replays the press when
   `driver("sent")` is answered, which the main thread, busy in that script, cannot do. The assistant does not wait for it.
+- Choices one behind the other (issue 47, 1 October, 1.59; run on the stand-in page, `restart_edge.py` done): `s61 [letters]`, from the tester's 1.58 log of 11:44 to 11:45 (the eleventh address, a unit chosen with Enter, Control+Z, and then Down Arrow in
+  the address box, which found no list). A is his steps and then a second Control+Z (with 1.58 the page's own: it hid the unit box and left a list of the one address; with 1.59 NVDA says "Choice undone, 241 w pine st" and all twenty come back),
+  B the address box after the unit was taken back (Down Arrow there goes on as NVDA has it; NVDA is then told the focus is in the unit box, as a real NVDA's focus event would, and Control+Z takes the address back from there), C Shift+Tab to the address box
+  right after the unit was chosen and Control+Z there, D the unit box left and entered again 3.5 seconds after the choice (NVDA's new object, known by its identity) with a visit to the units and Control+Z in the middle of it,
+  E a unit chosen and taken back, another chosen and taken back, then the address, and Down Arrow into the twenty, F something typed in the unit box (the page's own Control+Z) and then Control+Z in the address box, G "APT" typed in the unit box before a unit is chosen (once the unit is taken back the box holds "APT" again, so NVDA says only "Choice undone, APT":
+  it must not promise the address, because a second Control+Z in a box that holds text is the page's own).
+  This desktop delivers no focus events, so a scenario that moves the page's focus tells NVDA (`syncFocus`) before the next key, or NVDA's idea of the focus is stale (B showed it: the page's focus fell to the body when the unit box was hidden).
 
 ## The speech volume that changed between typing and reading (issue 49, 1 October, 1.56)
 
