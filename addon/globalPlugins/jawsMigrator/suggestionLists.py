@@ -69,7 +69,19 @@ those alone:
   objects is the visit's too (it waits in NVDA's queue behind it), for two seconds;
 - where browse mode's cursor does come to the one suggestion its buffer has (Escape, then Down Arrow), the focus stays in the
   field and Enter presses it, as in 1.46. Browse mode itself is not changed: Down Arrow goes into the suggestions in focus
-  mode, where the tester types.
+  mode, where the tester types;
+- once Enter has chosen a suggestion, the page has its address in the field and has shut its list, and it brings suggestions back only
+  when the text changes (its input event also makes it forget the choice). So someone who pressed Enter on the wrong one had no way
+  back to the list: the tester wrote on 1 October 2026 "if I accidently select the wrong one I can't unselect it", and his log shows
+  Up Arrow, Down Arrow, which found no list showing, and Down Arrow again, which left the field (his NVDA has automatic focus mode for
+  caret movement on). Control+Z, while the field still holds what the choice put there, puts back the text that was in it when Down
+  Arrow began the visit, and the page shows its suggestions for that text again; Down Arrow goes into them as before, waiting up to
+  a second and a half for them if the page has not shown them yet. The text is put through the page's accessibility (IAccessible's
+  ``accValue``). Measured in NVDA 2026.2 with Edge 154 on a stand-in for the page's picker (tests/live_nvda/pages/address.html, so
+  that nothing was typed into the live site): Backspace once brings back a list of the one address chosen; Control+A and the street
+  typed again brings back all twenty; the browser's own Control+Z brings back the one address, not the street; ``accValue`` brings back
+  all twenty, the page gets a real input event, and NVDA says nothing of the change. A press of Control+Z when the field holds anything
+  else goes on as NVDA has it.
 
 A field that is a combo box (its own role, or expanded or collapsed) does as it did: its page handles its keys. It works
 while the assistant runs, unless it is turned off in NVDA's Settings, JAWS Migration Assistant.
@@ -112,6 +124,19 @@ _SCROLLBAR = 20
 #: about twelve milliseconds to tell NVDA where the suggestion was (Edge 154, NVDA 2026.2).
 _SCROLL_WAIT = 0.4
 _SCROLL_STEP = 0.01
+#: The key, with Control, that takes back a choice (see _undoChoice).
+UNDO_KEY = "z"
+#: How long, in seconds, the page is given to put a chosen suggestion, or the text typed before, in the field, and the pause between
+#: looks: the page changes the field when it has the mouse press, NVDA reads it a little later.
+_TEXT_WAIT = 0.3
+_TEXT_STEP = 0.01
+#: How long, in seconds, Down Arrow waits for the page's suggestions after a choice was taken back (visible.com asks for them 300 ms
+#: after the last change, and its service answers), and the pause between looks. Shorter than _PENDING_SECONDS: the keys pressed
+#: meanwhile are the visit's for that long only.
+_RETURN_WAIT = 1.5
+_RETURN_STEP = 0.05
+#: How long, in seconds, after a choice was taken back Down Arrow waits for the suggestions at all.
+_RETURN_WINDOW = 5.0
 #: No function is wrapped deeper than this.
 _MOST_WRAPPERS = 16
 
@@ -129,6 +154,10 @@ _declined = None
 #: The field Down Arrow was last taken in, and until when (time.monotonic) keys that follow at once are taken too, before the
 #: script of Down Arrow has begun the visit (see scriptFor).
 _pending = None
+#: The suggestion the assistant pressed last, while the field holds what that put there (see _Choice, _undoChoice).
+_chosen = None
+#: The field whose choice was taken back, and until when (time.monotonic) Down Arrow waits for the page's suggestions to come back.
+_returning = None
 #: True while the assistant asks NVDA what it does with a key without the assistant's commands (see _passOn).
 _passing = False
 #: The class given to edit fields with suggestions (see _overlayClass).
@@ -179,12 +208,14 @@ def register() -> None:
 
 def unregister() -> None:
 	"""Give NVDA its own methods back, where nothing has been put over the assistant's since."""
-	global _enabled, _noted, _session, _declined, _pending
+	global _enabled, _noted, _session, _declined, _pending, _chosen, _returning
 	_enabled = False
 	_noted = None
 	_session = None
 	_declined = None
 	_pending = None
+	_chosen = None
+	_returning = None
 	_noticed.clear()
 	with _lock:
 		for owner, name, installed, original in reversed(_replaced):
@@ -655,8 +686,10 @@ class _Session:
 	they are made once for a visit and used again for each key, as long as the list is the same.
 	"""
 
-	def __init__(self, field, box, options: list, index: int):
+	def __init__(self, field, box, options: list, index: int, typed=None):
 		self.field, self.box, self.options, self.index = field, box, list(options), index
+		#: What the field held when the visit began, which is what the user typed (see _undoChoice).
+		self.typed = typed
 		self.name = _nameOf(self.options[index])
 		self.count = _childCount(box)
 
@@ -689,6 +722,125 @@ def _visit(field):
 	if session is not None and _same(field, session.field) and session.holds():
 		return session
 	return None
+
+
+#: What a choice replaced: the field, the text it held when the visit began (what the user typed), and the suggestion the choice put
+#: there (the page puts its text in the field).
+_Choice = namedtuple("_Choice", "field typed text")
+
+
+def _textOf(field):
+	"""What an edit field holds, as NVDA reads it from the page; None where it can't be read."""
+	try:
+		value = field.value
+	except Exception:
+		return None
+	return None if value is None else str(value)
+
+
+def _normal(text):
+	"""Text as one line of words, to tell whether two texts are the same."""
+	return None if text is None else " ".join(str(text).split())
+
+
+def _waitForText(field, test):
+	"""The field's text once ``test`` is true of it, looking again for a moment: the page changes it a little after the press or the
+	change that was made, and NVDA reads it a little later. None when it never is."""
+	deadline = time.monotonic() + _TEXT_WAIT
+	while True:
+		_forget(field)
+		text = _textOf(field)
+		if text is not None and test(text):
+			return text
+		if time.monotonic() >= deadline:
+			return None
+		time.sleep(_TEXT_STEP)
+
+
+def _putText(field, text) -> bool:
+	"""Make the field hold ``text`` through the page's accessibility, as if it were typed: Edge gives the page its input event (measured).
+
+	True once the field says it holds the text.
+	"""
+	try:
+		field.IAccessibleObject.accValue[field.IAccessibleChildID] = text
+	except Exception:
+		return False
+	return _waitForText(field, lambda now: _normal(now) == _normal(text)) is not None
+
+
+def _rememberChoice(field, typed, text) -> None:
+	"""Note what the choice that was just made replaced in the field, so that Control+Z can put it back (see _undoChoice).
+
+	``text`` is the suggestion that was pressed: the page puts it in the field a moment later (the press is the mouse's, and the page
+	answers it in its own time), so it is not waited for here. Control+Z looks whether the field holds it, and does nothing if not.
+	It never raises: the choice has been made, and the key that made it must not go on to the page.
+	"""
+	global _chosen
+	_chosen = None
+	try:
+		if not typed or not typed.strip() or not text or not text.strip():
+			return
+		_chosen = _Choice(field, typed, text)
+		_log().debug(f"jawsMigrator: the suggestion {text!r} was chosen, and Control+Z puts back {typed!r}")
+	except Exception:
+		_failure("could not note what the choice replaced, so Control+Z doesn't take it back")
+
+
+def _isUndoKey(gesture) -> bool:
+	"""Whether the key is Control+Z alone. Python only (see scriptFor)."""
+	if getattr(gesture, "mainKeyName", None) != UNDO_KEY or getattr(gesture, "isModifier", False):
+		return False
+	try:
+		return [str(name).lower() for name in gesture.modifierNames] == ["control"]
+	except Exception:
+		return False
+
+
+def _undoChoice(gesture):
+	# Control+Z while the field holds what a choice put there: the text typed before is put back, and the page shows its suggestions for it
+	# again. In any other case the key goes on as NVDA has it. No description, as NVDA's scripts that may send a key on have none.
+	global _chosen, _returning
+	chosen, _chosen = _chosen, None
+	try:
+		import api
+		import ui
+
+		field = api.getFocusObject()
+		if chosen is not None and _same(field, chosen.field):
+			_forget(field)
+			if _normal(_textOf(field)) == _normal(chosen.text):
+				if _putText(field, chosen.typed):
+					_returning = (field, time.monotonic() + _RETURN_WINDOW)
+					ui.message(f"Choice undone, {chosen.typed}")
+					_log().debug(f"jawsMigrator: Control+Z took the choice back: the field holds {chosen.typed!r} again")
+				else:
+					ui.message("Can't put back what you typed")
+					_log().debug(f"jawsMigrator: Control+Z could not put {chosen.typed!r} back in the field")
+				return
+		_log().debug("jawsMigrator: Control+Z goes on as NVDA has it: the field no longer holds what the choice put there")
+		_passOn(gesture)
+	except Exception:
+		_failure("could not take the choice back, so the key goes on as NVDA has it")
+		_passOn(gesture)
+
+
+def _listBack(field) -> bool:
+	"""Whether the page's suggestions are showing within a moment, when a choice was taken back a short while ago: it shows them after the change."""
+	returning = _returning
+	if returning is None or not _same(returning[0], field) or time.monotonic() > returning[1]:
+		return False
+	started = time.monotonic()
+	deadline = started + _RETURN_WAIT
+	while True:
+		_forget(field)
+		if _showing(field) is not None:
+			_log().debug(f"jawsMigrator: the page's suggestions were back {time.monotonic() - started:.2f} seconds after Down Arrow")
+			return True
+		if time.monotonic() >= deadline:
+			_log().debug(f"jawsMigrator: the page's suggestions were not back {_RETURN_WAIT} seconds after Down Arrow")
+			return False
+		time.sleep(_RETURN_STEP)
 
 
 def _placeOf(option, index: int, count: int):
@@ -747,33 +899,37 @@ def _go(gesture, target, enter: bool = False) -> None:
 	the number of the suggestion to go to, which is kept inside the list. Only a key that ``enter`` the suggestions, Down
 	Arrow, begins a visit.
 	"""
-	global _session, _pending
+	global _session, _pending, _chosen, _returning
 	try:
 		import api
 
 		field = api.getFocusObject()
 		session = _visit(field)
 		if session is not None:
-			box, options, here = session.box, session.options, session.index
+			box, options, here, typed = session.box, session.options, session.index, session.typed
 		else:
 			if not enter:
 				_endSession("the key came with no visit going on")
 				_passOn(gesture)
 				return
 			_pending = None
-			if _showing(field) is None:
+			# After a choice was taken back the page shows its suggestions a moment later: Down Arrow waits for them (see _undoChoice).
+			if _showing(field) is None and not _listBack(field):
 				_decline(field, "no suggestions are showing for it")
 				_endSession("no suggestions are showing")
 				_passOn(gesture)
 				return
+			# What the field holds as the visit begins is what the user typed: Control+Z puts it back after a choice.
+			typed = _textOf(field)
 			box, options = _suggestionList(field)
 			here = None
 			if not options:
 				_endSession("the list has no suggestions")
 				_passOn(gesture)
 				return
+			_chosen = _returning = None
 		index = max(0, min(len(options) - 1, target(here, len(options))))
-		_session = _Session(field, box, options, index)
+		_session = _Session(field, box, options, index, typed)
 		_announce(box, options, index, first=session is None)
 	except Exception:
 		_session = None
@@ -819,8 +975,10 @@ def _choose(gesture):
 			_endSession("the key came with no visit going on")
 			_passOn(gesture)
 			return
-		if _press(session.options[session.index], session.box, _pageOf(field)):
+		option = session.options[session.index]
+		if _press(option, session.box, _pageOf(field)):
 			_endSession("the suggestion was chosen")
+			_rememberChoice(field, session.typed, _nameOf(option))
 		else:
 			ui.message("Can't press this suggestion, it is not on the screen. Make the window bigger or the page smaller.")
 	except Exception:
@@ -851,6 +1009,19 @@ def _decline(field, why: str) -> None:
 	_log().debug(f"jawsMigrator: Down Arrow in the edit field {_nameOf(field)!r}, which says it has suggestions, goes on as NVDA has it: {why}")
 
 
+def _undoScriptFor(gesture):
+	"""Control+Z is the assistant's right after it chose a suggestion, while the field it chose in has the focus. Python only (see scriptFor)."""
+	chosen = _chosen
+	if chosen is None or not _isUndoKey(gesture):
+		return None
+	try:
+		import api
+
+		return _undoChoice if api.getFocusObject() is chosen.field else None
+	except Exception:
+		return None
+
+
 def scriptFor(gesture):
 	"""The command to run for this key when a visit to the suggestions of the focused edit field is going on. None: NVDA goes on.
 
@@ -859,13 +1030,15 @@ def scriptFor(gesture):
 	where Windows gives about 300 milliseconds. So this looks at nothing but what is Python's: the key, and which object has the
 	focus. Once Down Arrow has gone into the suggestions (see chooseOverlay), Down Arrow, Up Arrow, Home, End, Enter and Space go
 	through them and choose one, until another key is pressed (it goes to the page as it does: typing, Escape to close the list,
-	Tab to leave the field) or the focus moves.
+	Tab to leave the field) or the focus moves. Where no visit is going on, Control+Z is the assistant's too, right after it chose a
+	suggestion in the field that has the focus (see _undoScriptFor); whether the field still holds that suggestion is for the script
+	to find out, in the main thread.
 	"""
 	if not _enabled or _passing:
 		return None
 	session, pending = _session, _pending
 	if session is None and (pending is None or time.monotonic() > pending[1]):
-		return None
+		return _undoScriptFor(gesture)
 	try:
 		if getattr(gesture, "isModifier", False) or getattr(gesture, "modifiers", None):
 			return None

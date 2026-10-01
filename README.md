@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.56
+- Version: 1.57
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: GNU General Public License, version 2 or later
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.57](#whats-new-in-157)
 - [What's new in 1.56](#whats-new-in-156)
 - [What's new in 1.55](#whats-new-in-155)
 - [What's new in 1.54](#whats-new-in-154)
@@ -108,10 +109,20 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.56.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.57.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.57
+
+From the tester's comment on issue 47 after 1.55, with his NVDA log: "The address picker is accessible. The only thing I noticed is if I accidently select the wrong one I can't unselect it. if that is by design that is fine. log attached. it is 100% better then it was."
+
+- **What his log shows.** NVDA 2026.2 with 1.55, and nothing in the log that is an error of the assistant's. He typed "241 w pine st" and pressed Down Arrow eight times; the assistant said each address with its place, "8 of 20" for the eighth (CANTON, IL), which is out of sight in the list of seven, so the page scrolled it into view. Enter pressed it with the mouse, NVDA said "241 W PINE ST, CANTON, IL, 61520, USA, selected", and the visit was over. Then he pressed Up Arrow, Down Arrow and Down Arrow. The first two said the address in the field. The assistant's log line for the second says "no suggestions are showing for it", so NVDA did what it does with the key, and the third took him out of the field: his NVDA has "Automatic focus mode for caret movement" on, which takes Down Arrow out of an edit field of one line when the caret can't move further. He went on to the Check availability button.
+- **Is that by design?** It is how the page works, not something the assistant added. visible.com's script puts the address you chose in the field and shuts its list, and it shows suggestions again only when the text in the field changes (it forgets the choice then, too). So there was no list to go back to: with a mouse you would click in the field and change the text. With the assistant that still works (tried on the stand-in described below): Control+A and the start of the address typed again shows all twenty suggestions, and Down Arrow goes into them. Backspace once shows only the address you chose.
+- **Control+Z takes a choice back.** Right after you choose a suggestion with Enter or Space, Control+Z puts back the text that was in the field when you pressed Down Arrow, and NVDA says "Choice undone, 241 w pine st". The page sees the text change, forgets the choice and shows its suggestions for that text, and Down Arrow goes into them as before. If you press Down Arrow before the page has shown them again, the assistant waits for them, at most a second and a half; if they still are not there, Down Arrow does what NVDA does. Up Arrow, Down Arrow, Home and End pressed after the choice, as in the tester's log, do not end it, and it works when NVDA is in browse mode, as long as the focus is still in the field.
+- **Only for what the assistant chose.** Control+Z is the assistant's only while the field still holds the address its choice put there. If you typed or deleted anything, moved to another control, chose nothing, or press Control+Z a second time, it is the page's own, as before. (The browser's own Control+Z after such a choice brings back a list of only the address you chose.) It is part of the setting "Reach the suggestions an edit field on a web page shows with Down Arrow, and choose one with Enter" in NVDA's Settings, JAWS Migration Assistant. NVDA's debug log says what happened: "the suggestion '...' was chosen, and Control+Z puts back '...'", "Control+Z took the choice back", "the page's suggestions were back 0.73 seconds after Down Arrow" or "were not back 1.5 seconds after Down Arrow", and "Control+Z goes on as NVDA has it: the field no longer holds what the choice put there".
+- **What was tried, and what was not.** In a second NVDA 2026.2 on its own Windows desktop (the one that was running was not touched), with Microsoft Edge 154 and this add-on alone, on a stand-in for the address page that runs on this computer: the live page's markup and the behavior I measured on it, with twenty fixed addresses (`tests/live_nvda/pages/address.html`). I did not type into the live site this time. Text put into the field through the page's accessibility gave the page its input event and brought all twenty suggestions back, and NVDA said nothing about the change. Fourteen rounds (eight, and six more with the files this version is made of) of Down Arrow to a row, Enter, Control+Z, Down Arrow (half of them as soon as the test could press it, about half a second after Control+Z, half after a pause), Down Arrow to another row and Enter all ended as they should: the page had the text, NVDA said it, the page's events were the ones expected. With a service that answers 900 milliseconds after the page's 300 of quiet, Down Arrow waited 0.73 seconds and said the first suggestion; with one that takes 4 seconds it waited 1.5 and then did what NVDA does. With nothing chosen, and for a second Control+Z, the key went to the page; after another letter had been typed the assistant did not put the old text back (its log says "goes on as NVDA has it" and the letter stayed; this rig does not show the key that NVDA sends on, which the tests check); after Up Arrow and Down Arrow had taken NVDA out of the field it still put the text back. **Not tried:** the live visible.com page with this version, a real keyboard (the keys were given to NVDA's gesture handling), the real mouse pointer (the press was replayed on the page), Firefox and Chrome, JAWS, and the tester's other add-ons.
 
 ## What's new in 1.56
 
@@ -984,7 +995,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - opening a list of one kind for each JAWS list key, as JAWS does: Insert+F7 links, Insert+F6 headings, Insert+F5 form fields, Control+Insert+B buttons and Control+Insert+R regions, each with JAWS's title and no radio buttons, and JAWS's words on a page with none (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
 - staying in an edit field on a web page when the arrow keys reach its start or end, where only Up and Down Arrow leave a field of one line (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
-- going into the suggestions an edit field on a web page shows, such as the addresses on visible.com, with Down Arrow after you type, through them with Down Arrow, Up Arrow, Home and End, and choosing one with Enter or Space (on unless you turn it off; see [What's new in 1.55](#whats-new-in-155), [What's new in 1.54](#whats-new-in-154) and [What's new in 1.46](#whats-new-in-146));
+- going into the suggestions an edit field on a web page shows, such as the addresses on visible.com, with Down Arrow after you type, through them with Down Arrow, Up Arrow, Home and End, choosing one with Enter or Space, and taking the choice back with Control+Z (on unless you turn it off; see [What's new in 1.57](#whats-new-in-157), [What's new in 1.55](#whats-new-in-155), [What's new in 1.54](#whats-new-in-154) and [What's new in 1.46](#whats-new-in-146));
 - saying only the Outlook message you come to, not the one you leave, when you move in the message list (on unless you turn it off; see [What's new in 1.22](#whats-new-in-122));
 - not saying page and section numbers in Outlook messages (on unless you turn it off; see [What's new in 1.24](#whats-new-in-124));
 - saying the alternative text of a picture in an Outlook message, as JAWS does, where NVDA said "link" or "blank" (on unless you turn it off; see [What's new in 1.44](#whats-new-in-144));

@@ -378,6 +378,11 @@ class Gesture:
 		self.isModifier = isModifier
 		self.sent = 0
 
+	@property
+	def modifierNames(self):
+		"""NVDA's KeyboardInputGesture.modifierNames: the names of the modifiers held."""
+		return sorted(name for name, _ in self.modifiers)
+
 	def send(self):
 		self.sent += 1
 		self.page.keyDown(self.mainKeyName)
