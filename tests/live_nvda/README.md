@@ -1,6 +1,6 @@
 # Testing the add-on in a real NVDA, on a private desktop
 
-Written on 30 September 2026 while fixing issue 47 (1.54), and extended on 1 October (1.55). The tests under `tests/` run the add-on's code against
+Written on 30 September 2026 while fixing issue 47 (1.54), and extended on 1 October (1.55; the stand-in page and Control+Z of 1.57). The tests under `tests/` run the add-on's code against
 imitations of NVDA. They could not show what was wrong with 1.46 to 1.53, which only a running NVDA shows (NVDA looks for a key's script on the
 keyboard hook's thread, where its objects can't be read, and its buffer has one suggestion of a list). This runs a **second NVDA 2026.2 on its own
 Windows desktop**, with Microsoft Edge on that desktop, next to the user's own NVDA, which it never touches. Nothing here is part of the add-on and
@@ -23,12 +23,16 @@ none of it is packaged (`build.py` packages only `addon/`).
   search for a script. Run it on the main thread and you will not see failures that only the hook thread has.
 - **Stop the rig before running the full test suite** (`touch stop` next to `deskhost.py`): with its NVDA and Edge running, one Remote Access test
   (`test_v148_remoteTransport.SessionTests.test_tPressedAgainClosesTheConnection`) failed in every full run.
+- **Two rigs at once** (sessions work in parallel, each in its own worktree) need their own desktop name and DevTools port, because a second NVDA on a desktop that
+  already has one ends the first, and a port is the computer's. Set `JM_RIG_DESKTOP` (default `jm47`) and `JM_RIG_PORT` (default `9444`) in the shell before `mkconfig.py`,
+  `start_edge.py` and every scenario, to values nobody else uses (1 October: the issue 49 session had `jm47` and 9444, this one `jm47b` and 9455). `ps`-style check first:
+  `Get-CimInstance Win32_Process -Filter "Name='nvda_noUIAccess.exe'"` shows each private NVDA's `-c` folder, which names the session that owns it.
 
 ## Setting it up (from this folder, `tests/live_nvda`)
 
 1. Make `cfg/addons/jawsMigrator` and `cfg/scratchpad/globalPlugins`; copy `nvda.ini.sample` to `cfg/nvda.ini` and `aa47driver.py` to
    `cfg/scratchpad/globalPlugins/`. Edit the ini to match the user's settings (the sample is the tester's: laptop layout, automatic focus mode for caret movement on).
-2. `python -m pip install --target pylib websocket-client` (the DevTools client; `rig.py` looks in `pylib` here).
+2. Optional: `python -m pip install --target pylib websocket-client` (`rig.py` looks in `pylib` here). Without it, `rig.py` uses a small WebSocket client of its own (`_MiniSocket`), so nothing has to be installed.
 3. Optional: `python fetch_addons.py` puts some of the tester's other add-ons into `cfg/addons` (the store's datastore JSON gives each URL), to see the assistant next to them. The scenarios also run with this add-on alone.
 4. `python deploy.py --norestart` copies this repository's `addon/` to `cfg/addons/jawsMigrator`.
 5. `python mkconfig.py nvda`, then run `python deskhost.py` in the background (it creates the desktop, starts NVDA on it, and runs until a file named `stop` appears next to it).
@@ -38,6 +42,11 @@ none of it is packaged (`build.py` packages only `addon/`).
    and what the page did. `touch stop` ends it all.
 
 The visible.com address list needs the page's own address service to answer; if no suggestions appear, wait or try again.
+
+**Without the live site.** Set `JM_RIG_PAGE` to the local stand-in, `file:///<this folder>/pages/address.html`: it has the live page's markup and does what the live page was measured to do (Down Arrow in the field
+focuses the first suggestion and the blur then closes the list; a suggestion is chosen by its `mousedown`; choosing sets the field's text by script and shuts the list; any edit of the text is an `input` event, forgets
+the choice and asks for suggestions 300 ms later), with twenty canned suggestions for "241 w pine st" and one for a whole address. `window.__log` has what the page saw, for the scenarios to print. Nothing is typed
+into a live site and no network is needed. Use it for anything that does not depend on the live service.
 
 ## The scenarios (`scenarios/`)
 
@@ -49,6 +58,13 @@ The visible.com address list needs the page's own address service to answer; if 
 - What was tried to bring a row that the page's edge hides into the page, and failed, which is why 1.55 presses where a row shows instead: every IAccessible2 `scrollTo` type (`s45`), the
   page's `scrollIntoView` (`s46`, `s48`), and `scrollToPoint` (`s49`: it moved the list the wrong way). The address form is in a part of the page that stays where it is. `s40` tried NVDA's
   hit test `objectFromPoint` for "what is under the pointer": it answered with a generic section for a row in plain view, so it can't be used.
+
+- After a choice (issue 47, 1 October, 1.57; run on the stand-in page): `s52` is the tester's steps from his 1.55 log (type, Down Arrow to the eighth, Enter, then Up Arrow, Down Arrow, Down Arrow: no list, and the last key
+  leaves the field because his NVDA has automatic focus mode for caret movement on); `s53` tries what brings the list back (Backspace once: a list of the one address; Control+A and typing the street: all twenty; the browser's
+  own Control+Z: the one address again; `accValue` set to the street on NVDA's main thread: the page gets an `input` event and shows all twenty, NVDA says nothing); `s54` and `s55` are Control+Z with the assistant (the choice
+  taken back and Down Arrow at once, typing in between, nothing chosen, after Up Arrow and Down Arrow, twice); `s56 [rounds]` repeats choose, Control+Z, Down Arrow at once or after a pause, choose another, and counts the rounds.
+  What the rig cannot show: a press replayed on the page after the script returns, so a script that waits for the page to react to its own press (a loop of reads) waits for nothing: the rig only replays the press when
+  `driver("sent")` is answered, which the main thread, busy in that script, cannot do. The assistant does not wait for it.
 
 ## The speech volume that changed between typing and reading (issue 49, 1 October, 1.56)
 

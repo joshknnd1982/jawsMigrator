@@ -1,7 +1,7 @@
 """Scenario helpers on top of rig.py: set the page up the way a tester's keys do, and replay what NVDA presses."""
 import time
 
-from rig import Cdp, Rig, VK
+from rig import PAGE, Cdp, Rig, VK
 
 ADDRESS = "241 w pine st"
 
@@ -26,8 +26,8 @@ result = list(doc.rootNVDAObject.location)
 
 	def fresh(self, typed=ADDRESS, mode="focus"):
 		"""Load the page again, focus the address field in NVDA as E and Enter do, type the address."""
-		self.cdp.send("Page.navigate", url="https://www.visible.com/shop/home-internet")
-		time.sleep(9)
+		self.cdp.send("Page.navigate", url=PAGE)
+		time.sleep(9 if "visible.com" in PAGE else 3)
 		self.cdp.js("document.querySelector('#address-input').focus(); 1")
 		time.sleep(0.5)
 		self.driver("syncFocus", find="Enter your home address")
@@ -81,6 +81,10 @@ result = list(doc.rootNVDAObject.location)
 				key = VK.get(item["vk"])
 				if key:
 					forwarded.append(key)
+		# Control and Z sent together (a key NVDA passes on with gesture.send()).
+		pressedKeys = [item["vk"] for item in sent if item["kind"] == "key" and not (item["flags"] & 2)]
+		if 0x5A in pressedKeys and any(vk in pressedKeys for vk in (0x11, 0xA2, 0xA3)):
+			forwarded.append("control+z")
 		if info.get("passedThrough"):
 			forwarded = [name]
 		for key in forwarded:

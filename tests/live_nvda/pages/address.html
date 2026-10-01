@@ -1,0 +1,146 @@
+<!doctype html>
+<!--
+  A stand-in for the address field on visible.com/shop/home-internet (issue 47), so that the rig can be tried without typing into
+  a live site. The markup is the live page's. The script is written for this file; it does what the live page's was measured to do
+  on 30 September and 1 October 2026 (Edge 154, NVDA 2026.2):
+
+  - Down Arrow in the field, with the list open, focuses the first suggestion (and the field's blur then closes the list 150 ms later);
+  - a suggestion is chosen by its mousedown, or by Enter or Space on it when it has the focus; a click alone chooses nothing;
+  - choosing puts the address in the field with a script (no input event) and closes the list; the field keeps the focus;
+  - any edit of the field (an input event) forgets the choice and asks for suggestions for the text, 300 ms later (debounced);
+    the list is shown again when they arrive, if there are any and the text is at least three characters.
+
+  The suggestions are fixed: those the tester's log shows for "241 w pine st" (the first eight) and twelve more. The text typed is
+  taken as the beginning of an address, so a whole address, once chosen, has the one suggestion that is that address.
+  window.__log has what happened, for the scenarios to read.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shop Home Internet stand-in</title>
+<style>
+  body { font: 16px Arial, sans-serif; margin: 0; padding: 16px; }
+  .typeahead-wrapper { position: relative; width: 460px; }
+  #address-input, #unit-input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 16px; }
+  .typeahead-dropdown { display: none; position: absolute; left: 0; right: 0; top: 100%; max-height: 294px; overflow-y: auto; background: #fff; border: 1px solid #888; z-index: 10; }
+  .typeahead-item { padding: 10px; height: 20px; line-height: 20px; border-bottom: 1px solid #ddd; cursor: pointer; }
+  .typeahead-item:focus, .typeahead-item:hover { background: #dde; }
+  .availability-actions { margin-top: 330px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Home internet &amp; mobile for one flat rate</h1>
+<form id="availability-form" autocomplete="off" class="availability-form-stack" aria-label="Visible Home Internet is here">
+  <div class="availability-input-wrap">
+    <div class="typeahead-wrapper">
+      <input id="address-input" type="text" placeholder="Enter your home address (required)" autocomplete="off" aria-required="true" aria-autocomplete="list" aria-controls="address-dropdown">
+      <div id="address-dropdown" class="typeahead-dropdown" role="listbox" aria-label="Address suggestions"></div>
+    </div>
+  </div>
+  <div class="availability-unit-wrap" id="availabilityUnitWrap" style="display:none">
+    <div class="typeahead-wrapper">
+      <input id="unit-input" type="text" placeholder="Enter Unit address" autocomplete="off" aria-autocomplete="list" aria-controls="unit-dropdown" aria-label="Enter Unit Label">
+      <div id="unit-dropdown" class="typeahead-dropdown" role="listbox" aria-label="Unit suggestions"></div>
+    </div>
+  </div>
+  <div class="availability-actions">
+    <button type="submit" id="checkAvailabilityBtn" class="cmp-button btn-primary availability-cta">Check availability</button>
+  </div>
+</form>
+<p id="chosen" role="status"></p>
+</main>
+<script>
+'use strict';
+window.__log = [];
+const note = (what, extra) => window.__log.push(Object.assign({t: Math.round(performance.now()), what}, extra || {}));
+
+const TOWNS = [
+  ['LISBON', 'OH', '44432'], ['PAXTON', 'IL', '60957'], ['CANISTOTA', 'SD', '57012'], ['JESUP', 'GA', '31545'],
+  ['LANCASTER', 'WI', '53813'], ['JOHNSONVILLE', 'SC', '29555'], ['PONCHATOULA', 'LA', '70454'], ['CANTON', 'IL', '61520'],
+  ['ELDON', 'MO', '65026'], ['HAMBURG', 'AR', '71646'], ['ALTOONA', 'IA', '50009'], ['WINNSBORO', 'LA', '71295'],
+  ['BELOIT', 'KS', '67420'], ['EUREKA', 'CA', '95501'], ['MARION', 'IL', '62959'], ['DEXTER', 'NM', '88230'],
+  ['ROCKWELL', 'NC', '28138'], ['SIOUX CENTER', 'IA', '51250'], ['BRYAN', 'OH', '43506'], ['LAPEER', 'MI', '48446'],
+];
+const ADDRESSES = TOWNS.map(([city, state, zip], index) => ({disprawstr: `241 W PINE ST, ${city}, ${state}, ${zip}, USA`, unitExists: index === 2}));
+
+const input = document.getElementById('address-input');
+const dropdown = document.getElementById('address-dropdown');
+const unitWrap = document.getElementById('availabilityUnitWrap');
+let chosen = null;
+
+function suggestionsFor(text) {
+  const wanted = text.trim().replace(/\s+/g, ' ').toUpperCase();
+  return ADDRESSES.filter(address => address.disprawstr.startsWith(wanted));
+}
+
+function closeDropdown() {
+  if (dropdown.style.display !== 'none') note('close');
+  dropdown.style.display = 'none';
+}
+
+function selectAddress(address) {
+  input.value = address.disprawstr;  // by script: no input event, as on the live page
+  chosen = address.disprawstr;
+  closeDropdown();
+  unitWrap.style.display = address.unitExists ? 'block' : 'none';
+  document.getElementById('chosen').textContent = 'Chosen: ' + chosen;
+  note('select', {value: chosen});
+}
+
+function buildItem(address) {
+  const item = document.createElement('div');
+  item.className = 'typeahead-item';
+  item.setAttribute('role', 'option');
+  item.setAttribute('tabindex', '0');
+  item.textContent = address.disprawstr;
+  item.addEventListener('mousedown', event => { event.preventDefault(); selectAddress(address); });
+  item.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectAddress(address); }
+    else if (event.key === 'ArrowDown') { if (item.nextElementSibling) item.nextElementSibling.focus(); }
+    else if (event.key === 'ArrowUp') { (item.previousElementSibling || input).focus(); }
+    else if (event.key === 'Escape') { closeDropdown(); input.focus(); }
+  });
+  return item;
+}
+
+function render(addresses) {
+  dropdown.innerHTML = '';
+  if (!addresses.length) { closeDropdown(); return; }
+  addresses.forEach(address => dropdown.appendChild(buildItem(address)));
+  dropdown.style.display = 'block';
+  note('open', {count: addresses.length});
+}
+
+let timer = null;
+function ask(text) {
+  clearTimeout(timer);
+  if (text.trim().length < 3) { closeDropdown(); return; }
+  // 300 ms of quiet, then an answer 120 ms later, as a service would (window.__serviceDelay makes the service slower or faster).
+  timer = setTimeout(() => setTimeout(() => render(suggestionsFor(text)), window.__serviceDelay === undefined ? 120 : window.__serviceDelay), 300);
+}
+
+input.addEventListener('input', () => {
+  chosen = null;
+  unitWrap.style.display = 'none';
+  document.getElementById('chosen').textContent = '';
+  note('input', {value: input.value});
+  ask(input.value);
+});
+input.addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown') {
+    const first = dropdown.style.display !== 'none' && dropdown.querySelector('.typeahead-item');
+    if (first) { event.preventDefault(); first.focus(); note('pageDown'); }
+  } else if (event.key === 'Escape') {
+    closeDropdown();
+  }
+});
+input.addEventListener('blur', () => { note('blur'); setTimeout(closeDropdown, 150); });
+document.getElementById('availability-form').addEventListener('submit', event => {
+  event.preventDefault();
+  note('submit', {value: input.value, chosen});
+  document.getElementById('chosen').textContent = chosen ? 'Checking ' + chosen : 'Choose an address first';
+});
+</script>
+</body>
+</html>

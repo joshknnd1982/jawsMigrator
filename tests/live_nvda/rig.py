@@ -8,11 +8,20 @@ import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-for folder in (os.path.join(HERE, "pylib"), HERE):  # pylib: python -m pip install --target pylib websocket-client
+for folder in (os.path.join(HERE, "pylib"), HERE):  # pylib: python -m pip install --target pylib websocket-client (optional)
 	sys.path.insert(0, folder)
-import websocket  # noqa: E402
+try:
+	import websocket  # noqa: E402
+except ImportError:  # nothing is installed: _MiniSocket below is all DevTools needs
+	websocket = None
 
 from joinlog import entries  # noqa: E402
+
+#: The DevTools port and the page this rig uses. Two rigs at once (two sessions) need their own desktop name (mkconfig.py) and port, or
+#: the second NVDA ends the first: NVDA's single instance is per desktop. JM_RIG_PAGE can be a local page (pages/address.html) so that
+#: nothing is typed into a live site.
+PORT = int(os.environ.get("JM_RIG_PORT", "9444"))
+PAGE = os.environ.get("JM_RIG_PAGE", "https://www.visible.com/shop/home-internet")
 
 CFG = os.path.join(HERE, "cfg")
 CMD = os.path.join(CFG, "driver", "cmd.json")
@@ -32,12 +41,100 @@ KEYS = {
 	"space": (" ", "Space", 0x20, " "),
 	"backspace": ("Backspace", "Backspace", 0x08, None),
 	"control+a": ("a", "KeyA", 0x41, None),
+	"control+z": ("z", "KeyZ", 0x5A, None),
 }
+#: What the browser does for a key with Control held: DevTools only runs an editing command when it is named.
+COMMANDS = {"control+a": ["selectAll"], "control+z": ["undo"]}
 VK = {0x28: "downArrow", 0x26: "upArrow", 0x25: "leftArrow", 0x27: "rightArrow", 0x0D: "enter", 0x1B: "escape", 0x09: "tab", 0x20: "space", 0x08: "backspace"}
 
 
+class _MiniSocket:
+	"""Just enough of a WebSocket client for DevTools' text messages, so that nothing has to be installed (websocket-client is used if it is)."""
+
+	def __init__(self, url, timeout=60):
+		import base64
+		import socket
+		from urllib.parse import urlparse
+
+		parts = urlparse(url)
+		self.sock = socket.create_connection((parts.hostname, parts.port or 80), timeout=timeout)
+		key = base64.b64encode(os.urandom(16)).decode()
+		path = parts.path + (("?" + parts.query) if parts.query else "")
+		self.sock.sendall(
+			(
+				f"GET {path} HTTP/1.1\r\nHost: {parts.hostname}:{parts.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+				f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+			).encode()
+		)
+		response = b""
+		while b"\r\n\r\n" not in response:
+			chunk = self.sock.recv(4096)
+			if not chunk:
+				raise ConnectionError("DevTools closed the connection")
+			response += chunk
+		head, _, self._buffer = response.partition(b"\r\n\r\n")
+		if b" 101 " not in head.split(b"\r\n")[0]:
+			raise ConnectionError(head.decode("utf-8", "replace"))
+
+	def _frame(self, opcode, data):
+		import struct
+
+		header = bytearray([0x80 | opcode])
+		size = len(data)
+		if size < 126:
+			header.append(0x80 | size)
+		elif size < 65536:
+			header.append(0x80 | 126)
+			header += struct.pack(">H", size)
+		else:
+			header.append(0x80 | 127)
+			header += struct.pack(">Q", size)
+		mask = os.urandom(4)
+		header += mask
+		self.sock.sendall(bytes(header) + bytes(byte ^ mask[index % 4] for index, byte in enumerate(data)))
+
+	def send(self, text):
+		self._frame(1, text.encode("utf-8"))
+
+	def _read(self, count):
+		while len(self._buffer) < count:
+			chunk = self.sock.recv(65536)
+			if not chunk:
+				raise ConnectionError("DevTools closed the connection")
+			self._buffer += chunk
+		data, self._buffer = self._buffer[:count], self._buffer[count:]
+		return data
+
+	def recv(self):
+		import struct
+
+		message = b""
+		while True:
+			first, second = self._read(2)
+			opcode, size = first & 0x0F, second & 0x7F
+			if size == 126:
+				size = struct.unpack(">H", self._read(2))[0]
+			elif size == 127:
+				size = struct.unpack(">Q", self._read(8))[0]
+			payload = self._read(size)  # a server's frames are not masked
+			if opcode == 8:
+				raise ConnectionError("DevTools closed the connection")
+			if opcode == 9:
+				self._frame(10, payload)
+			elif opcode in (0, 1, 2):
+				message += payload
+				if first & 0x80:
+					return message.decode("utf-8", "replace")
+
+	def close(self):
+		try:
+			self.sock.close()
+		except OSError:
+			pass
+
+
 class Cdp:
-	def __init__(self, port=9444):
+	def __init__(self, port=PORT):
 		self.port = port
 		self._id = 0
 		self.connect()
@@ -45,8 +142,10 @@ class Cdp:
 	def connect(self):
 		targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{self.port}/json"))
 		pages = [t for t in targets if t["type"] == "page"]
-		page = next((t for t in pages if "visible.com" in t["url"]), pages[0])
-		self.ws = websocket.create_connection(page["webSocketDebuggerUrl"], max_size=None, timeout=60)
+		want = PAGE.split("#")[0]
+		page = next((t for t in pages if t["url"].split("#")[0] == want), None) or next((t for t in pages if "visible.com" in t["url"]), pages[0])
+		url = page["webSocketDebuggerUrl"]
+		self.ws = websocket.create_connection(url, max_size=None, timeout=60) if websocket else _MiniSocket(url, timeout=60)
 
 	def send(self, method, **params):
 		self._id += 1
@@ -69,13 +168,16 @@ class Cdp:
 		if name not in KEYS and len(name) == 1:
 			KEYS[name] = (name, "Key" + name.upper(), ord(name.upper()), name)
 		key, code, vk, text = KEYS[name]
+		held = {"modifiers": 2} if name.startswith("control+") else {}
 		if down:
-			params = dict(type="keyDown", key=key, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk)
+			params = dict(type="rawKeyDown" if held else "keyDown", key=key, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk, **held)
 			if text:
 				params["text"] = text
+			if name in COMMANDS:
+				params["commands"] = COMMANDS[name]
 			self.send("Input.dispatchKeyEvent", **params)
 		if up:
-			self.send("Input.dispatchKeyEvent", type="keyUp", key=key, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk)
+			self.send("Input.dispatchKeyEvent", type="keyUp", key=key, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk, **held)
 
 	def type(self, text, delay=0.07):
 		for ch in text:
@@ -106,7 +208,7 @@ class Rig:
 
 	def startEdge(self, url="about:blank"):
 		cmd = (
-			f'"{EDGE}" --user-data-dir="{os.path.join(HERE, "edgeprofile")}" --remote-debugging-port=9444 '
+			f'"{EDGE}" --user-data-dir="{os.path.join(HERE, "edgeprofile")}" --remote-debugging-port={PORT} '
 			"--remote-allow-origins=* --no-first-run --no-default-browser-check --disable-gpu --force-renderer-accessibility "
 			"--window-position=0,0 --window-size=1280,1000 " + url
 		)
