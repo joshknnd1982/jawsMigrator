@@ -54,6 +54,7 @@ from .. import (
 	state,
 	trayChanges,
 	trayEnter,
+	trayList,
 	webRegions,
 )
 from .common import checkListClass, openFile
@@ -89,6 +90,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="Click a program's system tray icon with the mouse when you press Enter on it, as some programs answer only the mouse"),
 		)
 		self.trayEnter.SetValue(trayEnter.wanted(state.load()))
+		# The System Tray List add-on's list (NVDA+F11) double-clicks an icon on Enter; JAWS's list (Insert+F11) right-clicks it (issue 54).
+		self.trayList = helper.addItem(
+			wx.CheckBox(self, label="In the System Tray List add-on's list (NVDA+F11), Enter right-clicks the icon, as in JAWS's list (Insert+F11)"),
+		)
+		self.trayList.SetValue(trayList.wanted(state.load()))
 		# Control+Alt+N, the key of NVDA's desktop shortcut, leaves the focus on the taskbar ("Copilot pinned");
 		# JAWS, started with its own desktop shortcut's key, goes back to the window you were in.
 		self.backFromTaskbar = helper.addItem(
@@ -421,6 +427,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownSayOnce = self.sayOnce.GetValue()
 		self._shownQuietTray = self.quietTray.GetValue()
 		self._shownTrayEnter = self.trayEnter.GetValue()
+		self._shownTrayList = self.trayList.GetValue()
 		self._shownBackFromTaskbar = self.backFromTaskbar.GetValue()
 		self._shownHeadingAlone = self.headingAlone.GetValue()
 		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
@@ -508,6 +515,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[trayChanges.STATE_KEY] = self.quietTray.GetValue()
 		if self.trayEnter.GetValue() != self._shownTrayEnter:
 			updates[trayEnter.STATE_KEY] = self.trayEnter.GetValue()
+		if self.trayList.GetValue() != self._shownTrayList:
+			updates[trayList.STATE_KEY] = self.trayList.GetValue()
 		if self.backFromTaskbar.GetValue() != self._shownBackFromTaskbar:
 			updates[startupFocus.STATE_KEY] = self.backFromTaskbar.GetValue()
 		if self.headingAlone.GetValue() != self._shownHeadingAlone:

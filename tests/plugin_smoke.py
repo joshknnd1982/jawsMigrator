@@ -1177,6 +1177,33 @@ def main():
 		jawsMigrator.state.set(listBounds.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(vars(columnsReview.GlobalPlugin)["reportListBounds"].__wrapped__ is reportListBounds, "and on again, wrapped once")
+		# The System Tray List add-on's list (NVDA+F11) double-clicked an icon on Enter; JAWS's list right-clicks it (issue 54).
+		from jawsMigrator import trayList
+
+		def createSystrayList(self):
+			pass
+
+		def createTaskList(self):
+			pass
+
+		systrayList = types.ModuleType(trayList.MODULE)
+		systrayList.GlobalPlugin = type(
+			"GlobalPlugin", (), {"_systrayListDialog": None, "_createSystrayList": createSystrayList, "_createTaskList": createTaskList},
+		)
+		check(trayList.isRegistered() and not trayList.isInstalled(), "without System Tray List there is nothing to change")
+		sys.modules[trayList.MODULE] = systrayList
+		plugin.applyRuntimeSettings()
+		systrayList.GlobalPlugin()._createSystrayList()
+		check(trayList.isInstalled(), "System Tray List's list of the tray's icons right-clicks on Enter")
+		jawsMigrator.state.set(trayList.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(
+			not trayList.isRegistered() and vars(systrayList.GlobalPlugin)["_createSystrayList"] is createSystrayList,
+			"turned off in the Settings panel, System Tray List has its own",
+		)
+		jawsMigrator.state.set(trayList.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(vars(systrayList.GlobalPlugin)["_createSystrayList"].__wrapped__ is createSystrayList, "and on again, wrapped once")
 		# Columns Review asked NVDA for every command at each profile switch, and Emoticons wrote 177 warnings, so each
 		# Alt+Tab into or out of Edge held NVDA up for seconds (issue 31; see profileSwitches).
 		from jawsMigrator import profileSwitches
@@ -1467,6 +1494,12 @@ def main():
 			"and Columns Review's own report of a list's ends",
 		)
 		check(
+			not trayList.isRegistered()
+			and vars(systrayList.GlobalPlugin)["_createSystrayList"] is createSystrayList
+			and vars(systrayList.GlobalPlugin)["_createTaskList"] is createTaskList,
+			"and System Tray List's own list",
+		)
+		check(
 			not profileSwitches.isRegistered()
 			and columnsReview.getScriptGestures is getScriptGestures
 			and emoticons.deactivateAnnouncement is deactivateAnnouncement
@@ -1480,6 +1513,7 @@ def main():
 			else:
 				sys.modules[name] = saved
 		del sys.modules[listBounds.MODULE]
+		del sys.modules[trayList.MODULE]
 		check(not linkSpeech.isRegistered() and linkSpeechNvdasOwn(), "and NVDA's link types, a document's field speech and a web page's quick navigation report")
 		check(
 			not formFields.isRegistered() and plugin._formFields is None and formFieldsNvdasOwn(),
@@ -1533,6 +1567,7 @@ def main():
 			"outlookMessages",
 			"outlookStatusBar",
 			"listBounds",
+			"trayList",
 			"profileSwitches",
 			"linkSpeech",
 			"formFields",

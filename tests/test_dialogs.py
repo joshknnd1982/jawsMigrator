@@ -426,6 +426,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"sayTypeAndStateOnce": True,
 				"quietTrayIconChanges": True,
 				"clickTrayIconOnEnter": True,
+				"rightClickInSystrayList": True,
 				"sayHeadingAlone": True,
 				"listItemsWithoutCoordinates": True,
 				"positionLikeJawsInExplorer": True,
@@ -467,6 +468,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"sayTypeAndStateOnce": False,
 				"quietTrayIconChanges": False,
 				"clickTrayIconOnEnter": False,
+				"rightClickInSystrayList": False,
 				"sayHeadingAlone": False,
 				"listItemsWithoutCoordinates": False,
 				"positionLikeJawsInExplorer": False,
@@ -485,6 +487,7 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("clickTrayIconOnEnter"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("rightClickInSystrayList"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("sayHeadingAlone"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("listItemsWithoutCoordinates"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("positionLikeJawsInExplorer"), "a check box the user didn't change saves nothing")
@@ -552,6 +555,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"Click a program's system tray icon with the mouse when you press Enter on it, as some programs answer only the mouse",
 			trayEnter.STATE_KEY,
 			"Enter on a program's system tray icon goes on to Windows again, at once",
+		)
+
+	def test_trayListIsSavedAndApplied(self):
+		from jawsMigrator import trayList
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.trayList,
+			"In the System Tray List add-on's list (NVDA+F11), Enter right-clicks the icon, as in JAWS's list (Insert+F11)",
+			trayList.STATE_KEY,
+			"System Tray List's list double-clicks on Enter again, at once",
 		)
 
 	def test_headingAloneIsSavedAndApplied(self):

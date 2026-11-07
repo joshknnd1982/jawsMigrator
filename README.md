@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.61
+- Version: 1.62
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: MIT License
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.62](#whats-new-in-162)
 - [What's new in 1.61](#whats-new-in-161)
 - [What's new in 1.60](#whats-new-in-160)
 - [What's new in 1.59](#whats-new-in-159)
@@ -113,10 +114,21 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.61.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.62.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.62
+
+From issue 54: "pressing enter on a system tray icon doesn't work. ... It should behave as Jaws does." The tester's NVDA log came with it. In it, the tester pressed NVDA+F11, moved to "Volume" in the list of system tray icons and pressed Enter, and Windows' Quick Settings opened, with the focus on Wi-Fi.
+
+- **Where the list comes from.** NVDA has no list of the system tray's icons of its own. NVDA+F11 is the System Tray List add-on (systrayList), which the tester has installed. Its dialog has the buttons Left Click (Alt+L), Left Double Click (Alt+D) and Right Click (Alt+R), and Left Double Click is its default button, so Enter in its list double-clicks the icon. Double-clicking Windows 11's volume icon opens Quick Settings.
+- **What JAWS does.** JAWS's list, Insert+F11 ("Select a System Tray Icon"), has the buttons Right Single Click, Left Single Click and Left Double Click, with the same letters, and Right Single Click is its default button. This was read from JAWS 2027's own dialog, and JAWS's help for the list says the same: Enter on an icon simulates a right single mouse click. So in JAWS, Enter on an icon in the list opens the icon's menu (for Volume: Troubleshoot sound problems, Open volume mixer, Sound settings), and Alt+L clicks it.
+- **Now Enter in System Tray List's list right-clicks the icon, as in JAWS.** Its Right Click button is made the default whenever it shows the tray's icons. Alt+L, Alt+D and Alt+R, and Enter on a button you Tab to, still press that button, so Alt+L is still a left click. NVDA+F11 pressed twice shows the taskbar's programs in the same dialog, which JAWS's list doesn't; there Enter still double-clicks, as the add-on has it. Nothing else System Tray List does changes, and without it installed nothing happens.
+- **Turning it off.** NVDA's Settings, JAWS Migration Assistant: "In the System Tray List add-on's list (NVDA+F11), Enter right-clicks the icon, as in JAWS's list (Insert+F11)". It is on unless you turn it off.
+- **What was tested.** In a running NVDA 2026.3 on Windows 11 (build 26300) with System Tray List 2026.08.24, the version in the tester's log: Enter on Volume opened its menu ("Troubleshoot sound problems, 1 of 3", "Open volume mixer", "Sound settings"); Enter on NVDA's own icon opened the NVDA menu; Alt+L on Volume still opened Quick Settings; the taskbar's list kept Left Double Click; and with the setting off, Enter on Volume opened Quick Settings on Wi-Fi again, as in the tester's log. New unit tests (tests/test_v162_trayList.py), with the Settings panel test and the smoke test; the full suite passes.
+- **Found while testing: an automatically hidden taskbar.** System Tray List notes where each icon is when it makes the list. With "Automatically hide the taskbar" on and the taskbar hidden, that is the bottom edge of the screen, so each of its buttons clicks there and misses the icon. This is how System Tray List works, with or without the assistant; with the taskbar showing (the mouse pointer on it, or auto-hide off) the click lands on the icon.
 
 ## What's new in 1.61
 
@@ -1031,6 +1043,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - saying a control's type and state once, even when its label repeats them, and a change once when you activate a control in browse mode (on unless you turn it off; see [What's new in 1.5](#whats-new-in-15) and [What's new in 1.8](#whats-new-in-18));
 - saying a system tray icon when you move to it, not each time its program changes it (on unless you turn it off; see [What's new in 1.9](#whats-new-in-19));
 - clicking a program's system tray icon with the mouse when you press Enter on it, as some programs answer only the mouse (on unless you turn it off; see [What's new in 1.61](#whats-new-in-161));
+- Enter right-clicking the icon in the System Tray List add-on's list (NVDA+F11), as in JAWS's list (Insert+F11) (on unless you turn it off; see [What's new in 1.62](#whats-new-in-162));
 - going back to the window you were in when NVDA starts with the focus on the taskbar, as Control+Alt+N leaves it, where NVDA then reads the focus as it reads that program (on unless you turn it off; see [What's new in 1.18](#whats-new-in-118) and [What's new in 1.28](#whats-new-in-128));
 - saying what quick navigation moves to without the landmark, region or list it is in, and "blank, placeholder" for an empty edit field (on unless you turn it off; see [What's new in 1.13](#whats-new-in-113), [What's new in 1.31](#whats-new-in-131) and [What's new in 1.36](#whats-new-in-136));
 - leaving out the row and column numbers of items in lists, such as drives, files and messages (on unless you turn it off);
@@ -1265,6 +1278,7 @@ Everything the assistant writes is inside NVDA's settings folder, usually `%APPD
 - Backspace is said once the program has deleted, up to half a second after the key. A program slower than that is still silent, as NVDA is without the assistant; the text itself is never changed. While NVDA waits, it can't do anything else.
 - Only tabs, and buttons and check boxes in toolbars, keep browse mode. When you Tab to a list, a radio button, a menu or an edit field on a web page, NVDA goes to focus mode there, as it does without the assistant, so letters you type there reach the page. A toolbar button you reach by clicking, or with the arrow keys in focus mode, gets NVDA's own focus mode too.
 - Enter on a program's system tray icon is a click of the mouse, so it needs the icon to be on the screen: on an icon NVDA has no place for, or one another window covers, Enter goes on to Windows as before. A program that opens only on a double click needs Enter twice, quickly (within Windows' double-click time).
+- The System Tray List add-on (NVDA+F11) clicks an icon where it was when the list was made. With the taskbar set to hide automatically and hidden at that moment, that is the edge of the screen, and the click misses the icon, whichever button you choose.
 - NVDA can't tell what changed a system tray icon. A change within a moment of a key you press on the icon is said, whatever made it. Any other change isn't said until you move to the icon again or press NVDA+Tab.
 - A control's type and state are only left out of a label when they are at its end, in NVDA's words (or "checkbox", "dropdown" and similar English spellings), right next to where NVDA says them. A page that puts them first, or in another language than NVDA's, is read as it is.
 - JAWS voices from synthesizers with no NVDA equivalent on the computer (for example old hardware synthesizers) cannot be used. The report says which ones.
