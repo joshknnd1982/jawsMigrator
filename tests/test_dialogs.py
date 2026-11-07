@@ -425,6 +425,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"checkForUpdatesAutomatically": True,
 				"sayTypeAndStateOnce": True,
 				"quietTrayIconChanges": True,
+				"clickTrayIconOnEnter": True,
 				"sayHeadingAlone": True,
 				"listItemsWithoutCoordinates": True,
 				"positionLikeJawsInExplorer": True,
@@ -465,6 +466,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"activateJawsProfileAtStartup": True,
 				"sayTypeAndStateOnce": False,
 				"quietTrayIconChanges": False,
+				"clickTrayIconOnEnter": False,
 				"sayHeadingAlone": False,
 				"listItemsWithoutCoordinates": False,
 				"positionLikeJawsInExplorer": False,
@@ -482,6 +484,7 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertTrue(state.get("checkForUpdatesAutomatically"))
 		self.assertFalse(state.get("sayTypeAndStateOnce"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("clickTrayIconOnEnter"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("sayHeadingAlone"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("listItemsWithoutCoordinates"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("positionLikeJawsInExplorer"), "a check box the user didn't change saves nothing")
@@ -540,6 +543,16 @@ class SettingsPanelTests(unittest.TestCase):
 		self.dialog.panel.onSave()
 		state.forget()
 		self.assertTrue(state.get(stateKey))
+
+	def test_trayEnterIsSavedAndApplied(self):
+		from jawsMigrator import trayEnter
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.trayEnter,
+			"Click a program's system tray icon with the mouse when you press Enter on it, as some programs answer only the mouse",
+			trayEnter.STATE_KEY,
+			"Enter on a program's system tray icon goes on to Windows again, at once",
+		)
 
 	def test_headingAloneIsSavedAndApplied(self):
 		from jawsMigrator import quickNavHeadings

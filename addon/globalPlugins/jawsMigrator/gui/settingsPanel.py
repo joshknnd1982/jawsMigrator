@@ -53,6 +53,7 @@ from .. import (
 	suggestionLists,
 	state,
 	trayChanges,
+	trayEnter,
 	webRegions,
 )
 from .common import checkListClass, openFile
@@ -83,6 +84,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# A temperature monitor changes its system tray icon's name every few seconds, which NVDA would read each time.
 		self.quietTray = helper.addItem(wx.CheckBox(self, label="Say a system &tray icon when you move to it, not each time its program changes it"))
 		self.quietTray.SetValue(trayChanges.wanted(state.load()))
+		# Enter on a system tray icon sends the program a keyboard notice, which many programs ignore (issue 52).
+		self.trayEnter = helper.addItem(
+			wx.CheckBox(self, label="Click a program's system tray icon with the mouse when you press Enter on it, as some programs answer only the mouse"),
+		)
+		self.trayEnter.SetValue(trayEnter.wanted(state.load()))
 		# Control+Alt+N, the key of NVDA's desktop shortcut, leaves the focus on the taskbar ("Copilot pinned");
 		# JAWS, started with its own desktop shortcut's key, goes back to the window you were in.
 		self.backFromTaskbar = helper.addItem(
@@ -414,6 +420,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownAtStartup = self.atStartup.GetValue()
 		self._shownSayOnce = self.sayOnce.GetValue()
 		self._shownQuietTray = self.quietTray.GetValue()
+		self._shownTrayEnter = self.trayEnter.GetValue()
 		self._shownBackFromTaskbar = self.backFromTaskbar.GetValue()
 		self._shownHeadingAlone = self.headingAlone.GetValue()
 		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
@@ -499,6 +506,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[labelRepeats.STATE_KEY] = self.sayOnce.GetValue()
 		if self.quietTray.GetValue() != self._shownQuietTray:
 			updates[trayChanges.STATE_KEY] = self.quietTray.GetValue()
+		if self.trayEnter.GetValue() != self._shownTrayEnter:
+			updates[trayEnter.STATE_KEY] = self.trayEnter.GetValue()
 		if self.backFromTaskbar.GetValue() != self._shownBackFromTaskbar:
 			updates[startupFocus.STATE_KEY] = self.backFromTaskbar.GetValue()
 		if self.headingAlone.GetValue() != self._shownHeadingAlone:

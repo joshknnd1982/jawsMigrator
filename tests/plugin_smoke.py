@@ -478,6 +478,16 @@ def main():
 		jawsMigrator.state.set(trayChanges.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(trayChanges.isRegistered() and decider.handlers.count(trayChanges.noteGesture) == 1, "and on again, once")
+		# Enter on a program's system tray icon clicks it with the mouse (issue 52).
+		from jawsMigrator import trayEnter
+
+		check(trayEnter.isRegistered() and plugin._trayEnter is trayEnter, "Enter on a program's system tray icon clicks it")
+		jawsMigrator.state.set(trayEnter.STATE_KEY, False)
+		plugin.applyRuntimeSettings()
+		check(not trayEnter.isRegistered() and plugin._trayEnter is None, "turned off in the Settings panel, Enter goes on to Windows")
+		jawsMigrator.state.set(trayEnter.STATE_KEY, True)
+		plugin.applyRuntimeSettings()
+		check(trayEnter.isRegistered() and plugin._trayEnter is trayEnter, "and on again")
 		# What NVDA says is kept for NVDA+Shift+J, then H, Control+H and Shift+H, as JAWS's speech history.
 		from jawsMigrator import speechHistory
 
@@ -1416,6 +1426,7 @@ def main():
 		check(not speechHistory.isRegistered() and not list(preSpeech.handlers) and not speechHistory.entries(), "and keeping what NVDA says")
 		check(not changeRepeats.isRegistered() and plugin._changeRepeats is None, "and NVDA's change notices")
 		check(not trayChanges.isRegistered() and plugin._trayChanges is None and not decider.handlers, "and NVDA's key presses")
+		check(not trayEnter.isRegistered() and plugin._trayEnter is None, "and Enter on a system tray icon")
 		check(
 			not quickNavHeadings.isRegistered()
 			and not listCoordinates.isRegistered()
@@ -1508,6 +1519,7 @@ def main():
 			"labelRepeats",
 			"changeRepeats",
 			"trayChanges",
+			"trayEnter",
 			"quickNavHeadings",
 			"listCoordinates",
 			"listPosition",

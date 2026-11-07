@@ -74,6 +74,8 @@ DEFAULTS = {
 	"playJawsLayerSound": True,
 	#: NVDA says a system tray icon when the focus moves to it, not each time its program changes it (see trayChanges).
 	"quietTrayIconChanges": True,
+	#: Enter on a program's system tray icon clicks it with the mouse, as some programs answer only the mouse (see trayEnter).
+	"clickTrayIconOnEnter": True,
 	#: Quick navigation says a heading or an edit field without the landmark, region or list it is in, and an empty edit
 	#: field with "blank, placeholder", as JAWS does (see quickNavHeadings). Version 1.12's "sayHeadingLevelFirst" (a
 	#: heading's level before its text) is gone: JAWS says the text first.

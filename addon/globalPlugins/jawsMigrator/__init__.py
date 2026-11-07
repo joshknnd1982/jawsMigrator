@@ -13,7 +13,8 @@ It also has NVDA say a control's type and state once when a web page repeats
 them in the control's label (see labelRepeats), or when NVDA would say again
 what activating a control in browse mode changed (see changeRepeats), and a
 system tray icon when the focus moves to it, not each time its program changes
-it (see trayChanges), and a heading or an edit field without the landmark, region
+it (see trayChanges), Enter clicking a program's system tray icon with the
+mouse (see trayEnter), and a heading or an edit field without the landmark, region
 or list it is in when quick navigation moves to it, an empty edit field with
 "blank" and "placeholder" as JAWS says it (see quickNavHeadings), and an item in a
 list without row and column numbers (see listCoordinates), a position ("3 of 3")
@@ -227,6 +228,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._changeRepeats = None
 		#: The trayChanges module, once loaded: NVDA's name change notices go through it.
 		self._trayChanges = None
+		#: The trayEnter module, once loaded: it gives a program's system tray icon the assistant's class, for Enter.
+		self._trayEnter = None
 		#: The autoFormsMode module, once loaded: it notes each focus change before NVDA chooses browse or focus mode.
 		self._autoFormsMode = None
 		#: The linksList module, once loaded: it gives the Elements List's items the assistant's class.
@@ -435,6 +438,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import trayChanges
 
 			trayChanges.unregister()
+		except Exception:
+			pass
+		self._trayEnter = None
+		try:
+			from . import trayEnter
+
+			trayEnter.unregister()
 		except Exception:
 			pass
 		try:
@@ -684,7 +694,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		JAWS's rule for a colon between digits, a drive said without the ":)" after its letter, JAWS's dictionaries
 		for single applications, used only in their programs (read again from their files), a control's type
 		and state said once (and a change said once),
-		a system tray icon said when the focus moves to it, a heading said without what it is in when quick
+		a system tray icon said when the focus moves to it, Enter clicking a program's system tray icon, a heading said without what it is in when quick
 		navigation moves to it, a list item said without row and column numbers, what Backspace deletes said in
 		a slow program too, Enhanced Control Support's timer kept off documents, browse mode kept on a web page's
 		tabs and toolbar buttons, links shown in the Elements List as JAWS's Links List shows them, the speech
@@ -764,6 +774,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._trayChanges = trayChanges
 		except Exception:
 			debugLog.error("could not apply saying a system tray icon when the focus moves to it")
+		try:
+			from . import trayEnter
+
+			# Not a JAWS setting: Enter on a program's system tray icon clicks it with the mouse, as some programs answer only the mouse.
+			if trayEnter.wanted(data):
+				trayEnter.register()
+				self._trayEnter = trayEnter
+			else:
+				trayEnter.unregister()
+				self._trayEnter = None
+		except Exception:
+			debugLog.error("could not apply Enter clicking a program's system tray icon")
 		try:
 			from . import quickNavHeadings
 
@@ -1766,6 +1788,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def event_gainFocus(self, obj, nextHandler):
 		self._checkSleep(obj)
+		# The mouse pointer the assistant put on a system tray icon to click it goes back once the focus moves (see trayEnter).
+		trayEnter = getattr(self, "_trayEnter", None)
+		if trayEnter is not None:
+			trayEnter.focusMoved(obj)
 		# Before NVDA's browse mode chooses focus or browse mode for obj, what had the focus before is noted (see autoFormsMode).
 		autoFormsMode = getattr(self, "_autoFormsMode", None)
 		if autoFormsMode is not None:
@@ -1901,6 +1927,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		startupFocus = getattr(self, "_startupFocus", None)
 		if startupFocus is not None:
 			startupFocus.chooseOverlay(obj, clsList)
+		# A program's system tray icon: Enter clicks it with the mouse (see trayEnter).
+		trayEnter = getattr(self, "_trayEnter", None)
+		if trayEnter is not None:
+			trayEnter.chooseOverlay(obj, clsList)
 		# The Speech History window and its text box: the title, then the line, as JAWS says (see speechHistory).
 		speechHistory.chooseOverlay(obj, clsList)
 
