@@ -95,6 +95,11 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			wx.CheckBox(self, label="In the System Tray List add-on's list (NVDA+F11), Enter right-clicks the icon, as in JAWS's list (Insert+F11)"),
 		)
 		self.trayList.SetValue(trayList.wanted(state.load()))
+		# System Tray List clicks where an icon was when it made its list: the edge of the screen, when the taskbar was hidden.
+		self.trayListReveal = helper.addItem(
+			wx.CheckBox(self, label="In the System Tray List add-on's list, bring up a taskbar that hides automatically before clicking an icon, so the click reaches it"),
+		)
+		self.trayListReveal.SetValue(trayList.revealWanted(state.load()))
 		# Control+Alt+N, the key of NVDA's desktop shortcut, leaves the focus on the taskbar ("Copilot pinned");
 		# JAWS, started with its own desktop shortcut's key, goes back to the window you were in.
 		self.backFromTaskbar = helper.addItem(
@@ -428,6 +433,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownQuietTray = self.quietTray.GetValue()
 		self._shownTrayEnter = self.trayEnter.GetValue()
 		self._shownTrayList = self.trayList.GetValue()
+		self._shownTrayListReveal = self.trayListReveal.GetValue()
 		self._shownBackFromTaskbar = self.backFromTaskbar.GetValue()
 		self._shownHeadingAlone = self.headingAlone.GetValue()
 		self._shownListNoCoordinates = self.listNoCoordinates.GetValue()
@@ -517,6 +523,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[trayEnter.STATE_KEY] = self.trayEnter.GetValue()
 		if self.trayList.GetValue() != self._shownTrayList:
 			updates[trayList.STATE_KEY] = self.trayList.GetValue()
+		if self.trayListReveal.GetValue() != self._shownTrayListReveal:
+			updates[trayList.REVEAL_KEY] = self.trayListReveal.GetValue()
 		if self.backFromTaskbar.GetValue() != self._shownBackFromTaskbar:
 			updates[startupFocus.STATE_KEY] = self.backFromTaskbar.GetValue()
 		if self.headingAlone.GetValue() != self._shownHeadingAlone:

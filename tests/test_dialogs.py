@@ -427,6 +427,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"quietTrayIconChanges": True,
 				"clickTrayIconOnEnter": True,
 				"rightClickInSystrayList": True,
+				"revealHiddenTaskbarForSystrayList": True,
 				"sayHeadingAlone": True,
 				"listItemsWithoutCoordinates": True,
 				"positionLikeJawsInExplorer": True,
@@ -469,6 +470,7 @@ class SettingsPanelTests(unittest.TestCase):
 				"quietTrayIconChanges": False,
 				"clickTrayIconOnEnter": False,
 				"rightClickInSystrayList": False,
+				"revealHiddenTaskbarForSystrayList": False,
 				"sayHeadingAlone": False,
 				"listItemsWithoutCoordinates": False,
 				"positionLikeJawsInExplorer": False,
@@ -488,6 +490,7 @@ class SettingsPanelTests(unittest.TestCase):
 		self.assertFalse(state.get("quietTrayIconChanges"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("clickTrayIconOnEnter"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("rightClickInSystrayList"), "a check box the user didn't change saves nothing")
+		self.assertFalse(state.get("revealHiddenTaskbarForSystrayList"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("sayHeadingAlone"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("listItemsWithoutCoordinates"), "a check box the user didn't change saves nothing")
 		self.assertFalse(state.get("positionLikeJawsInExplorer"), "a check box the user didn't change saves nothing")
@@ -565,6 +568,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"In the System Tray List add-on's list (NVDA+F11), Enter right-clicks the icon, as in JAWS's list (Insert+F11)",
 			trayList.STATE_KEY,
 			"System Tray List's list double-clicks on Enter again, at once",
+		)
+
+	def test_trayListRevealIsSavedAndApplied(self):
+		from jawsMigrator import trayList
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.trayListReveal,
+			"In the System Tray List add-on's list, bring up a taskbar that hides automatically before clicking an icon, so the click reaches it",
+			trayList.REVEAL_KEY,
+			"System Tray List clicks where it noted an icon again, at once",
 		)
 
 	def test_headingAloneIsSavedAndApplied(self):

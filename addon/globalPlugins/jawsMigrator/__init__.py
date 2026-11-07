@@ -51,7 +51,8 @@ view and zoom buttons (see outlookStatusBar);
 the Columns Review add-on doesn't say "List top" or "List bottom" at the ends
 of a list, which JAWS never says (see listBounds), Enter in the System Tray
 List add-on's list (NVDA+F11) right-clicks the icon, as in JAWS's list,
-Insert+F11 (see trayList), and neither Columns Review nor the
+Insert+F11, and its clicks reach the icons of a taskbar that hides
+automatically (see trayList), and neither Columns Review nor the
 Emoticons add-on holds NVDA up each time NVDA switches configuration profiles,
 as Alt+Tab into or out of a program with its own profile does, which had keys
 such as Insert+F7 go through to the program (see profileSwitches);
@@ -1017,11 +1018,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			from . import trayList
 
 			# Not a JAWS setting: the System Tray List add-on's list (NVDA+F11) double-clicks an icon on Enter, where
-			# Enter in JAWS's list (Insert+F11) right-clicks it (issue 54).
-			if trayList.wanted(data):
-				trayList.register()
-			else:
-				trayList.unregister()
+			# Enter in JAWS's list (Insert+F11) right-clicks it (issue 54), and its clicks missed the icons of a taskbar
+			# that hides automatically. register() with both parts off is unregister().
+			trayList.register(rightClick=trayList.wanted(data), reveal=trayList.revealWanted(data))
 		except Exception:
 			debugLog.error("could not have Enter in System Tray List's list right-click the icon")
 		try:

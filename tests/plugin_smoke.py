@@ -1186,7 +1186,11 @@ def main():
 		def createTaskList(self):
 			pass
 
+		def mouseEvents(location, *events):
+			pass
+
 		systrayList = types.ModuleType(trayList.MODULE)
+		systrayList.mouseEvents = mouseEvents
 		systrayList.GlobalPlugin = type(
 			"GlobalPlugin", (), {"_systrayListDialog": None, "_createSystrayList": createSystrayList, "_createTaskList": createTaskList},
 		)
@@ -1195,13 +1199,20 @@ def main():
 		plugin.applyRuntimeSettings()
 		systrayList.GlobalPlugin()._createSystrayList()
 		check(trayList.isInstalled(), "System Tray List's list of the tray's icons right-clicks on Enter")
+		check(trayList.isClickInstalled(), "and its clicks bring up a taskbar that hides automatically")
 		jawsMigrator.state.set(trayList.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
+		check(trayList.isRegistered() and trayList.isClickInstalled(), "Enter's right click turned off, the clicks still bring up a hidden taskbar")
+		jawsMigrator.state.set(trayList.REVEAL_KEY, False)
+		plugin.applyRuntimeSettings()
 		check(
-			not trayList.isRegistered() and vars(systrayList.GlobalPlugin)["_createSystrayList"] is createSystrayList,
-			"turned off in the Settings panel, System Tray List has its own",
+			not trayList.isRegistered()
+			and vars(systrayList.GlobalPlugin)["_createSystrayList"] is createSystrayList
+			and systrayList.mouseEvents is mouseEvents,
+			"both turned off in the Settings panel, System Tray List has its own",
 		)
 		jawsMigrator.state.set(trayList.STATE_KEY, True)
+		jawsMigrator.state.set(trayList.REVEAL_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(vars(systrayList.GlobalPlugin)["_createSystrayList"].__wrapped__ is createSystrayList, "and on again, wrapped once")
 		# Columns Review asked NVDA for every command at each profile switch, and Emoticons wrote 177 warnings, so each
@@ -1496,8 +1507,9 @@ def main():
 		check(
 			not trayList.isRegistered()
 			and vars(systrayList.GlobalPlugin)["_createSystrayList"] is createSystrayList
-			and vars(systrayList.GlobalPlugin)["_createTaskList"] is createTaskList,
-			"and System Tray List's own list",
+			and vars(systrayList.GlobalPlugin)["_createTaskList"] is createTaskList
+			and systrayList.mouseEvents is mouseEvents,
+			"and System Tray List's own list and clicks",
 		)
 		check(
 			not profileSwitches.isRegistered()

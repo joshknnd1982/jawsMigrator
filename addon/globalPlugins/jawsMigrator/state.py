@@ -79,6 +79,9 @@ DEFAULTS = {
 	#: Enter in the System Tray List add-on's list of the tray's icons (NVDA+F11) right-clicks the icon, as Enter in
 	#: JAWS's list (Insert+F11) does (see trayList).
 	"rightClickInSystrayList": True,
+	#: The System Tray List add-on's clicks bring up a taskbar that hides automatically first, so they reach the icon
+	#: (see trayList).
+	"revealHiddenTaskbarForSystrayList": True,
 	#: Quick navigation says a heading or an edit field without the landmark, region or list it is in, and an empty edit
 	#: field with "blank, placeholder", as JAWS does (see quickNavHeadings). Version 1.12's "sayHeadingLevelFirst" (a
 	#: heading's level before its text) is gone: JAWS says the text first.
