@@ -163,6 +163,9 @@ class BrowseModeTreeInterceptor:
 	def shouldPassThrough(self, obj, reason=None):
 		return True
 
+	def _activateNVDAObject(self, obj):
+		obj.doAction()
+
 	def script_elementsList(self, gesture):
 		pass
 
@@ -268,6 +271,7 @@ class EditableText:
 NVDA_REPORT = vars(TextInfoQuickNavItem)["report"]
 NVDA_GET_LABEL = vars(TextInfoQuickNavItem)["_getLabelForProperties"]
 NVDA_PASS_THROUGH = vars(BrowseModeTreeInterceptor)["shouldPassThrough"]
+NVDA_ACTIVATE_OBJECT = vars(BrowseModeTreeInterceptor)["_activateNVDAObject"]
 NVDA_BACKSPACE = vars(EditableText)["_backspaceScriptHelper"]
 NVDA_CARET_WAIT = vars(EditableText)["_hasCaretMoved"]
 NVDA_FILL = vars(ElementsListDialog)["initElementType"]
@@ -527,7 +531,7 @@ def main():
 		# Quick navigation says a heading without what it is in, a list item has no row and column, and a web page's
 		# tabs and toolbar buttons stay in browse mode: NVDA's field speech, quick navigation report, what NVDA may say
 		# about an object, and its choice of mode.
-		from jawsMigrator import autoFormsMode, backspaceEcho, listCoordinates, listPosition, quickNavHeadings
+		from jawsMigrator import autoFormsMode, backspaceEcho, innerControls, listCoordinates, listPosition, quickNavHeadings
 
 		speechPackage, speechModule = sys.modules["speech"], sys.modules["speech.speech"]
 		nvdaFieldSpeech, nvdaAllowed = getControlFieldSpeech, _objectSpeech_calculateAllowedProps
@@ -538,6 +542,7 @@ def main():
 				and getattr(TextInfoQuickNavItem.report, "__wrapped__", None) is NVDA_REPORT
 				and getattr(speechModule._objectSpeech_calculateAllowedProps, "__wrapped__", None) is nvdaAllowed
 				and getattr(BrowseModeTreeInterceptor.shouldPassThrough, "__wrapped__", None) is NVDA_PASS_THROUGH
+				and getattr(BrowseModeTreeInterceptor._activateNVDAObject, "__wrapped__", None) is NVDA_ACTIVATE_OBJECT
 				and getattr(EditableText._backspaceScriptHelper, "__wrapped__", None) is NVDA_BACKSPACE
 				and getattr(EditableText._hasCaretMoved, "__wrapped__", None) is NVDA_CARET_WAIT
 			)
@@ -548,6 +553,7 @@ def main():
 				and TextInfoQuickNavItem.report is NVDA_REPORT
 				and speechModule._objectSpeech_calculateAllowedProps is nvdaAllowed
 				and BrowseModeTreeInterceptor.shouldPassThrough is NVDA_PASS_THROUGH
+				and BrowseModeTreeInterceptor._activateNVDAObject is NVDA_ACTIVATE_OBJECT
 				and EditableText._backspaceScriptHelper is NVDA_BACKSPACE
 				and EditableText._hasCaretMoved is NVDA_CARET_WAIT
 			)
@@ -559,12 +565,13 @@ def main():
 				and listPosition.isRegistered()
 				and listCoordinates._positionRule is listPosition.leaveOutPosition
 				and autoFormsMode.isRegistered()
+				and innerControls.isRegistered()
 				and backspaceEcho.isRegistered()
 			)
 
-		check(allRegistered() and wrapped() and plugin._autoFormsMode is autoFormsMode, "headings, list items and their positions, Backspace and web page tabs as in JAWS")
+		check(allRegistered() and wrapped() and plugin._autoFormsMode is autoFormsMode, "headings, list items and their positions, Backspace, web page tabs and check boxes as in JAWS")
 		check(decider.handlers.count(autoFormsMode.noteGesture) == 1, "Tab is noted, once")
-		for module in (quickNavHeadings, listCoordinates, listPosition, autoFormsMode, backspaceEcho):
+		for module in (quickNavHeadings, listCoordinates, listPosition, autoFormsMode, innerControls, backspaceEcho):
 			jawsMigrator.state.set(module.STATE_KEY, False)
 		plugin.applyRuntimeSettings()
 		check(
@@ -572,11 +579,12 @@ def main():
 			and not listCoordinates.isRegistered()
 			and not listPosition.isRegistered()
 			and not autoFormsMode.isRegistered()
+			and not innerControls.isRegistered()
 			and not backspaceEcho.isRegistered()
 			and nvdasOwn(),
 			"turned off in the Settings panel, NVDA's own are back",
 		)
-		for module in (quickNavHeadings, listCoordinates, listPosition, autoFormsMode, backspaceEcho):
+		for module in (quickNavHeadings, listCoordinates, listPosition, autoFormsMode, innerControls, backspaceEcho):
 			jawsMigrator.state.set(module.STATE_KEY, True)
 		plugin.applyRuntimeSettings()
 		check(allRegistered() and wrapped(), "and on again, wrapped once")
@@ -1417,6 +1425,7 @@ def main():
 			"and NVDA's field speech, quick navigation report, object speech, Backspace and choice of mode",
 		)
 		check(not autoFormsMode.isRegistered() and plugin._autoFormsMode is None, "and the note of each focus")
+		check(not innerControls.isRegistered(), "and the activation of a check box's control inside it")
 		check(
 			not documentPolling.isRegistered() and enhancedControlSupport.shouldUseTimerMixin is shouldUseTimerMixin,
 			"and Enhanced Control Support's own choice of its timer",
@@ -1504,6 +1513,7 @@ def main():
 			"listPosition",
 			"driveLetters",
 			"autoFormsMode",
+			"innerControls",
 			"backspaceEcho",
 			"documentPolling",
 			"documentValues",

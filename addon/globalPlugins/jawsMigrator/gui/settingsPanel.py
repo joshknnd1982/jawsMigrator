@@ -27,6 +27,7 @@ from .. import (
 	exitMessage,
 	fieldEdges,
 	formFields,
+	innerControls,
 	labelRepeats,
 	layerSound,
 	linkSpeech,
@@ -139,6 +140,12 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		# NVDA uses focus mode on a web page's tabs and toolbars, so letters go to the page; JAWS stays in its virtual cursor.
 		self.tabsBrowse = helper.addItem(wx.CheckBox(self, label="Stay in &browse mode when you Tab to a tab or a toolbar button on a web page"))
 		self.tabsBrowse.SetValue(autoFormsMode.wanted(state.load()))
+		# pizzahut.com's toppings are check boxes that stand for the real one inside them, which NVDA's browse mode doesn't show:
+		# Space and Enter did nothing on them.
+		self.innerChecks = helper.addItem(
+			wx.CheckBox(self, label="Space and Enter check a web page's check box whose real check box is inside it, as on pizzahut.com's toppings")
+		)
+		self.innerChecks.SetValue(innerControls.wanted(state.load()))
 		# NVDA's Elements List says "Homepage; visited, 2 of 50, level 0"; JAWS's Links List says "Homepage, 2 of 34",
 		# with "Current Page" before a link marked as current and a link's shortcut key after it. On a page without links JAWS
 		# says "no links", and the list starts on the link at the cursor, which is the link you activated when you come back.
@@ -416,6 +423,7 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 		self._shownDocumentsUnpolled = self.documentsUnpolled.GetValue()
 		self._shownDocumentsNoValue = self.documentsNoValue.GetValue()
 		self._shownTabsBrowse = self.tabsBrowse.GetValue()
+		self._shownInnerChecks = self.innerChecks.GetValue()
 		self._shownLinksJaws = self.linksJaws.GetValue()
 		self._shownListKeysJaws = self.listKeysJaws.GetValue()
 		self._shownQuietEmptyAlerts = self.quietEmptyAlerts.GetValue()
@@ -509,6 +517,8 @@ class JawsMigratorSettingsPanel(SettingsPanel):
 			updates[documentValues.STATE_KEY] = self.documentsNoValue.GetValue()
 		if self.tabsBrowse.GetValue() != self._shownTabsBrowse:
 			updates[autoFormsMode.STATE_KEY] = self.tabsBrowse.GetValue()
+		if self.innerChecks.GetValue() != self._shownInnerChecks:
+			updates[innerControls.STATE_KEY] = self.innerChecks.GetValue()
 		if self.linksJaws.GetValue() != self._shownLinksJaws:
 			updates[linksList.STATE_KEY] = self.linksJaws.GetValue()
 		if self.listKeysJaws.GetValue() != self._shownListKeysJaws:

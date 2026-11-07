@@ -89,6 +89,10 @@ no real focus events, so `Scenario.toUnitBox()` gives NVDA the focus event the p
   it must not promise the address, because a second Control+Z in a box that holds text is the page's own).
   This desktop delivers no focus events, so a scenario that moves the page's focus tells NVDA (`syncFocus`) before the next key, or NVDA's idea of the focus is stale (B showed it: the page's focus fell to the body when the unit box was hidden).
 
+## pizzahut.com's toppings (issue 51, 6 November, 1.60)
+
+`pages/pizzahut.html` is a stand-in for the toppings of pizzahut.com's pizza builder (the live page turns away a browser that DevTools drives): the live page's markup (Garlic-Parm Hut Blend, a focusable `div role="checkbox"`, and three toppings, each an outer `div role="checkbox"` with an `aria-label`, no tabindex and no click handler, holding the topping's button and the real check box), and a script that does what the live page was measured to do. Set `JM_RIG_PAGE` to it, run the rig with automatic focus mode for focus changes and for caret movement off in `cfg/nvda.ini` (`autoPassThroughOnFocusChange` and `autoPassThroughOnCaretMove`, as the tester has them since issue 50), and run `python -u -m scenarios.s62 [letters]`: A with the assistant's fix turned off (Space clicks the outer div, nothing changes), B and C Space and Enter with 1.60, D Garlic-Parm, E NVDA's lines at the topping, F Tab, G and H with the focus and state change events Chrome sends on a real desktop, which this desktop doesn't deliver, given to NVDA by hand (G: adding and removing toppings; H: Space on the Extra switch once the focus is on it). Chrome focuses a check box it activates for NVDA, so without G's events NVDA's focus stays on the document and the page's is on the check box: F's Tab presses tell nothing.
+
 ## The speech volume that changed between typing and reading (issue 49, 1 October, 1.56)
 
 No Edge is needed. `setup_issue49.py` writes the tester's profiles (`JAWS - msedge`, `browseMode`, ...), his normal configuration's Eloquence settings, the triggers, the assistant's settings, and a **silent copy of

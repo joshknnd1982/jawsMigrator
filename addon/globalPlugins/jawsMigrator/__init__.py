@@ -20,7 +20,9 @@ list without row and column numbers (see listCoordinates), a position ("3 of 3")
 in File Explorer and Alt+Tab only where JAWS says one (see listPosition), a drive
 without the ":)" after its letter, as in "Data (D:)" (see driveLetters), and what Backspace
 deletes in a slow program (see backspaceEcho); a web page's tabs and toolbar
-buttons stay in browse mode, as in JAWS (see autoFormsMode); Enhanced Control
+buttons stay in browse mode, as in JAWS (see autoFormsMode); Space and Enter
+check a web page's check box whose real check box is inside it, as on
+pizzahut.com's toppings (see innerControls); Enhanced Control
 Support, which the assistant offers to install, doesn't read a whole document
 20 times a second, which froze NVDA in a large file (see documentPolling), and
 NVDA doesn't have a document build its whole text at every key, which slowed
@@ -449,6 +451,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			pass
 		try:
+			from . import innerControls
+
+			innerControls.unregister()
+		except Exception:
+			pass
+		try:
 			from . import listCoordinates
 
 			listCoordinates.unregister()
@@ -831,6 +839,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._autoFormsMode = autoFormsMode
 		except Exception:
 			debugLog.error("could not apply browse mode on a web page's tabs and toolbar buttons")
+		try:
+			from . import innerControls
+
+			# Not a JAWS setting: Space on pizzahut.com's toppings did nothing in browse mode, as NVDA activated the check box
+			# that stands for the real one inside it.
+			if innerControls.wanted(data):
+				innerControls.register()
+			else:
+				innerControls.unregister()
+		except Exception:
+			debugLog.error("could not apply Space and Enter reaching the check box inside a web page's check box")
 		try:
 			from . import linksList
 

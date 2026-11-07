@@ -90,6 +90,9 @@ DEFAULTS = {
 	#: A web page's tabs, and toolbar buttons reached with Tab, stay in browse mode, as in JAWS's Auto Forms Mode,
 	#: so letters don't reach the page (see autoFormsMode).
 	"browseModeOnTabsAndToolbars": True,
+	#: Space and Enter in browse mode on a web page's check box that only stands for the real one inside it, as on
+	#: pizzahut.com's toppings, activate the one inside, and NVDA says "checked" (see innerControls).
+	"activateInnerControls": True,
 	#: Enhanced Control Support leaves its 50 ms timer off documents NVDA follows itself, where it read the whole text
 	#: each time and a large file froze NVDA (see documentPolling).
 	"documentsWithoutControlSupportTimer": True,

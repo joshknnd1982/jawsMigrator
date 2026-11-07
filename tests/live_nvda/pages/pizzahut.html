@@ -1,0 +1,110 @@
+<!doctype html>
+<!--
+  A stand-in for the toppings of the pizza builder on pizzahut.com (issue 51), so that the rig can be tried without the live site,
+  which turns away a browser that DevTools drives. The markup is the live page's, copied on 6 November 2026 from
+  https://www.pizzahut.com/menu/pizza/builder?id=CLSS001P%7CPROD010B (Material UI; its css-* classes are left out, the few styles
+  that matter are below). The script is written for this file; it does what the live page was measured to do that day:
+
+  - Garlic-Parm Hut Blend (a crust finisher) is a div with role="checkbox" and tabindex="0": a click on it checks or unchecks it.
+  - Each topping (21 on the live page; Pepperoni, Bacon and Ham here) is a Material UI Accordion whose outer div has role="checkbox",
+    aria-checked and aria-label="Pepperoni checkbox, unchecked", but no tabindex and no click handler: a click on that div does
+    nothing. Inside it, a heading holds the Accordion's button (aria-expanded), and the button holds the picture, the name and the
+    real check box (input type="checkbox", tabindex="-1", no name, opacity 0 over its icon). A click on the button, or on the check
+    box (it reaches the button), adds the topping: the outer div becomes aria-checked="true", "Pepperoni checkbox, checked", the
+    check box is checked and the Accordion opens on the placement (Left-half only, Whole pizza, Right-half only) and the Extra switch.
+    Another click takes the topping off and closes it. A closed Accordion's panel is visibility: hidden.
+
+  window.__log has what happened, for the scenarios to read.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pizza Hut builder stand-in</title>
+<style>
+  body { font: 16px Arial, sans-serif; margin: 0; padding: 16px; }
+  .finisher, .MuiAccordion-root { width: 540px; border: 1px solid #ccc; border-radius: 4px; margin: 8px 0; }
+  .finisher { display: grid; grid-template-columns: 42px 1fr; gap: 8px; padding: 12px; box-sizing: border-box; cursor: pointer; }
+  .MuiAccordion-root { position: relative; }
+  .MuiAccordion-heading { margin: 0; font-size: 16px; font-weight: normal; }
+  .MuiAccordionSummary-root { display: flex; width: 100%; min-height: 48px; padding: 0 16px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+  .MuiAccordionSummary-content { display: flex; flex-grow: 1; margin: 3px 0; }
+  .row { display: flex; align-items: center; gap: 8px; width: 100%; }
+  .row .name { flex-grow: 1; }
+  .MuiCheckbox-root, .MuiRadio-root, .MuiSwitch-switchBase { position: relative; display: inline-flex; width: 42px; height: 42px; }
+  .PrivateSwitchBase-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; z-index: 1; cursor: inherit; }
+  .box { width: 18px; height: 18px; margin: 12px; border: 2px solid #555; border-radius: 2px; }
+  .Mui-checked .box { background: #e91c24; border-color: #e91c24; }
+  .MuiCollapse-hidden { visibility: hidden; height: 0; overflow: hidden; }
+  .MuiAccordionDetails-root { display: flex; align-items: center; gap: 16px; padding: 8px 16px 16px; }
+  .MuiSwitch-root { display: inline-flex; width: 58px; height: 38px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Create Your Own Pizza</h1>
+<h2>Crust flavor</h2>
+<div tabindex="0" role="checkbox" aria-checked="false" aria-disabled="false" aria-label="Garlic-Parm Hut Blend™ checkbox, unchecked" class="finisher" id="garlic">
+  <img alt="Garlic-Parm Hut Blend™ option" width="42" height="42" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+  <div><div><div id="CLSS001P|TOPP983GB-name">Garlic-Parm Hut Blend™</div><div>Savory, buttery garlic crust finisher - our signature Hut Blend™</div><p>add 7 cal/Slice</p></div>
+  <span class="MuiCheckbox-root" data-testid="checkbox-input"><input tabindex="-1" class="PrivateSwitchBase-input" type="checkbox"><span class="box" aria-hidden="true"></span></span></div>
+</div>
+<h2>Toppings</h2>
+<div>Additional toppings are $1.89 each</div>
+<ul id="toppings"></ul>
+<p id="chosen" role="status"></p>
+</main>
+<script>
+window.__log = [];
+const note = (what, extra) => window.__log.push(Object.assign({t: Math.round(performance.now()), what}, extra || {}));
+const GIF = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+const TOPPINGS = [["TOPP012P", "Pepperoni", "add 50 cal/Slice"], ["TOPP040B", "Bacon", "add 30 cal/Slice"], ["TOPP030H", "Ham", "add 10 cal/Slice"]];
+
+const garlic = document.getElementById("garlic");
+function setGarlic(on) {
+	garlic.setAttribute("aria-checked", String(on));
+	garlic.setAttribute("aria-label", `Garlic-Parm Hut Blend™ checkbox, ${on ? "checked" : "unchecked"}`);
+	garlic.querySelector("input").checked = on;
+	garlic.querySelector(".MuiCheckbox-root").classList.toggle("Mui-checked", on);
+	note("garlic", {on});
+}
+garlic.addEventListener("click", () => setGarlic(garlic.getAttribute("aria-checked") !== "true"));
+garlic.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); garlic.click(); } });
+
+function topping(id, name, cal) {
+	const li = document.createElement("li");
+	li.innerHTML = `<div><div class="MuiPaper-root MuiAccordion-root" role="checkbox" aria-checked="false" aria-disabled="false" aria-label="${name} checkbox, unchecked">
+<h3 class="MuiAccordion-heading"><button class="MuiButtonBase-root MuiAccordionSummary-root" tabindex="0" type="button" aria-expanded="false"><span class="MuiAccordionSummary-content"><div class="row">
+<img alt="${name} option" width="42" height="42" src="${GIF}"><div class="name"><div id="CLSS001P|${id}-name">${name}</div><p>${cal}</p></div>
+<span class="MuiCheckbox-root" data-testid="checkbox-input"><input tabindex="-1" class="PrivateSwitchBase-input" type="checkbox"><span class="box" aria-hidden="true"></span></span></div></span></button></h3>
+<div class="MuiCollapse-root MuiCollapse-hidden"><div role="region" class="MuiAccordion-region"><div class="MuiAccordionDetails-root">
+<div role="radiogroup" aria-label="${name} placement">
+<span class="MuiRadio-root"><input aria-label="Left-half only" class="PrivateSwitchBase-input" type="radio" value="LEFT" name="${id}-place"><span class="box" aria-hidden="true"></span></span>
+<span class="MuiRadio-root"><input aria-label="Whole pizza" class="PrivateSwitchBase-input" type="radio" value="WHOLE" checked name="${id}-place"><span class="box" aria-hidden="true"></span></span>
+<span class="MuiRadio-root"><input aria-label="Right-half only" class="PrivateSwitchBase-input" type="radio" value="RIGHT" name="${id}-place"><span class="box" aria-hidden="true"></span></span>
+</div><div role="separator" aria-orientation="vertical"></div>
+<label><span class="MuiSwitch-root"><span class="MuiSwitch-switchBase"><input aria-labelledby="CLSS001P|${id}-extra CLSS001P|${id}-name" class="PrivateSwitchBase-input" type="checkbox"><span class="box" aria-hidden="true"></span></span></span><span id="CLSS001P|${id}-extra">Extra</span></label>
+</div></div></div></div></div>`;
+	const outer = li.querySelector("[role=checkbox]");
+	const button = li.querySelector("button");
+	const input = button.querySelector("input");
+	const set = (on) => {
+		outer.setAttribute("aria-checked", String(on));
+		outer.setAttribute("aria-label", `${name} checkbox, ${on ? "checked" : "unchecked"}`);
+		button.setAttribute("aria-expanded", String(on));
+		input.checked = on;
+		button.querySelector(".MuiCheckbox-root").classList.toggle("Mui-checked", on);
+		li.querySelector(".MuiCollapse-root").classList.toggle("MuiCollapse-hidden", !on);
+		document.getElementById("chosen").textContent = "";
+		note("topping", {name, on});
+	};
+	// The live page: the button's click adds or removes the topping; a click on the check box reaches the button.
+	button.addEventListener("click", () => { set(outer.getAttribute("aria-checked") !== "true"); });
+	outer.addEventListener("click", (e) => note("outerClick", {name, target: e.target.tagName}));
+	li.querySelector(".MuiSwitch-switchBase input").addEventListener("change", (e) => note("extra", {name, on: e.target.checked}));
+	return li;
+}
+const list = document.getElementById("toppings");
+for (const [id, name, cal] of TOPPINGS) list.appendChild(topping(id, name, cal));
+</script>
+</body>
+</html>

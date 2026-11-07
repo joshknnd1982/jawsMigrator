@@ -621,6 +621,16 @@ class SettingsPanelTests(unittest.TestCase):
 			"NVDA goes to focus mode on tabs and toolbars again, at once",
 		)
 
+	def test_activateInnerControlsIsSavedAndApplied(self):
+		from jawsMigrator import innerControls
+
+		self._checkBoxIsSavedAndApplied(
+			self.dialog.panel.innerChecks,
+			"Space and Enter check a web page's check box whose real check box is inside it, as on pizzahut.com's toppings",
+			innerControls.STATE_KEY,
+			"Space and Enter activate a web page's check box itself again, at once",
+		)
+
 	def test_quietEmptyAlertsIsSavedAndApplied(self):
 		from jawsMigrator import emptyAlerts
 

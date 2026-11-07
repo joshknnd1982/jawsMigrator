@@ -15,7 +15,7 @@ Before anything changes, NVDA's settings, every add-on and the add-ons' own sett
 
 JAWS itself is never changed. The assistant only reads JAWS files. It never writes to, updates, reconfigures or uninstalls JAWS. When the migration is finished, it tells you that you can uninstall JAWS yourself if you want to.
 
-- Version: 1.59
+- Version: 1.60
 - Requires: NVDA 2026.1 or later (tested with NVDA 2026.2) on Windows 10 22H2 or Windows 11
 - Works with: JAWS 18 and later, in any JAWS language, including settings left behind by an uninstalled JAWS
 - License: MIT License
@@ -24,6 +24,7 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 - [What it does](#what-it-does)
 - [Installing](#installing)
+- [What's new in 1.60](#whats-new-in-160)
 - [What's new in 1.59](#whats-new-in-159)
 - [What's new in 1.58](#whats-new-in-158)
 - [What's new in 1.57](#whats-new-in-157)
@@ -111,10 +112,20 @@ JAWS itself is never changed. The assistant only reads JAWS files. It never writ
 
 ## Installing
 
-1. Download `jawsMigrator-1.59.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
+1. Download `jawsMigrator-1.60.nvda-addon` from the [releases page](https://github.com/joshknnd1982/jawsMigrator/releases).
 2. Press Enter on the file. NVDA asks you to confirm, installs the add-on and offers to restart.
 3. A few seconds after NVDA starts, the assistant checks the computer once and offers to migrate. After that it only runs when you ask.
 4. If [ClassicSpeech](#classicspeech) is not installed, the assistant offers to install it, in a dialog you can read line by line. It downloads ClassicSpeech's newest release from GitHub. If you install it, restart NVDA and open the assistant again, so your JAWS schemes, voice aliases and sounds can come over too. You can say not to be asked again, and install it later from the NVDA menu, Tools, JAWS Migration Assistant, Install or update ClassicSpeech.
+
+## What's new in 1.60
+
+From issue 51: "When I press x to check the box the check boxes don't get checked." on pizzahut.com. The log the issue names was on the tester's own computer and was not attached, so this comes from the page itself.
+
+- **What the page does.** The check boxes that don't check are the toppings of the pizza builder (Pepperoni, Bacon and the 19 others). Each one is a check box only in name: a part of the page marked as a check box, labelled "Pepperoni checkbox, unchecked", which the page made neither something you can move to with Tab nor something a click does anything to. Inside it are the topping's button and, in the button, the real check box, with no label of its own. A click on the button or on that check box adds the topping, and the outer one then says "Pepperoni checkbox, checked".
+- **Why NVDA did nothing.** NVDA's browse mode shows a check box with a label of its own as that label alone, and leaves out everything inside it (NVDA 2026.2's virtual buffer for Chrome and Edge). So X moved to "Pepperoni checkbox, unchecked, check box, not checked", the one line NVDA has for it, and Space or Enter clicked that outer check box, which the page ignores. The button and the real check box were not in NVDA's document at all.
+- **Space and Enter now check it.** When Space or Enter in browse mode is on a check box, radio button or switch that the page did not make focusable, and there is a control inside it that the page did make focusable, NVDA activates that control instead: one of the same kind first, else a button. On pizzahut.com that is the real check box, so the topping is added. Chrome and Edge then move the page's focus to that check box, and NVDA says it as it says any focus, "check box, checked"; Space again says "not checked". (Where the browser doesn't move the focus, the assistant says "checked" or "not checked" itself.) A check box the page made focusable (pizzahut.com's Garlic-Parm Hut Blend, which works when clicked) and one with nothing usable inside are activated as NVDA always has. To turn it off, uncheck "Space and Enter check a web page's check box whose real check box is inside it, as on pizzahut.com's toppings" in NVDA's Settings, JAWS Migration Assistant.
+- **A topping's own choices.** Once a topping is added, the page shows its placement (Left-half only, Whole pizza, Right-half only) and an Extra switch, inside the same check box, so NVDA's browse mode doesn't show them and quick navigation keys don't reach them. Tab and Shift+Tab do, as for any control on the page, and NVDA says each one as you move to it. Browse mode's cursor stays on the topping meanwhile, so 1.60 makes Space and Enter work on the one you Tabbed to: Space on "Extra Pepperoni" switches Extra on, and the topping stays on.
+- **What was tried, and what was not.** The live page in a browser (6 November 2026, after choosing a store; nothing was ordered): a click on the outer check box changes nothing, and a click on the topping's button or on the check box inside adds the topping; Chrome's accessibility tree has the heading, the button and the check box inside the outer one. Pizza Hut turns away a browser that test tools drive, so the trials in NVDA itself were on a stand-in for the toppings that runs on this computer (`tests/live_nvda/pages/pizzahut.html`: the live page's markup, and a script that does what the live page was measured to do), in a second NVDA 2026.3 on its own Windows desktop with Microsoft Edge 157, this add-on alone, and automatic focus mode for focus changes and for caret movement both off, as the tester has them (issue 50). With the assistant's fix turned off, NVDA did what the issue says: X said "Pepperoni checkbox, unchecked, check box, not checked", Space said nothing, and the page got a click on the outer check box and nothing else; NVDA's document had the topping as the one line "Pepperoni checkbox, unchecked". With 1.60: Space added Pepperoni and took it off again, Enter added Bacon, and Space on Garlic-Parm Hut Blend worked as before. That desktop gives NVDA no focus events, so the ones Chrome sends on a real desktop were given to NVDA by hand: with them, adding Pepperoni said "check box, checked" once, Space again said "not checked" once, Bacon after it "check box, checked" once, and with the focus on Pepperoni's Extra switch Space switched Extra on ("checked") and off ("not checked") with Pepperoni still on. Without them the assistant says "checked" and "not checked" itself. The test suite passes (2,312 tests), and breaking each new behavior on purpose, one at a time, was noticed by a test (27 of 27). **Not tried:** the live pizzahut.com page in NVDA (the stand-in was used instead), a real keyboard, a real Tab key from the topping to its choices (the focus was moved as Tab moves it), Firefox and Chrome, JAWS, and the tester's other add-ons together with this one.
 
 ## What's new in 1.59
 
@@ -1016,6 +1027,7 @@ The NVDA menu, Tools, JAWS Migration Assistant has most of the layer's commands,
 - keeping Enhanced Control Support from reading a document's whole text 20 times a second, which can freeze NVDA in a large file (on unless you turn it off; see [What's new in 1.15](#whats-new-in-115));
 - keeping NVDA from having a document build its whole text at every key, which slows typing in a large file (on unless you turn it off; see [What's new in 1.23](#whats-new-in-123));
 - staying in browse mode when you Tab to a tab or a toolbar button on a web page (on unless you turn it off);
+- checking a web page's check box with Space or Enter in browse mode when the page puts the real check box inside it, as on pizzahut.com's toppings (on unless you turn it off; see [What's new in 1.60](#whats-new-in-160));
 - showing links in NVDA's Elements List as JAWS's Links List does: current page and shortcut keys, without visited, same page or level 0; "no links" on a page without links; activating a link moves to it (on unless you turn it off; see [What's new in 1.19](#whats-new-in-119) and [What's new in 1.20](#whats-new-in-120));
 - opening a list of one kind for each JAWS list key, as JAWS does: Insert+F7 links, Insert+F6 headings, Insert+F5 form fields, Control+Insert+B buttons and Control+Insert+R regions, each with JAWS's title and no radio buttons, and JAWS's words on a page with none (on unless you turn it off; see [What's new in 1.29](#whats-new-in-129));
 - not saying "alert" for an alert with nothing in it, as on GitHub pages (on unless you turn it off; see [What's new in 1.21](#whats-new-in-121));
